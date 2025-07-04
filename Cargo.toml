@@ -1,0 +1,26 @@
+[package]
+name = "secretspec"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "secretspec"
+path = "src/lib.rs"
+
+[[bin]]
+name = "secretspec"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+keyring = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+thiserror = "1.0"
+directories = "5.0"
+colored = "2.0"
+rpassword = "7.4.0"
+dotenvy = "0.15"
+
+[dev-dependencies]
+tempfile = "3.0"
