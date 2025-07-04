@@ -2,6 +2,8 @@
 
 Declarative secrets manager for development workflows, supporting a variety of storage backends.
 
+See [announcement blog post for motivation](XXX).
+
 ## Features
 
 - **Declarative Configuration**: Define your secrets in `secretspec.toml` with descriptions and requirements
@@ -10,20 +12,32 @@ Declarative secrets manager for development workflows, supporting a variety of s
 
 ## Installation
 
-```bash
-$ cargo install secretspec
+### Static binary
+
+```
+$ curl https://secretspec.dev ...
 ```
 
-(open pull requests once these hit distributions)
+### Devenv.sh
+
+XXX: LINK TO DOCS
+
+### Nix
+
+```
+$ nix-env -iA secretspec -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
+```
+
+*Please, open pull requests once these hit your favorite distribution.*
 
 ## Quick Start
 
-1. **Initialize `secretspec.toml` from an existing .env file:**
+1. **Initialize `secretspec.toml` (automatically detects .env)**
    ```bash
    $ secretspec init
    ```
 
-2. **Set up global configuration:**
+2. **Set up storage backend:**
    ```bash
    $ secretspec config init
    ```
@@ -41,7 +55,7 @@ $ cargo install secretspec
 
 5. **Run your application with secrets:**
    ```bash
-   $ secretspec run -- npm start
+   $ secretspec run --environment production -- npm start
    ```
 
 ## Configuration
@@ -52,14 +66,10 @@ Each project has a `secretspec.toml` file that declares the required secrets:
 
 ```toml
 [project]
-name = "my-app"  # if not specified, inferred from current directory name
+name = "my-app"  # Inferred from current directory name when using `secretspec init`
 
 [secrets.DATABASE_URL]
 description = "PostgreSQL connection string"
-required = true
-
-[secrets.API_KEY]
-description = "External service API key"
 required = true
 
 [secrets.REDIS_URL]
@@ -74,14 +84,11 @@ required = false
 
 [secrets.DATABASE_URL.production]
 required = true  # no default - must be set
-
-[secrets.API_KEY.production]
-required = true  # override: required in production
 ```
 
 ### Global Configuration
 
-Global settings are stored in your system config directory:
+Storage is specified in global configuration using `secretspec config init` or via `--storage` on CLI.
 
 ```toml
 [defaults]
@@ -89,6 +96,14 @@ storage = "keyring"  # or "dotenv"
 ```
 
 ## Storage Backends
+
+SecretSpec includes three built-in storage backends:
+
+- **keyring** - Secure system credential store integration
+- **dotenv** - Local .env file storage
+- **env** - Read-only environment variable access
+
+*Additional storage backends are welcome!**
 
 ### Keyring Storage (Recommended)
 
@@ -129,14 +144,6 @@ your-connection-string
 
 $ secretspec check --storage env
 ```
-
-### Available Storage Backends
-
-SecretSpec includes three built-in storage backends:
-
-- **keyring** - Secure system credential store integration
-- **dotenv** - Local .env file storage 
-- **env** - Read-only environment variable access
 
 ### Adding a New Storage Backend
 
@@ -179,124 +186,6 @@ To implement a new storage backend in this repository:
    ```bash
    $ secretspec set SECRET_NAME --storage your_backend
    ```
-
-## Commands
-
-### Project Management
-
-```bash
-# Initialize project from .env file
-$ secretspec init
-
-# Check if all required secrets are set
-$ secretspec check
-
-# Check secrets for specific environment
-$ secretspec check --env production
-
-# Run command with secrets injected
-$ secretspec run -- your-command
-
-# Run with environment-specific configuration
-$ secretspec run --env production -- your-command
-```
-
-### Secret Management
-
-```bash
-# Set a secret (will prompt for value)
-$ secretspec set SECRET_NAME
-
-# Set a secret with value
-$ secretspec set SECRET_NAME "secret-value"
-
-# Set secret for specific environment
-$ secretspec set SECRET_NAME --env production
-
-# Get a secret value
-$ secretspec get SECRET_NAME
-
-# Get secret with environment-specific defaults
-$ secretspec get SECRET_NAME --env development
-
-# Use specific storage backend
-$ secretspec set SECRET_NAME --storage keyring
-```
-
-### Configuration
-
-```bash
-# Initialize global configuration
-$ secretspec config init
-
-# Show current configuration
-$ secretspec config show
-```
-
-## Security Best Practices
-
-1. **Use keyring storage** for production and sensitive environments
-2. **Add `.env` to `.gitignore`** if using env storage
-3. **Never commit `secretspec.toml` with actual secret values** - it should only contain metadata
-4. **Use required: true** for critical secrets
-5. **Provide meaningful descriptions** for all secrets
-
-## Migration from .env
-
-If you're already using `.env` files:
-
-1. Run `secretspec init --from .env` to create `secretspec.toml`
-2. Set your secrets with `secretspec set SECRET_NAME`
-3. Remove the original `.env` file
-4. Use `secretspec run -- your-command` instead of loading `.env` manually
-
-## Examples
-
-### Basic Web Application
-
-```toml
-[project]
-name = "web-app"
-
-[secrets.DATABASE_URL]
-description = "PostgreSQL connection string"
-required = true
-
-[secrets.SESSION_SECRET]
-description = "Secret key for session encryption"
-required = true
-
-[secrets.SMTP_PASSWORD]
-description = "Password for email service"
-required = false
-```
-
-### Development vs Production
-
-Use different storage backends and environment-specific configurations:
-
-```bash
-# Development: use .env file with development defaults
-$ secretspec set DATABASE_URL --storage dotenv --env development
-
-# Production: use keyring with production requirements
-$ secretspec set DATABASE_URL --storage keyring --env production
-
-# Check different environments
-$ secretspec check --env development
-$ secretspec check --env production
-```
-
-## Troubleshooting
-
-### "No secretspec.toml found"
-Run `secretspec init` in your project directory first.
-
-### "No storage backend configured"
-Run `secretspec config init` to set up global defaults, or use `--storage` flag.
-
-### Keyring access issues
-Ensure your system's credential store is unlocked and accessible.
 
 ## License
 
