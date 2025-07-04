@@ -120,7 +120,11 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Init { from } => {
             let project_config = ProjectConfig::from_path(&from)?;
-            let content = toml::to_string_pretty(&project_config)?;
+            let mut content = toml::to_string_pretty(&project_config)?;
+            
+            // Append comprehensive example
+            content.push_str(ProjectConfig::get_example_toml());
+            
             fs::write("secretspec.toml", content)?;
 
             println!(
@@ -135,6 +139,14 @@ fn main() -> Result<()> {
                 );
                 println!("  secretspec set <SECRET_NAME>");
             }
+            
+            println!("\n! Check the commented examples at the end of secretspec.toml");
+            println!("  Uncomment and customize sections you need");
+            println!("\nNext steps:");
+            println!("  1. secretspec config init    # Set up user configuration");
+            println!("  2. secretspec set API_KEY    # Store your secrets");
+            println!("  3. secretspec check          # Verify all secrets are set");
+            println!("  4. secretspec run -- your-command  # Run with secrets");
 
             Ok(())
         }

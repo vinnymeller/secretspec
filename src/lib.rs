@@ -84,6 +84,51 @@ impl ProjectConfig {
             secrets,
         })
     }
+
+    pub fn get_example_toml() -> &'static str {
+        r#"
+# Example secrets configuration
+# Uncomment and modify the sections you need
+
+# [secrets.API_KEY]
+# description = "API key for external service"
+# required = true
+# 
+# [secrets.API_KEY.development]
+# required = false
+# default = "dev-api-key"
+
+# [secrets.DATABASE_URL]
+# description = "Database connection string"
+# required = true
+# 
+# [secrets.DATABASE_URL.development]
+# default = "sqlite:///dev.db"
+
+# [secrets.JWT_SECRET]
+# description = "Secret key for JWT token signing"
+# required = true
+
+# [secrets.REDIS_URL]
+# description = "Redis connection URL for caching"
+# required = false
+# default = "redis://localhost:6379"
+
+# [secrets.EMAIL_PROVIDER]
+# description = "Email service provider"
+# required = false
+# default = "smtp"
+
+# [secrets.OAUTH_CLIENT_ID]
+# description = "OAuth client ID"
+# required = false
+
+# [secrets.OAUTH_CLIENT_SECRET]
+# description = "OAuth client secret"
+# required = false
+"#
+    }
+
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -96,7 +141,7 @@ pub struct SecretConfig {
     pub environments: HashMap<String, EnvironmentOverride>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnvironmentOverride {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub required: Option<bool>,
