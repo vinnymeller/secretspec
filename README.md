@@ -10,26 +10,6 @@ See [announcement blog post for motivation](XXX).
 - **Multiple Storage Backends**: [Keyring](https://docs.rs/keyring/latest/keyring/) (system credential store), [.env](https://www.dotenv.org/), and environment variable support
 - **Simple Migration**: `secretspec init` to migrate from existing `.env` files
 
-## Installation
-
-### Static binary
-
-```
-$ curl https://secretspec.dev ...
-```
-
-### Devenv.sh
-
-XXX: LINK TO DOCS
-
-### Nix
-
-```
-$ nix-env -iA secretspec -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
-```
-
-*Please, open pull requests once these hit your favorite distribution.*
-
 ## Quick Start
 
 1. **Initialize `secretspec.toml` (automatically detects .env)**
@@ -57,6 +37,26 @@ $ nix-env -iA secretspec -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-uns
    ```bash
    $ secretspec run --environment production -- npm start
    ```
+
+## Installation
+
+### Static binary
+
+```bash
+$ curl -sSL https://secretspec.dev/install | sh
+```
+
+### Devenv.sh
+
+See the [devenv integration guide](https://secretspec.dev/docs/devenv) for setup instructions.
+
+### Nix
+
+```bash
+$ nix-env -iA secretspec -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
+```
+
+*Please, open pull requests once these hit your favorite distribution.*
 
 ## Configuration
 
@@ -87,6 +87,8 @@ required = true  # no default - must be set
 ```
 
 ### Global Configuration
+
+Global configuration is stored at `~/.config/secretspec/config.toml` on Linux/macOS or `%APPDATA%\secretspec\config.toml` on Windows.
 
 Storage is specified in global configuration using `secretspec config init` or via `--storage` on CLI.
 
