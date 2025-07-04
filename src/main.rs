@@ -90,8 +90,8 @@ fn get_config_path() -> Result<PathBuf> {
 }
 
 fn load_project_config() -> Result<ProjectConfig> {
-    let content =
-        fs::read_to_string("secretspec.toml").map_err(|_| secretspec::SecretSpecError::NoManifest)?;
+    let content = fs::read_to_string("secretspec.toml")
+        .map_err(|_| secretspec::SecretSpecError::NoManifest)?;
     Ok(toml::from_str(&content)?)
 }
 
@@ -121,10 +121,10 @@ fn main() -> Result<()> {
         Commands::Init { from } => {
             let project_config = ProjectConfig::from_path(&from)?;
             let mut content = toml::to_string_pretty(&project_config)?;
-            
+
             // Append comprehensive example
             content.push_str(ProjectConfig::get_example_toml());
-            
+
             fs::write("secretspec.toml", content)?;
 
             println!(
@@ -139,9 +139,7 @@ fn main() -> Result<()> {
                 );
                 println!("  secretspec set <SECRET_NAME>");
             }
-            
-            println!("\n! Check the commented examples at the end of secretspec.toml");
-            println!("  Uncomment and customize sections you need");
+
             println!("\nNext steps:");
             println!("  1. secretspec config init    # Set up user configuration");
             println!("  2. secretspec set API_KEY    # Store your secrets");
@@ -178,27 +176,30 @@ fn main() -> Result<()> {
                 Ok(())
             }
         },
-        _ => {
-            let project_config = load_project_config()?;
-            let global_config = load_global_config()?;
-            let app = SecretSpec::new(project_config, global_config);
-
-            match cli.command {
-                Commands::Set {
-                    name,
-                    value,
-                    storage,
-                    env,
-                } => app.set(&name, value, storage, env),
-                Commands::Get { name, storage, env } => app.get(&name, storage, env),
-                Commands::Run {
-                    command,
-                    storage,
-                    env,
-                } => app.run(command, storage, env),
-                Commands::Check { storage, env } => app.check(storage, env),
-                _ => unreachable!(),
-            }
+        Commands::Set {
+            name,
+            value,
+            storage,
+            env,
+        } => {
+            let app = SecretSpec::load()?;
+            app.set(&name, value, storage, env)
+        }
+        Commands::Get { name, storage, env } => {
+            let app = SecretSpec::load()?;
+            app.get(&name, storage, env)
+        }
+        Commands::Run {
+            command,
+            storage,
+            env,
+        } => {
+            let app = SecretSpec::load()?;
+            app.run(command, storage, env)
+        }
+        Commands::Check { storage, env } => {
+            let app = SecretSpec::load()?;
+            app.check(storage, env)
         }
     }
 }

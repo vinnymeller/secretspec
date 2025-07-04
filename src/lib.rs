@@ -1,10 +1,11 @@
 use colored::Colorize;
+use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use thiserror::Error;
 
@@ -179,6 +180,12 @@ impl SecretSpec {
             config,
             global_config,
         }
+    }
+
+    pub fn load() -> Result<Self> {
+        let project_config = load_project_config()?;
+        let global_config = load_global_config()?;
+        Ok(Self::new(project_config, global_config))
     }
 
     fn resolve_secret_config(&self, name: &str, environment: Option<&str>) -> Option<(bool, Option<String>)> {
@@ -416,4 +423,26 @@ impl SecretSpec {
         let status = cmd.status()?;
         std::process::exit(status.code().unwrap_or(1));
     }
+}
+
+fn get_config_path() -> Result<PathBuf> {
+    let dirs = ProjectDirs::from("", "", "secretspec").ok_or_else(|| {
+        io::Error::new(io::ErrorKind::NotFound, "Could not find config directory")
+    })?;
+    Ok(dirs.config_dir().join("config.toml"))
+}
+
+fn load_project_config() -> Result<ProjectConfig> {
+    let content = fs::read_to_string("secretspec.toml")
+        .map_err(|_| SecretSpecError::NoManifest)?;
+    Ok(toml::from_str(&content)?)
+}
+
+fn load_global_config() -> Result<Option<GlobalConfig>> {
+    let config_path = get_config_path()?;
+    if !config_path.exists() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(&config_path)?;
+    Ok(Some(toml::from_str(&content)?))
 }
