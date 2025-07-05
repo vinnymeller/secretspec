@@ -9,8 +9,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use thiserror::Error;
 
-mod storage;
-use storage::{StorageBackend, StorageRegistry};
+mod provider;
+use provider::{Provider, ProviderRegistry};
+
+#[cfg(feature = "codegen")]
+pub mod codegen;
+#[cfg(feature = "codegen")]
+pub use codegen::{Provider as CodegenProvider, Profile as CodegenProfile};
 
 #[derive(Error, Debug)]
 pub enum SecretSpecError {
@@ -24,10 +29,10 @@ pub enum SecretSpecError {
     Keyring(#[from] keyring::Error),
     #[error("Dotenv error: {0}")]
     Dotenv(#[from] dotenvy::Error),
-    #[error("No storage backend configured. Use --storage or configure user settings")]
-    NoStorageConfigured,
-    #[error("Storage backend '{0}' not found")]
-    StorageNotFound(String),
+    #[error("No provider backend configured.\n\nTo fix this, either:\n  1. Run 'secretspec config init' to set up your default provider\n  2. Use --provider flag (e.g., 'secretspec check --provider keyring')")]
+    NoProviderConfigured,
+    #[error("Provider backend '{0}' not found")]
+    ProviderNotFound(String),
     #[error("Secret '{0}' not found")]
     SecretNotFound(String),
     #[error("Secret '{0}' is required but not set")]
@@ -36,8 +41,10 @@ pub enum SecretSpecError {
     NoManifest,
     #[error("Project name not found in secretspec.toml")]
     NoProjectName,
-    #[error("Storage operation failed: {0}")]
-    StorageOperationFailed(String),
+    #[error("Provider operation failed: {0}")]
+    ProviderOperationFailed(String),
+    #[error("User interaction error: {0}")]
+    InquireError(#[from] inquire::InquireError),
 }
 
 pub type Result<T> = std::result::Result<T, SecretSpecError>;
@@ -68,7 +75,7 @@ impl ProjectConfig {
                         description: format!("{} secret", key),
                         required: true,
                         default: None,
-                        environments: HashMap::new(),
+                        profiles: HashMap::new(),
                     },
                 );
             }
@@ -139,11 +146,11 @@ pub struct SecretConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<String>,
     #[serde(default, flatten)]
-    pub environments: HashMap<String, EnvironmentOverride>,
+    pub profiles: HashMap<String, ProfileOverride>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EnvironmentOverride {
+pub struct ProfileOverride {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub required: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -159,16 +166,16 @@ pub struct GlobalConfig {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DefaultConfig {
-    pub storage: String,
+    pub provider: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectUserConfig {
-    pub storage: String,
+    pub provider: String,
 }
 
 pub struct SecretSpec {
-    registry: StorageRegistry,
+    registry: ProviderRegistry,
     config: ProjectConfig,
     global_config: Option<GlobalConfig>,
 }
@@ -176,7 +183,7 @@ pub struct SecretSpec {
 impl SecretSpec {
     pub fn new(config: ProjectConfig, global_config: Option<GlobalConfig>) -> Self {
         Self {
-            registry: StorageRegistry::new(),
+            registry: ProviderRegistry::new(),
             config,
             global_config,
         }
@@ -188,13 +195,13 @@ impl SecretSpec {
         Ok(Self::new(project_config, global_config))
     }
 
-    fn resolve_secret_config(&self, name: &str, environment: Option<&str>) -> Option<(bool, Option<String>)> {
+    fn resolve_secret_config(&self, name: &str, profile: Option<&str>) -> Option<(bool, Option<String>)> {
         let secret_config = self.config.secrets.get(name)?;
         
-        if let Some(env) = environment {
-            if let Some(env_override) = secret_config.environments.get(env) {
-                let required = env_override.required.unwrap_or(secret_config.required);
-                let default = env_override.default.clone().or_else(|| secret_config.default.clone());
+        if let Some(prof) = profile {
+            if let Some(profile_override) = secret_config.profiles.get(prof) {
+                let required = profile_override.required.unwrap_or(secret_config.required);
+                let default = profile_override.default.clone().or_else(|| secret_config.default.clone());
                 return Some((required, default));
             }
         }
@@ -202,28 +209,28 @@ impl SecretSpec {
         Some((secret_config.required, secret_config.default.clone()))
     }
 
-    fn get_storage_backend(
+    fn get_provider_backend(
         &self,
-        storage_arg: Option<String>,
-    ) -> Result<(String, &Box<dyn StorageBackend>)> {
-        let storage_name = if let Some(name) = storage_arg {
+        provider_arg: Option<String>,
+    ) -> Result<(String, &Box<dyn Provider>)> {
+        let provider_name = if let Some(name) = provider_arg {
             name
         } else if let Some(global_config) = &self.global_config {
             global_config
                 .projects
                 .get(&self.config.project.name)
-                .map(|p| p.storage.clone())
-                .unwrap_or(global_config.defaults.storage.clone())
+                .map(|p| p.provider.clone())
+                .unwrap_or(global_config.defaults.provider.clone())
         } else {
-            return Err(SecretSpecError::NoStorageConfigured);
+            return Err(SecretSpecError::NoProviderConfigured);
         };
 
         let backend = self
             .registry
-            .get(&storage_name)
-            .ok_or_else(|| SecretSpecError::StorageNotFound(storage_name.clone()))?;
+            .get(&provider_name)
+            .ok_or_else(|| SecretSpecError::ProviderNotFound(provider_name.clone()))?;
 
-        Ok((storage_name, backend))
+        Ok((provider_name, backend))
     }
 
     pub fn init(&self, from: &Path) -> Result<()> {
@@ -241,7 +248,7 @@ impl SecretSpec {
                         description: format!("{} secret", key),
                         required: true,
                         default: None,
-                        environments: HashMap::new(),
+                        profiles: HashMap::new(),
                     },
                 );
             }
@@ -274,38 +281,38 @@ impl SecretSpec {
         &self,
         name: &str,
         value: Option<String>,
-        storage_arg: Option<String>,
-        environment: Option<String>,
+        provider_arg: Option<String>,
+        profile: Option<String>,
     ) -> Result<()> {
-        let (storage_name, backend) = self.get_storage_backend(storage_arg)?;
-        let env_display = environment.as_deref().unwrap_or("default");
+        let (provider_name, backend) = self.get_provider_backend(provider_arg)?;
+        let profile_display = profile.as_deref().unwrap_or("default");
 
         let value = if let Some(v) = value {
             v
         } else {
-            print!("Enter value for {} (env: {}): ", name, env_display);
+            print!("Enter value for {} (profile: {}): ", name, profile_display);
             io::stdout().flush()?;
             rpassword::read_password()?
         };
 
-        backend.set(&self.config.project.name, name, &value)?;
+        backend.set(&self.config.project.name, name, &value, profile.as_deref())?;
         println!(
-            "{} Secret '{}' saved to {} (env: {})",
+            "{} Secret '{}' saved to {} (profile: {})",
             "✓".green(),
             name,
-            storage_name,
-            env_display
+            provider_name,
+            profile_display
         );
 
         Ok(())
     }
 
-    pub fn get(&self, name: &str, storage_arg: Option<String>, environment: Option<String>) -> Result<()> {
-        let (_, backend) = self.get_storage_backend(storage_arg)?;
-        let (_, default) = self.resolve_secret_config(name, environment.as_deref())
+    pub fn get(&self, name: &str, provider_arg: Option<String>, profile: Option<String>) -> Result<()> {
+        let (_, backend) = self.get_provider_backend(provider_arg)?;
+        let (_, default) = self.resolve_secret_config(name, profile.as_deref())
             .ok_or_else(|| SecretSpecError::SecretNotFound(name.to_string()))?;
 
-        match backend.get(&self.config.project.name, name)? {
+        match backend.get(&self.config.project.name, name, profile.as_deref())? {
             Some(value) => {
                 println!("{}", value);
                 Ok(())
@@ -321,24 +328,24 @@ impl SecretSpec {
         }
     }
 
-    pub fn check(&self, storage_arg: Option<String>, environment: Option<String>) -> Result<()> {
-        let (storage_name, backend) = self.get_storage_backend(storage_arg)?;
-        let env_display = environment.as_deref().unwrap_or("default");
+    pub fn check(&self, provider_arg: Option<String>, profile: Option<String>) -> Result<()> {
+        let (provider_name, backend) = self.get_provider_backend(provider_arg)?;
+        let profile_display = profile.as_deref().unwrap_or("default");
 
         println!(
-            "Checking secrets in {} using {} (env: {})...\n",
+            "Checking secrets in {} using {} (profile: {})...\n",
             self.config.project.name.bold(),
-            storage_name.blue(),
-            env_display.cyan()
+            provider_name.blue(),
+            profile_display.cyan()
         );
 
         let mut missing = vec![];
         let mut found = vec![];
 
         for (name, config) in &self.config.secrets {
-            let (required, default) = self.resolve_secret_config(name, environment.as_deref()).unwrap();
+            let (required, default) = self.resolve_secret_config(name, profile.as_deref()).unwrap();
             
-            match backend.get(&self.config.project.name, name)? {
+            match backend.get(&self.config.project.name, name, profile.as_deref())? {
                 Some(_) => {
                     found.push(name);
                     println!("{} {} - {}", "✓".green(), name, config.description);
@@ -387,7 +394,31 @@ impl SecretSpec {
         Ok(())
     }
 
-    pub fn run(&self, command: Vec<String>, storage_arg: Option<String>, environment: Option<String>) -> Result<()> {
+    pub fn get_all_secrets(&self, provider_arg: Option<String>, profile: Option<String>) -> Result<HashMap<String, String>> {
+        let (_, backend) = self.get_provider_backend(provider_arg)?;
+        let mut secrets = HashMap::new();
+
+        for (name, _config) in &self.config.secrets {
+            let (required, default) = self.resolve_secret_config(name, profile.as_deref()).unwrap();
+            
+            match backend.get(&self.config.project.name, name, profile.as_deref())? {
+                Some(value) => {
+                    secrets.insert(name.clone(), value);
+                }
+                None => {
+                    if let Some(default_value) = default {
+                        secrets.insert(name.clone(), default_value);
+                    } else if required {
+                        return Err(SecretSpecError::RequiredSecretMissing(name.clone()));
+                    }
+                }
+            }
+        }
+
+        Ok(secrets)
+    }
+
+    pub fn run(&self, command: Vec<String>, provider_arg: Option<String>, profile: Option<String>) -> Result<()> {
         if command.is_empty() {
             return Err(SecretSpecError::Io(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -395,26 +426,10 @@ impl SecretSpec {
             )));
         }
 
-        let (_, backend) = self.get_storage_backend(storage_arg)?;
-
+        let secrets = self.get_all_secrets(provider_arg, profile)?;
+        
         let mut env_vars = env::vars().collect::<HashMap<_, _>>();
-
-        for (name, _config) in &self.config.secrets {
-            let (required, default) = self.resolve_secret_config(name, environment.as_deref()).unwrap();
-            
-            match backend.get(&self.config.project.name, name)? {
-                Some(value) => {
-                    env_vars.insert(name.clone(), value);
-                }
-                None => {
-                    if let Some(default_value) = default {
-                        env_vars.insert(name.clone(), default_value);
-                    } else if required {
-                        return Err(SecretSpecError::RequiredSecretMissing(name.clone()));
-                    }
-                }
-            }
-        }
+        env_vars.extend(secrets);
 
         let mut cmd = Command::new(&command[0]);
         cmd.args(&command[1..]);

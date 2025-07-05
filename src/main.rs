@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
+use color_eyre::eyre::{Result, WrapErr};
 use directories::ProjectDirs;
-use secretspec::{DefaultConfig, GlobalConfig, ProjectConfig, Result, SecretSpec};
+use secretspec::{DefaultConfig, GlobalConfig, ProjectConfig, SecretSpec};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
@@ -28,44 +29,44 @@ enum Commands {
         name: String,
         /// Value of the secret (will prompt if not provided)
         value: Option<String>,
-        /// Storage backend to use
-        #[arg(short, long)]
-        storage: Option<String>,
-        /// Environment to use
-        #[arg(short, long)]
-        env: Option<String>,
+        /// Provider backend to use
+        #[arg(short, long, env = "SECRETSPEC_PROVIDER")]
+        provider: Option<String>,
+        /// Profile to use
+        #[arg(short = 'P', long, env = "SECRETSPEC_PROFILE")]
+        profile: Option<String>,
     },
     /// Get a secret value
     Get {
         /// Name of the secret
         name: String,
-        /// Storage backend to use
-        #[arg(short, long)]
-        storage: Option<String>,
-        /// Environment to use
-        #[arg(short, long)]
-        env: Option<String>,
+        /// Provider backend to use
+        #[arg(short, long, env = "SECRETSPEC_PROVIDER")]
+        provider: Option<String>,
+        /// Profile to use
+        #[arg(short = 'P', long, env = "SECRETSPEC_PROFILE")]
+        profile: Option<String>,
     },
     /// Run a command with secrets injected
     Run {
-        /// Storage backend to use
-        #[arg(short, long)]
-        storage: Option<String>,
-        /// Environment to use
-        #[arg(short, long)]
-        env: Option<String>,
+        /// Provider backend to use
+        #[arg(short, long, env = "SECRETSPEC_PROVIDER")]
+        provider: Option<String>,
+        /// Profile to use
+        #[arg(short = 'P', long, env = "SECRETSPEC_PROFILE")]
+        profile: Option<String>,
         /// Command and arguments to run
         #[arg(trailing_var_arg = true)]
         command: Vec<String>,
     },
     /// Check if all required secrets are available
     Check {
-        /// Storage backend to use
-        #[arg(short, long)]
-        storage: Option<String>,
-        /// Environment to use
-        #[arg(short, long)]
-        env: Option<String>,
+        /// Provider backend to use
+        #[arg(short, long, env = "SECRETSPEC_PROVIDER")]
+        provider: Option<String>,
+        /// Profile to use
+        #[arg(short = 'P', long, env = "SECRETSPEC_PROFILE")]
+        profile: Option<String>,
     },
     /// Configure user settings
     Config {
@@ -82,20 +83,14 @@ enum ConfigAction {
     Show,
 }
 
-fn get_config_path() -> Result<PathBuf> {
+fn get_config_path() -> secretspec::Result<PathBuf> {
     let dirs = ProjectDirs::from("", "", "secretspec").ok_or_else(|| {
         io::Error::new(io::ErrorKind::NotFound, "Could not find config directory")
     })?;
     Ok(dirs.config_dir().join("config.toml"))
 }
 
-fn load_project_config() -> Result<ProjectConfig> {
-    let content = fs::read_to_string("secretspec.toml")
-        .map_err(|_| secretspec::SecretSpecError::NoManifest)?;
-    Ok(toml::from_str(&content)?)
-}
-
-fn load_global_config() -> Result<Option<GlobalConfig>> {
+fn load_global_config() -> secretspec::Result<Option<GlobalConfig>> {
     let config_path = get_config_path()?;
     if !config_path.exists() {
         return Ok(None);
@@ -104,7 +99,7 @@ fn load_global_config() -> Result<Option<GlobalConfig>> {
     Ok(Some(toml::from_str(&content)?))
 }
 
-fn save_global_config(config: &GlobalConfig) -> Result<()> {
+fn save_global_config(config: &GlobalConfig) -> secretspec::Result<()> {
     let config_path = get_config_path()?;
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent)?;
@@ -150,15 +145,22 @@ fn main() -> Result<()> {
         }
         Commands::Config { action } => match action {
             ConfigAction::Init => {
+                use inquire::Select;
+                
+                let providers = vec!["keyring", "dotenv", "env"];
+                let provider = Select::new("Select your preferred provider backend:", providers)
+                    .with_help_message("keyring: Uses system keychain (Recommended)\ndotenv: Traditional .env files\nenv: Read-only environment variables")
+                    .prompt()?;
+                
                 let config = GlobalConfig {
                     defaults: DefaultConfig {
-                        storage: "keyring".to_string(),
+                        provider: provider.to_string(),
                     },
                     projects: HashMap::new(),
                 };
 
                 save_global_config(&config)?;
-                println!("✓ Created config at {}", get_config_path()?.display());
+                println!("\n✓ Configuration saved to {}", get_config_path()?.display());
                 Ok(())
             }
             ConfigAction::Show => {
@@ -179,27 +181,31 @@ fn main() -> Result<()> {
         Commands::Set {
             name,
             value,
-            storage,
-            env,
+            provider,
+            profile,
         } => {
-            let app = SecretSpec::load()?;
-            app.set(&name, value, storage, env)
+            let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
+            app.set(&name, value, provider, profile).wrap_err("Failed to set secret")?;
+            Ok(())
         }
-        Commands::Get { name, storage, env } => {
-            let app = SecretSpec::load()?;
-            app.get(&name, storage, env)
+        Commands::Get { name, provider, profile } => {
+            let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
+            app.get(&name, provider, profile).wrap_err("Failed to get secret")?;
+            Ok(())
         }
         Commands::Run {
             command,
-            storage,
-            env,
+            provider,
+            profile,
         } => {
-            let app = SecretSpec::load()?;
-            app.run(command, storage, env)
+            let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
+            app.run(command, provider, profile).wrap_err("Failed to run command")?;
+            Ok(())
         }
-        Commands::Check { storage, env } => {
-            let app = SecretSpec::load()?;
-            app.check(storage, env)
+        Commands::Check { provider, profile } => {
+            let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
+            app.check(provider, profile).wrap_err("Failed to check secrets")?;
+            Ok(())
         }
     }
 }

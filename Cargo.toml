@@ -1,7 +1,12 @@
+[workspace]
+members = [".", "secretspec-tests"]
+resolver = "2"
+
 [package]
 name = "secretspec"
 version = "0.1.0"
 edition = "2024"
+build = "build.rs"
 
 [lib]
 name = "secretspec"
@@ -12,7 +17,7 @@ name = "secretspec"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.0", features = ["derive", "env"] }
 keyring = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
@@ -21,6 +26,14 @@ directories = "5.0"
 colored = "2.0"
 rpassword = "7.4.0"
 dotenvy = "0.15"
+inquire = "0.6"
+color-eyre = "0.6"
+quote = { version = "1.0", optional = true }
+proc-macro2 = { version = "1.0", optional = true }
+
+[features]
+default = ["codegen"]
+codegen = ["quote", "proc-macro2"]
 
 [dev-dependencies]
 tempfile = "3.0"

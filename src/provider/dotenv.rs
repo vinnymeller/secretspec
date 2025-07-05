@@ -1,4 +1,4 @@
-use super::StorageBackend;
+use super::Provider;
 use crate::Result;
 use std::collections::HashMap;
 use std::fs;
@@ -37,13 +37,13 @@ impl DotEnvStorage {
     }
 }
 
-impl StorageBackend for DotEnvStorage {
-    fn get(&self, _project: &str, key: &str) -> Result<Option<String>> {
+impl Provider for DotEnvStorage {
+    fn get(&self, _project: &str, key: &str, _profile: Option<&str>) -> Result<Option<String>> {
         let vars = self.load_env_vars()?;
         Ok(vars.get(key).cloned())
     }
 
-    fn set(&self, _project: &str, key: &str, value: &str) -> Result<()> {
+    fn set(&self, _project: &str, key: &str, value: &str, _profile: Option<&str>) -> Result<()> {
         let mut vars = self.load_env_vars()?;
         vars.insert(key.to_string(), value.to_string());
         self.save_env_vars(&vars)
