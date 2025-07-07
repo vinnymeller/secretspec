@@ -156,82 +156,80 @@ $ secretspec check --provider env
 ```
 
 
-## Rust SDK with Type-Safe Code Generation
+## Rust SDK
+
+SecretSpec provides a proc macro that generates strongly-typed Rust structs from your `secretspec.toml` file at compile time.
+
+### Add to your `Cargo.toml`:
+```toml
+[dependencies]
+secretspec = { version = "0.1", features = ["codegen"] }
+```
 
 ### Basic Usage
 
 ```rust
-use secretspec::SecretSpec;
+// Generate typed structs from secretspec.toml
+secretspec::define_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let spec = SecretSpec::load()?;
+    // Load secrets with type-safe struct
+    let secrets = SecretSpec::load(Provider::Keyring)?;
     
-    // Validate and get all secrets for the current environment
-    let secrets = spec.validate(None, None)?;
+    // Field names are lowercased versions of secret names
+    println!("Database: {}", secrets.database_url);  // DATABASE_URL -> database_url
     
-    // Access individual secrets
-    let db_url = secrets.get("DATABASE_URL")
-        .ok_or("DATABASE_URL not found")?;
+    // Optional secrets are Option<String>
+    if let Some(redis) = &secrets.redis_url {
+        println!("Redis: {}", redis);
+    }
     
-    println!("Connecting to: {}", db_url);
+    // Set all secrets as environment variables
+    secrets.set_as_env_vars();
+    
     Ok(())
 }
 ```
 
-### Type-Safe Code Generation
+### Profile-Specific Types
 
-SecretSpec uses a proc macro to generate strongly-typed Rust structs from your `secretspec.toml` file:
+The macro generates exact types for each profile, ensuring compile-time safety:
 
-1. **Add to your `Cargo.toml`:**
-   ```toml
-   [dependencies]
-   secretspec = { version = "0.1", features = ["codegen"] }
-   ```
+```rust
+// Load with profile-specific types for maximum type safety
+match SecretSpec::load_profile(Provider::Keyring, Profile::Production)? {
+    SecretSpecProfile::Production { api_key, database_url, redis_url, .. } => {
+        // In production: api_key is String (required)
+        // database_url is String (required) 
+        // redis_url might be String or Option<String> based on config
+        println!("Production API key: {}", api_key);
+    }
+    SecretSpecProfile::Development { api_key, database_url, .. } => {
+        // In development: api_key is Option<String> (has default)
+        // database_url is Option<String> (has default)
+        if let Some(key) = api_key {
+            println!("Dev API key: {}", key);
+        }
+    }
+    _ => {}
+}
+```
 
-2. **Use the proc macro in your code:**
-   ```rust
-   // Generate typed structs from secretspec.toml
-   secretspec::define_secrets!("secretspec.toml");
-   
-   use secretspec::codegen::Provider;
-   
-   fn main() -> Result<(), Box<dyn std::error::Error>> {
-       // Load with strongly-typed struct
-       let secrets = SecretSpec::load(Provider::Keyring)?;
-       
-       // Required secrets are guaranteed to exist
-       println!("Database: {}", secrets.database_url);
-       
-       // Optional secrets are Option<String>
-       if let Some(redis) = &secrets.redis_url {
-           println!("Redis: {}", redis);
-       }
-       
-       // Set all secrets as environment variables
-       secrets.set_as_env_vars();
-       
-       Ok(())
-   }
-   ```
+### Generated Types
 
-3. **Load with specific profile for exact types:**
-   ```rust
-   // Load with profile-specific types
-   match SecretSpec::load_profile(Provider::Keyring, Profile::Production) {
-       Ok(SecretSpecProfile::Production { api_key, database_url, .. }) => {
-           // In production, api_key is String (required)
-           println!("API Key: {}", api_key);
-       }
-       _ => unreachable!(),
-   }
-   ```
+The macro generates several types based on your `secretspec.toml`:
 
-The macro generates:
-- `SecretSpec` struct with union types (safe for any profile)
-- `SecretSpecProfile` enum with exact types for each profile
-- `Profile` enum with all profiles from your TOML
-- Required secrets as `String` or `Option<String>` based on profile requirements
-- Compile-time type safety
+- **`SecretSpec`** - Main struct with union types (fields are `Option<String>` if optional in *any* profile)
+- **`SecretSpecProfile`** - Enum with profile-specific variants containing exact types
+- **`Profile`** - Enum of all profiles from your config (e.g., `Development`, `Production`)
+- **`Provider`** - Type-safe provider selection (`Keyring`, `Dotenv`, `Env`)
+
+### Type Rules
+
+- Secret fields are named as lowercase versions of the environment variable (e.g., `DATABASE_URL` → `database_url`)
+- A field is `String` if it's required and has no default in ALL profiles
+- A field is `Option<String>` if it's optional or has a default in ANY profile
+- Profile-specific types reflect the exact requirements for that profile
 
 ## Adding a New Provider Backend
 
