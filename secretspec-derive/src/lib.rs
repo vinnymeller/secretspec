@@ -58,48 +58,58 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
     let mut all_profiles = HashSet::new();
     let mut field_info = HashMap::new();
 
-    for (secret_name, secret_config) in &config.secrets {
-        let mut is_ever_optional = false;
+    for (profile_name, profile_config) in &config.profiles {
+        all_profiles.insert(profile_name.clone());
 
-        // Check base requirement
-        if !secret_config.required || secret_config.default.is_some() {
-            is_ever_optional = true;
-        }
+        for (secret_name, secret_config) in &profile_config.secrets {
+            let mut is_ever_optional = false;
 
-        // Check profile overrides
-        for (profile_name, profile_override) in &secret_config.profiles {
-            all_profiles.insert(profile_name.clone());
-
-            let profile_required = profile_override.required.unwrap_or(secret_config.required);
-            let has_default = profile_override.default.is_some() || secret_config.default.is_some();
-
-            if !profile_required || has_default {
+            // Check requirement across all profiles
+            if !secret_config.required || secret_config.default.is_some() {
                 is_ever_optional = true;
             }
+
+            // Check if this secret exists in other profiles with different requirements
+            for (other_profile_name, other_profile_config) in &config.profiles {
+                if other_profile_name != profile_name {
+                    if let Some(other_secret_config) = other_profile_config.secrets.get(secret_name)
+                    {
+                        let has_default = other_secret_config.default.is_some();
+                        if !other_secret_config.required || has_default {
+                            is_ever_optional = true;
+                        }
+                    } else {
+                        // If secret doesn't exist in other profile, it's optional
+                        is_ever_optional = true;
+                    }
+                }
+            }
+
+            // If it's ever optional, make it Option<String>
+            let field_type = if is_ever_optional {
+                quote! { Option<String> }
+            } else {
+                quote! { String }
+            };
+
+            field_info.insert(secret_name.clone(), field_type);
         }
-
-        // If it's ever optional, make it Option<String>
-        let field_type = if is_ever_optional {
-            quote! { Option<String> }
-        } else {
-            quote! { String }
-        };
-
-        field_info.insert(secret_name.clone(), (field_type, is_ever_optional));
     }
 
     // Generate the main struct
-    let struct_fields = field_info.iter().map(|(name, (field_type, _))| {
+    let struct_fields = field_info.iter().map(|(name, field_type)| {
         let field_name = format_ident!("{}", name.to_lowercase());
         quote! { pub #field_name: #field_type }
     });
 
     // Generate field assignments for load()
-    let load_assignments = field_info.iter().map(|(name, (_, is_optional))| {
+    let load_assignments = field_info.iter().map(|(name, field_type)| {
         let field_name = format_ident!("{}", name.to_lowercase());
         let secret_name = name.clone();
+        // Check if this is an Option type by looking at the field_type
+        let is_optional = field_type.to_string().starts_with("Option");
 
-        if *is_optional {
+        if is_optional {
             quote! {
                 #field_name: secrets.get(#secret_name).cloned()
             }
@@ -113,11 +123,14 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
     });
 
     // Generate env var setters
-    let env_setters = field_info.iter().map(|(name, (_, is_optional))| {
+    let env_setters = field_info.iter().map(|(name, field_type)| {
         let field_name = format_ident!("{}", name.to_lowercase());
         let env_name = name.clone();
 
-        if *is_optional {
+        // Check if this is an Option type by looking at the field_type
+        let is_optional = field_type.to_string().starts_with("Option");
+
+        if is_optional {
             quote! {
                 if let Some(ref value) = self.#field_name {
                     unsafe {
@@ -185,13 +198,8 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
     // Generate SecretSpecProfile enum variants
     let profile_enum_variants: Vec<_> = if all_profiles.is_empty() {
         // If no profiles, create a Default variant with all fields
-        let fields = config.secrets.iter().map(|(secret_name, secret_config)| {
+        let fields = field_info.iter().map(|(secret_name, field_type)| {
             let field_name = format_ident!("{}", secret_name.to_lowercase());
-            let field_type = if secret_config.required && secret_config.default.is_none() {
-                quote! { String }
-            } else {
-                quote! { Option<String> }
-            };
             quote! { #field_name: #field_type }
         });
         vec![quote! {
@@ -204,24 +212,8 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
             .iter()
             .map(|profile| {
                 let variant_name = format_ident!("{}", capitalize_first(profile));
-                let fields = config.secrets.iter().map(|(secret_name, secret_config)| {
+                let fields = field_info.iter().map(|(secret_name, field_type)| {
                     let field_name = format_ident!("{}", secret_name.to_lowercase());
-
-                    // Determine if this field is required for this profile
-                    let mut is_required = secret_config.required;
-                    let mut has_default = secret_config.default.is_some();
-
-                    if let Some(profile_override) = secret_config.profiles.get(profile) {
-                        is_required = profile_override.required.unwrap_or(is_required);
-                        has_default = profile_override.default.is_some() || has_default;
-                    }
-
-                    let field_type = if is_required && !has_default {
-                        quote! { String }
-                    } else {
-                        quote! { Option<String> }
-                    };
-
                     quote! { #field_name: #field_type }
                 });
 
@@ -237,18 +229,20 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
     // Generate load_profile match arms
     let load_profile_arms: Vec<_> = if all_profiles.is_empty() {
         // If no profiles, handle Default
-        let assignments = config.secrets.iter().map(|(secret_name, secret_config)| {
+        let assignments = field_info.iter().map(|(secret_name, field_type)| {
             let field_name = format_ident!("{}", secret_name.to_lowercase());
 
-            if secret_config.required && secret_config.default.is_none() {
+            // Check if this is an Option type by looking at the field_type
+            let is_optional = field_type.to_string().starts_with("Option");
+            if is_optional {
+                quote! {
+                    #field_name: secrets.get(#secret_name).cloned()
+                }
+            } else {
                 quote! {
                     #field_name: secrets.get(#secret_name)
                         .ok_or_else(|| secretspec::SecretSpecError::RequiredSecretMissing(#secret_name.to_string()))?
                         .clone()
-                }
-            } else {
-                quote! {
-                    #field_name: secrets.get(#secret_name).cloned()
                 }
             }
         });
@@ -261,27 +255,29 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
     } else {
         all_profiles.iter().map(|profile| {
         let variant_name = format_ident!("{}", capitalize_first(profile));
-        let assignments = config.secrets.iter().map(|(secret_name, secret_config)| {
+        let assignments = field_info.iter().map(|(secret_name, field_type)| {
             let field_name = format_ident!("{}", secret_name.to_lowercase());
 
-            // Determine if this field is required for this profile
-            let mut is_required = secret_config.required;
-            let mut has_default = secret_config.default.is_some();
+            // Check if this is an Option type
+            let is_optional = if let Some(profile_config) = config.profiles.get(profile) {
+                if let Some(secret_config) = profile_config.secrets.get(secret_name) {
+                    !secret_config.required || secret_config.default.is_some()
+                } else {
+                    true // Secret doesn't exist in this profile, so it's optional
+                }
+            } else {
+                true
+            };
 
-            if let Some(profile_override) = secret_config.profiles.get(profile) {
-                is_required = profile_override.required.unwrap_or(is_required);
-                has_default = profile_override.default.is_some() || has_default;
-            }
-
-            if is_required && !has_default {
+            if is_optional {
+                quote! {
+                    #field_name: secrets.get(#secret_name).cloned()
+                }
+            } else {
                 quote! {
                     #field_name: secrets.get(#secret_name)
                         .ok_or_else(|| secretspec::SecretSpecError::RequiredSecretMissing(#secret_name.to_string()))?
                         .clone()
-                }
-            } else {
-                quote! {
-                    #field_name: secrets.get(#secret_name).cloned()
                 }
             }
         });

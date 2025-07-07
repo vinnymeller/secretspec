@@ -2,5 +2,5 @@
 name = "empty-project"
 revision = "1.0"
 
-[secrets]
+[profiles.default]
 # No secrets defined

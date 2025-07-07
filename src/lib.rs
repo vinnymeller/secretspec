@@ -87,11 +87,13 @@ pub fn project_config_from_path(from: &Path) -> Result<ProjectConfig> {
                     description: format!("{} secret", key),
                     required: true,
                     default: None,
-                    profiles: HashMap::new(),
                 },
             );
         }
     }
+
+    let mut profiles = HashMap::new();
+    profiles.insert("default".to_string(), ProfileConfig { secrets });
 
     Ok(ProjectConfig {
         project: ProjectInfo {
@@ -101,8 +103,9 @@ pub fn project_config_from_path(from: &Path) -> Result<ProjectConfig> {
                 .to_string_lossy()
                 .to_string(),
             revision: "1.0".to_string(),
+            extends: None,
         },
-        secrets,
+        profiles,
     })
 }
 
@@ -111,42 +114,18 @@ pub fn get_example_toml() -> &'static str {
 # Example secrets configuration
 # Uncomment and modify the sections you need
 
-# [secrets.API_KEY]
-# description = "API key for external service"
-# required = true
+# [profiles.default]
+# API_KEY = { description = "API key for external service", required = true }
+# DATABASE_URL = { description = "Database connection string", required = true }
 #
-# [secrets.API_KEY.development]
-# required = false
-# default = "dev-api-key"
-
-# [secrets.DATABASE_URL]
-# description = "Database connection string"
-# required = true
-#
-# [secrets.DATABASE_URL.development]
-# default = "sqlite:///dev.db"
-
-# [secrets.JWT_SECRET]
-# description = "Secret key for JWT token signing"
-# required = true
-
-# [secrets.REDIS_URL]
-# description = "Redis connection URL for caching"
-# required = false
-# default = "redis://localhost:6379"
-
-# [secrets.EMAIL_PROVIDER]
-# description = "Email service provider"
-# required = false
-# default = "smtp"
-
-# [secrets.OAUTH_CLIENT_ID]
-# description = "OAuth client ID"
-# required = false
-
-# [secrets.OAUTH_CLIENT_SECRET]
-# description = "OAuth client secret"
-# required = false
+# [profiles.development]
+# API_KEY = { description = "API key for external service", required = false, default = "dev-api-key" }
+# DATABASE_URL = { description = "Database connection string", required = true, default = "sqlite:///dev.db" }
+# JWT_SECRET = { description = "Secret key for JWT token signing", required = true }
+# REDIS_URL = { description = "Redis connection URL for caching", required = false, default = "redis://localhost:6379" }
+# EMAIL_PROVIDER = { description = "Email service provider", required = false, default = "console" }
+# OAUTH_CLIENT_ID = { description = "OAuth client ID", required = false }
+# OAUTH_CLIENT_SECRET = { description = "OAuth client secret", required = false }
 "#
 }
 
@@ -176,18 +155,9 @@ impl SecretSpec {
         name: &str,
         profile: Option<&str>,
     ) -> Option<(bool, Option<String>)> {
-        let secret_config = self.config.secrets.get(name)?;
-
-        if let Some(prof) = profile {
-            if let Some(profile_override) = secret_config.profiles.get(prof) {
-                let required = profile_override.required.unwrap_or(secret_config.required);
-                let default = profile_override
-                    .default
-                    .clone()
-                    .or_else(|| secret_config.default.clone());
-                return Some((required, default));
-            }
-        }
+        let profile_name = profile.unwrap_or("default");
+        let profile_config = self.config.profiles.get(profile_name)?;
+        let secret_config = profile_config.secrets.get(name)?;
 
         Some((secret_config.required, secret_config.default.clone()))
     }
@@ -231,7 +201,6 @@ impl SecretSpec {
                         description: format!("{} secret", key),
                         required: true,
                         default: None,
-                        profiles: HashMap::new(),
                     },
                 );
             }
@@ -242,10 +211,15 @@ impl SecretSpec {
         let content = toml::to_string_pretty(&manifest)?;
         fs::write("secretspec.toml", content)?;
 
+        let secret_count = manifest
+            .profiles
+            .values()
+            .map(|p| p.secrets.len())
+            .sum::<usize>();
         println!(
             "{} Created secretspec.toml with {} secrets",
             "✓".green(),
-            manifest.secrets.len()
+            secret_count
         );
 
         if from.exists() {
@@ -268,11 +242,26 @@ impl SecretSpec {
         profile: Option<String>,
     ) -> Result<()> {
         // Check if the secret exists in the spec
-        if !self.config.secrets.contains_key(name) {
-            return Err(SecretSpecError::SecretNotFound(format!(
-                "Secret '{}' is not defined in secretspec.toml. Available secrets: {}",
-                name,
+        let profile_name = profile.as_deref().unwrap_or("default");
+        let profile_config = self.config.profiles.get(profile_name).ok_or_else(|| {
+            SecretSpecError::SecretNotFound(format!(
+                "Profile '{}' is not defined in secretspec.toml. Available profiles: {}",
+                profile_name,
                 self.config
+                    .profiles
+                    .keys()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+        })?;
+
+        if !profile_config.secrets.contains_key(name) {
+            return Err(SecretSpecError::SecretNotFound(format!(
+                "Secret '{}' is not defined in profile '{}'. Available secrets: {}",
+                name,
+                profile_name,
+                profile_config
                     .secrets
                     .keys()
                     .cloned()
@@ -355,28 +344,34 @@ impl SecretSpec {
         if interactive && !validation_result.missing_required.is_empty() {
             println!("\nThe following required secrets are missing:");
             for secret_name in &validation_result.missing_required {
-                if let Some(config) = self.config.secrets.get(secret_name) {
-                    println!("\n{} - {}", secret_name.bold(), config.description);
-                    print!(
-                        "Enter value for {} (profile: {}): ",
-                        secret_name, profile_display
-                    );
-                    io::stdout().flush()?;
-                    let value = rpassword::read_password()?;
+                if let Some((_, config)) =
+                    self.resolve_secret_config(secret_name, profile.as_deref())
+                {
+                    if let Some(profile_config) = self.config.profiles.get(profile_display) {
+                        if let Some(secret_config) = profile_config.secrets.get(secret_name) {
+                            println!("\n{} - {}", secret_name.bold(), secret_config.description);
+                            print!(
+                                "Enter value for {} (profile: {}): ",
+                                secret_name, profile_display
+                            );
+                            io::stdout().flush()?;
+                            let value = rpassword::read_password()?;
 
-                    backend.set(
-                        &self.config.project.name,
-                        secret_name,
-                        &value,
-                        profile.as_deref(),
-                    )?;
-                    println!(
-                        "{} Secret '{}' saved to {} (profile: {})",
-                        "✓".green(),
-                        secret_name,
-                        provider_name,
-                        profile_display
-                    );
+                            backend.set(
+                                &self.config.project.name,
+                                secret_name,
+                                &value,
+                                profile.as_deref(),
+                            )?;
+                            println!(
+                                "{} Secret '{}' saved to {} (profile: {})",
+                                "✓".green(),
+                                secret_name,
+                                provider_name,
+                                profile_display
+                            );
+                        }
+                    }
                 }
             }
 
@@ -411,7 +406,12 @@ impl SecretSpec {
         let initial_validation = self.validate(provider_arg.clone(), profile.clone())?;
 
         // Display status for each secret
-        for (name, config) in &self.config.secrets {
+        let profile_name = profile.as_deref().unwrap_or("default");
+        let profile_config = self.config.profiles.get(profile_name).ok_or_else(|| {
+            SecretSpecError::SecretNotFound(format!("Profile '{}' not found", profile_name))
+        })?;
+
+        for (name, config) in &profile_config.secrets {
             if initial_validation.secrets.contains_key(name) {
                 if initial_validation
                     .with_defaults
@@ -473,7 +473,12 @@ impl SecretSpec {
         let mut missing_optional = Vec::new();
         let mut with_defaults = Vec::new();
 
-        for (name, _config) in &self.config.secrets {
+        let profile_name = profile.as_deref().unwrap_or("default");
+        let profile_config = self.config.profiles.get(profile_name).ok_or_else(|| {
+            SecretSpecError::SecretNotFound(format!("Profile '{}' not found", profile_name))
+        })?;
+
+        for (name, _config) in &profile_config.secrets {
             let (required, default) = self
                 .resolve_secret_config(name, profile.as_deref())
                 .expect("Secret should exist in config since we're iterating over it");
@@ -579,8 +584,10 @@ mod tests {
             project: ProjectInfo {
                 name: "test_project".to_string(),
                 revision: "1.0".to_string(),
+                extends: None,
             },
-            secrets: {
+            profiles: {
+                let mut profiles = HashMap::new();
                 let mut secrets = HashMap::new();
                 secrets.insert(
                     "DEFINED_SECRET".to_string(),
@@ -588,10 +595,10 @@ mod tests {
                         description: "A defined secret".to_string(),
                         required: true,
                         default: None,
-                        profiles: HashMap::new(),
                     },
                 );
-                secrets
+                profiles.insert("default".to_string(), ProfileConfig { secrets });
+                profiles
             },
         };
 
@@ -617,7 +624,7 @@ mod tests {
         match result {
             Err(SecretSpecError::SecretNotFound(msg)) => {
                 assert!(msg.contains("UNDEFINED_SECRET"));
-                assert!(msg.contains("not defined in secretspec.toml"));
+                assert!(msg.contains("not defined in profile"));
                 assert!(msg.contains("DEFINED_SECRET"));
             }
             _ => panic!("Expected SecretNotFound error"),
@@ -638,8 +645,10 @@ mod tests {
             project: ProjectInfo {
                 name: "test_project".to_string(),
                 revision: "1.0".to_string(),
+                extends: None,
             },
-            secrets: {
+            profiles: {
+                let mut profiles = HashMap::new();
                 let mut secrets = HashMap::new();
                 secrets.insert(
                     "DEFINED_SECRET".to_string(),
@@ -647,10 +656,10 @@ mod tests {
                         description: "A defined secret".to_string(),
                         required: true,
                         default: None,
-                        profiles: HashMap::new(),
                     },
                 );
-                secrets
+                profiles.insert("default".to_string(), ProfileConfig { secrets });
+                profiles
             },
         };
 
@@ -684,8 +693,10 @@ mod tests {
             project: ProjectInfo {
                 name: "test_project".to_string(),
                 revision: "1.0".to_string(),
+                extends: None,
             },
-            secrets: {
+            profiles: {
+                let mut profiles = HashMap::new();
                 let mut secrets = HashMap::new();
                 secrets.insert(
                     "DEFINED_SECRET".to_string(),
@@ -693,10 +704,10 @@ mod tests {
                         description: "A defined secret".to_string(),
                         required: true,
                         default: None,
-                        profiles: HashMap::new(),
                     },
                 );
-                secrets
+                profiles.insert("default".to_string(), ProfileConfig { secrets });
+                profiles
             },
         };
 

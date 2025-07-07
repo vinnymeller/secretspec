@@ -2,30 +2,22 @@
 name = "profile-test"
 revision = "1.0"
 
-[secrets.API_KEY]
-description = "API key"
-required = true
+[profiles.default]
+API_KEY = { description = "API key", required = true }
+DATABASE_URL = { description = "Database URL", required = true }
+REDIS_URL = { description = "Redis URL", required = false }
 
-[secrets.API_KEY.development]
-required = false
-default = "dev-api-key"
+[profiles.development]
+API_KEY = { description = "API key", required = false, default = "dev-api-key" }
+DATABASE_URL = { description = "Database URL", required = true, default = "postgres://localhost/dev" }
+REDIS_URL = { description = "Redis URL", required = false }
 
-[secrets.API_KEY.staging]
-required = true
+[profiles.staging]
+API_KEY = { description = "API key", required = true }
+DATABASE_URL = { description = "Database URL", required = true }
+REDIS_URL = { description = "Redis URL", required = false }
 
-[secrets.DATABASE_URL]
-description = "Database URL"
-required = true
-
-[secrets.DATABASE_URL.development]
-default = "postgres://localhost/dev"
-
-[secrets.DATABASE_URL.production]
-required = true
-
-[secrets.REDIS_URL]
-description = "Redis URL"
-required = false
-
-[secrets.REDIS_URL.production]
-required = true
+[profiles.production]
+API_KEY = { description = "API key", required = true }
+DATABASE_URL = { description = "Database URL", required = true }
+REDIS_URL = { description = "Redis URL", required = true }

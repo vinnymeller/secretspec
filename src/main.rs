@@ -5,6 +5,8 @@ use secretspec::{DefaultConfig, GlobalConfig, SecretSpec};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -122,10 +124,21 @@ fn main() -> Result<()> {
 
             fs::write("secretspec.toml", content)?;
 
-            println!(
-                "✓ Created secretspec.toml with {} secrets",
-                project_config.secrets.len()
-            );
+            // Set file permissions to 600 (owner read/write only) on Unix systems
+            #[cfg(unix)]
+            {
+                let metadata = fs::metadata("secretspec.toml")?;
+                let mut permissions = metadata.permissions();
+                permissions.set_mode(0o600);
+                fs::set_permissions("secretspec.toml", permissions)?;
+            }
+
+            let secret_count = project_config
+                .profiles
+                .values()
+                .map(|p| p.secrets.len())
+                .sum::<usize>();
+            println!("✓ Created secretspec.toml with {} secrets", secret_count);
 
             if from.exists() {
                 println!(
