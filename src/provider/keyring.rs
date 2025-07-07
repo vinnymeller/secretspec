@@ -2,9 +2,9 @@ use super::Provider;
 use crate::Result;
 use keyring::Entry;
 
-pub struct KeyringStorage;
+pub struct KeyringProvider;
 
-impl Provider for KeyringStorage {
+impl Provider for KeyringProvider {
     fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>> {
         let service = format!("secretspec/{}", project);
         let username = if let Some(prof) = profile {

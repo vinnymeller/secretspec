@@ -4,11 +4,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-pub struct DotEnvStorage {
+pub struct DotEnvProvider {
     dotenv_path: PathBuf,
 }
 
-impl DotEnvStorage {
+impl DotEnvProvider {
     pub fn new(dotenv_path: PathBuf) -> Self {
         Self { dotenv_path }
     }
@@ -37,7 +37,7 @@ impl DotEnvStorage {
     }
 }
 
-impl Provider for DotEnvStorage {
+impl Provider for DotEnvProvider {
     fn get(&self, _project: &str, key: &str, _profile: Option<&str>) -> Result<Option<String>> {
         let vars = self.load_env_vars()?;
         Ok(vars.get(key).cloned())

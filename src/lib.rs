@@ -249,6 +249,13 @@ impl SecretSpec {
         let (provider_name, backend) = self.get_provider_backend(provider_arg)?;
         let profile_display = profile.as_deref().unwrap_or("default");
 
+        // Check if the provider supports setting values
+        if !backend.allows_set() {
+            return Err(SecretSpecError::ProviderOperationFailed(
+                format!("Provider '{}' is read-only and does not support setting values", provider_name)
+            ));
+        }
+
         let value = if let Some(v) = value {
             v
         } else {

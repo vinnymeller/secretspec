@@ -2,15 +2,15 @@ use super::Provider;
 use crate::Result;
 use std::env;
 
-pub struct EnvStorage;
+pub struct EnvProvider;
 
-impl EnvStorage {
+impl EnvProvider {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Provider for EnvStorage {
+impl Provider for EnvProvider {
     fn get(&self, _project: &str, key: &str, _profile: Option<&str>) -> Result<Option<String>> {
         Ok(env::var(key).ok())
     }
@@ -21,5 +21,9 @@ impl Provider for EnvStorage {
         Err(crate::SecretSpecError::ProviderOperationFailed(
             "Environment variable provider is read-only. Set variables in your shell or process environment.".to_string()
         ))
+    }
+    
+    fn allows_set(&self) -> bool {
+        false
     }
 }
