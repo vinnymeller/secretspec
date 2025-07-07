@@ -51,6 +51,20 @@ pub enum SecretSpecError {
 
 pub type Result<T> = std::result::Result<T, SecretSpecError>;
 
+#[derive(Debug)]
+pub struct ValidationResult {
+    pub secrets: HashMap<String, String>,
+    pub missing_required: Vec<String>,
+    pub missing_optional: Vec<String>,
+    pub with_defaults: Vec<(String, String)>,
+}
+
+impl ValidationResult {
+    pub fn is_valid(&self) -> bool {
+        self.missing_required.is_empty()
+    }
+}
+
 // Extension methods for ProjectConfig
 pub fn project_config_from_path(from: &Path) -> Result<ProjectConfig> {
     let mut secrets = HashMap::new();
@@ -302,73 +316,23 @@ impl SecretSpec {
         }
     }
 
-    pub fn check(&self, provider_arg: Option<String>, profile: Option<String>) -> Result<()> {
-        let (provider_name, backend) = self.get_provider_backend(provider_arg)?;
+    fn ensure_secrets(
+        &self,
+        provider_arg: Option<String>,
+        profile: Option<String>,
+        interactive: bool,
+    ) -> Result<ValidationResult> {
+        let (provider_name, backend) = self.get_provider_backend(provider_arg.clone())?;
         let profile_display = profile.as_deref().unwrap_or("default");
 
-        println!(
-            "Checking secrets in {} using {} (profile: {})...\n",
-            self.config.project.name.bold(),
-            provider_name.blue(),
-            profile_display.cyan()
-        );
+        // First validate to see what's missing
+        let mut validation_result = self.validate(provider_arg.clone(), profile.clone())?;
 
-        let mut missing = vec![];
-        let mut found = vec![];
-
-        for (name, config) in &self.config.secrets {
-            let Some((required, default)) = self.resolve_secret_config(name, profile.as_deref())
-            else {
-                // This should never happen since we're iterating over the config
-                continue;
-            };
-
-            match backend.get(&self.config.project.name, name, profile.as_deref())? {
-                Some(_) => {
-                    found.push(name);
-                    println!("{} {} - {}", "✓".green(), name, config.description);
-                }
-                None => {
-                    if required && default.is_none() {
-                        missing.push(name);
-                        println!(
-                            "{} {} - {} {}",
-                            "✗".red(),
-                            name,
-                            config.description,
-                            "(required)".red()
-                        );
-                    } else if default.is_some() {
-                        println!(
-                            "{} {} - {} {}",
-                            "○".yellow(),
-                            name,
-                            config.description,
-                            "(has default)".yellow()
-                        );
-                    } else {
-                        println!(
-                            "{} {} - {} {}",
-                            "○".blue(),
-                            name,
-                            config.description,
-                            "(optional)".blue()
-                        );
-                    }
-                }
-            }
-        }
-
-        println!(
-            "\nSummary: {} found, {} missing",
-            found.len().to_string().green(),
-            missing.len().to_string().red()
-        );
-
-        if !missing.is_empty() {
+        // If we're in interactive mode and have missing required secrets, prompt for them
+        if interactive && !validation_result.missing_required.is_empty() {
             println!("\nThe following required secrets are missing:");
-            for secret_name in &missing {
-                if let Some(config) = self.config.secrets.get(*secret_name) {
+            for secret_name in &validation_result.missing_required {
+                if let Some(config) = self.config.secrets.get(secret_name) {
                     println!("\n{} - {}", secret_name.bold(), config.description);
                     print!(
                         "Enter value for {} (profile: {}): ",
@@ -394,7 +358,83 @@ impl SecretSpec {
             }
 
             println!("\nAll required secrets have been set.");
+
+            // Re-validate to get the updated results
+            validation_result = self.validate(provider_arg, profile)?;
         }
+
+        // If we still have missing required secrets, fail
+        if !validation_result.is_valid() {
+            return Err(SecretSpecError::RequiredSecretMissing(
+                validation_result.missing_required.join(", "),
+            ));
+        }
+
+        Ok(validation_result)
+    }
+
+    pub fn check(&self, provider_arg: Option<String>, profile: Option<String>) -> Result<()> {
+        let (provider_name, _) = self.get_provider_backend(provider_arg.clone())?;
+        let profile_display = profile.as_deref().unwrap_or("default");
+
+        println!(
+            "Checking secrets in {} using {} (profile: {})...\n",
+            self.config.project.name.bold(),
+            provider_name.blue(),
+            profile_display.cyan()
+        );
+
+        // First get the initial validation result to display status
+        let initial_validation = self.validate(provider_arg.clone(), profile.clone())?;
+
+        // Display status for each secret
+        for (name, config) in &self.config.secrets {
+            if initial_validation.secrets.contains_key(name) {
+                if initial_validation
+                    .with_defaults
+                    .iter()
+                    .any(|(n, _)| n == name)
+                {
+                    println!(
+                        "{} {} - {} {}",
+                        "○".yellow(),
+                        name,
+                        config.description,
+                        "(has default)".yellow()
+                    );
+                } else {
+                    println!("{} {} - {}", "✓".green(), name, config.description);
+                }
+            } else if initial_validation.missing_required.contains(name) {
+                println!(
+                    "{} {} - {} {}",
+                    "✗".red(),
+                    name,
+                    config.description,
+                    "(required)".red()
+                );
+            } else if initial_validation.missing_optional.contains(name) {
+                println!(
+                    "{} {} - {} {}",
+                    "○".blue(),
+                    name,
+                    config.description,
+                    "(optional)".blue()
+                );
+            }
+        }
+
+        let found_count = initial_validation.secrets.len() - initial_validation.with_defaults.len();
+        let missing_count = initial_validation.missing_required.len();
+
+        println!(
+            "\nSummary: {} found, {} missing",
+            found_count.to_string().green(),
+            missing_count.to_string().red()
+        );
+
+        // Now ensure all secrets are present (will prompt if needed)
+        self.ensure_secrets(provider_arg, profile, true)?;
 
         Ok(())
     }
@@ -403,9 +443,12 @@ impl SecretSpec {
         &self,
         provider_arg: Option<String>,
         profile: Option<String>,
-    ) -> Result<HashMap<String, String>> {
+    ) -> Result<ValidationResult> {
         let (_, backend) = self.get_provider_backend(provider_arg)?;
         let mut secrets = HashMap::new();
+        let mut missing_required = Vec::new();
+        let mut missing_optional = Vec::new();
+        let mut with_defaults = Vec::new();
 
         for (name, _config) in &self.config.secrets {
             let (required, default) = self
@@ -418,15 +461,23 @@ impl SecretSpec {
                 }
                 None => {
                     if let Some(default_value) = default {
-                        secrets.insert(name.clone(), default_value);
+                        secrets.insert(name.clone(), default_value.clone());
+                        with_defaults.push((name.clone(), default_value));
                     } else if required {
-                        return Err(SecretSpecError::RequiredSecretMissing(name.clone()));
+                        missing_required.push(name.clone());
+                    } else {
+                        missing_optional.push(name.clone());
                     }
                 }
             }
         }
 
-        Ok(secrets)
+        Ok(ValidationResult {
+            secrets,
+            missing_required,
+            missing_optional,
+            with_defaults,
+        })
     }
 
     pub fn run(
@@ -438,14 +489,15 @@ impl SecretSpec {
         if command.is_empty() {
             return Err(SecretSpecError::Io(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "No command specified",
+                "No command specified. Usage: secretspec run -- <command> [args...]",
             )));
         }
 
-        let secrets = self.validate(provider_arg, profile)?;
+        // Ensure all secrets are available (will prompt for missing ones if needed)
+        let validation_result = self.ensure_secrets(provider_arg, profile, true)?;
 
         let mut env_vars = env::vars().collect::<HashMap<_, _>>();
-        env_vars.extend(secrets);
+        env_vars.extend(validation_result.secrets);
 
         let mut cmd = Command::new(&command[0]);
         cmd.args(&command[1..]);
