@@ -215,35 +215,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Type-Safe Code Generation
 
-SecretSpec can generate strongly-typed Rust structs from your `secretspec.toml` file:
+SecretSpec uses a proc macro to generate strongly-typed Rust structs from your `secretspec.toml` file:
 
 1. **Add to your `Cargo.toml`:**
    ```toml
    [dependencies]
-   secretspec = "0.1"
-   
-   [build-dependencies]
    secretspec = { version = "0.1", features = ["codegen"] }
    ```
 
-2. **Create a `build.rs`:**
+2. **Use the proc macro in your code:**
    ```rust
-   fn main() {
-       secretspec::codegen::generate_types(
-           "secretspec.toml",
-           &std::env::var("OUT_DIR").unwrap()
-       ).unwrap();
-   }
-   ```
-
-3. **Use the generated types:**
-   ```rust
-   // Include the generated code
-   include!(concat!(env!("OUT_DIR"), "/secrets.rs"));
+   // Generate typed structs from secretspec.toml
+   secretspec::define_secrets!("secretspec.toml");
+   
+   use secretspec::codegen::Provider;
    
    fn main() -> Result<(), Box<dyn std::error::Error>> {
        // Load with strongly-typed struct
-       let secrets = SecretSpec::load()?;
+       let secrets = SecretSpec::load(Provider::Keyring)?;
        
        // Required secrets are guaranteed to exist
        println!("Database: {}", secrets.database_url);
@@ -254,26 +243,30 @@ SecretSpec can generate strongly-typed Rust structs from your `secretspec.toml` 
        }
        
        // Set all secrets as environment variables
-       secrets.set_as_env_vars()?;
+       secrets.set_as_env_vars();
        
        Ok(())
    }
    ```
 
-4. **Load with specific provider and profile:**
+3. **Load with specific profile for exact types:**
    ```rust
-   use secretspec::codegen::{Provider, Profile};
-   
-   let secrets = SecretSpec::load_with(
-       Provider::Keyring,
-       Profile::Production
-   )?;
+   // Load with profile-specific types
+   match SecretSpec::load_as(Provider::Keyring, Profile::Production) {
+       Ok(SecretSpecProfile::Production { api_key, database_url, .. }) => {
+           // In production, api_key is String (required)
+           println!("API Key: {}", api_key);
+       }
+       _ => unreachable!(),
+   }
    ```
 
-The generated struct will have:
-- Required secrets (with no default) as `String` fields
-- Optional secrets (or those with defaults) as `Option<String>` fields
-- Compile-time type safety - if it compiles, all required secrets are available
+The macro generates:
+- `SecretSpec` struct with union types (safe for any profile)
+- `SecretSpecProfile` enum with exact types for each profile
+- `Profile` enum with all profiles from your TOML
+- Required secrets as `String` or `Option<String>` based on profile requirements
+- Compile-time type safety
 
 ## Profile Support
 

@@ -1,0 +1,30 @@
+[project]
+name = "profile-test"
+
+[secrets.API_KEY]
+description = "API key"
+required = true
+
+[secrets.API_KEY.development]
+required = false
+default = "dev-api-key"
+
+[secrets.API_KEY.staging]
+required = true
+
+[secrets.DATABASE_URL]
+description = "Database URL"
+required = true
+
+[secrets.DATABASE_URL.development]
+default = "postgres://localhost/dev"
+
+[secrets.DATABASE_URL.production]
+required = true
+
+[secrets.REDIS_URL]
+description = "Redis URL"
+required = false
+
+[secrets.REDIS_URL.production]
+required = true

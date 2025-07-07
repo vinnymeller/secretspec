@@ -1,12 +1,11 @@
 [workspace]
-members = [".", "secretspec-tests"]
+members = [".", "secretspec-derive", "examples/codegen_example"]
 resolver = "2"
 
 [package]
 name = "secretspec"
 version = "0.1.0"
 edition = "2024"
-build = "build.rs"
 
 [lib]
 name = "secretspec"
@@ -28,12 +27,11 @@ rpassword = "7.4.0"
 dotenvy = "0.15"
 inquire = "0.6"
 color-eyre = "0.6"
-quote = { version = "1.0", optional = true }
-proc-macro2 = { version = "1.0", optional = true }
+secretspec-derive = { path = "./secretspec-derive", optional = true }
 
 [features]
 default = ["codegen"]
-codegen = ["quote", "proc-macro2"]
+codegen = ["secretspec-derive"]
 
 [dev-dependencies]
 tempfile = "3.0"

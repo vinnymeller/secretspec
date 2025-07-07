@@ -13,9 +13,7 @@ mod provider;
 use provider::{Provider, ProviderRegistry};
 
 #[cfg(feature = "codegen")]
-pub mod codegen;
-#[cfg(feature = "codegen")]
-pub use codegen::{Provider as CodegenProvider, Profile as CodegenProfile};
+pub use secretspec_derive::define_secrets;
 
 #[derive(Error, Debug)]
 pub enum SecretSpecError {
@@ -29,7 +27,9 @@ pub enum SecretSpecError {
     Keyring(#[from] keyring::Error),
     #[error("Dotenv error: {0}")]
     Dotenv(#[from] dotenvy::Error),
-    #[error("No provider backend configured.\n\nTo fix this, either:\n  1. Run 'secretspec config init' to set up your default provider\n  2. Use --provider flag (e.g., 'secretspec check --provider keyring')")]
+    #[error(
+        "No provider backend configured.\n\nTo fix this, either:\n  1. Run 'secretspec config init' to set up your default provider\n  2. Use --provider flag (e.g., 'secretspec check --provider keyring')"
+    )]
     NoProviderConfigured,
     #[error("Provider backend '{0}' not found")]
     ProviderNotFound(String),
@@ -48,7 +48,6 @@ pub enum SecretSpecError {
 }
 
 pub type Result<T> = std::result::Result<T, SecretSpecError>;
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectConfig {
@@ -101,7 +100,7 @@ impl ProjectConfig {
 # [secrets.API_KEY]
 # description = "API key for external service"
 # required = true
-# 
+#
 # [secrets.API_KEY.development]
 # required = false
 # default = "dev-api-key"
@@ -109,7 +108,7 @@ impl ProjectConfig {
 # [secrets.DATABASE_URL]
 # description = "Database connection string"
 # required = true
-# 
+#
 # [secrets.DATABASE_URL.development]
 # default = "sqlite:///dev.db"
 
@@ -136,7 +135,6 @@ impl ProjectConfig {
 # required = false
 "#
     }
-
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -195,17 +193,24 @@ impl SecretSpec {
         Ok(Self::new(project_config, global_config))
     }
 
-    fn resolve_secret_config(&self, name: &str, profile: Option<&str>) -> Option<(bool, Option<String>)> {
+    fn resolve_secret_config(
+        &self,
+        name: &str,
+        profile: Option<&str>,
+    ) -> Option<(bool, Option<String>)> {
         let secret_config = self.config.secrets.get(name)?;
-        
+
         if let Some(prof) = profile {
             if let Some(profile_override) = secret_config.profiles.get(prof) {
                 let required = profile_override.required.unwrap_or(secret_config.required);
-                let default = profile_override.default.clone().or_else(|| secret_config.default.clone());
+                let default = profile_override
+                    .default
+                    .clone()
+                    .or_else(|| secret_config.default.clone());
                 return Some((required, default));
             }
         }
-        
+
         Some((secret_config.required, secret_config.default.clone()))
     }
 
@@ -307,9 +312,15 @@ impl SecretSpec {
         Ok(())
     }
 
-    pub fn get(&self, name: &str, provider_arg: Option<String>, profile: Option<String>) -> Result<()> {
+    pub fn get(
+        &self,
+        name: &str,
+        provider_arg: Option<String>,
+        profile: Option<String>,
+    ) -> Result<()> {
         let (_, backend) = self.get_provider_backend(provider_arg)?;
-        let (_, default) = self.resolve_secret_config(name, profile.as_deref())
+        let (_, default) = self
+            .resolve_secret_config(name, profile.as_deref())
             .ok_or_else(|| SecretSpecError::SecretNotFound(name.to_string()))?;
 
         match backend.get(&self.config.project.name, name, profile.as_deref())? {
@@ -343,8 +354,10 @@ impl SecretSpec {
         let mut found = vec![];
 
         for (name, config) in &self.config.secrets {
-            let (required, default) = self.resolve_secret_config(name, profile.as_deref()).unwrap();
-            
+            let (required, default) = self
+                .resolve_secret_config(name, profile.as_deref())
+                .unwrap();
+
             match backend.get(&self.config.project.name, name, profile.as_deref())? {
                 Some(_) => {
                     found.push(name);
@@ -388,19 +401,27 @@ impl SecretSpec {
         );
 
         if !missing.is_empty() {
-            return Err(SecretSpecError::RequiredSecretMissing(missing[0].to_string()));
+            return Err(SecretSpecError::RequiredSecretMissing(
+                missing[0].to_string(),
+            ));
         }
 
         Ok(())
     }
 
-    pub fn get_all_secrets(&self, provider_arg: Option<String>, profile: Option<String>) -> Result<HashMap<String, String>> {
+    pub fn get_all_secrets(
+        &self,
+        provider_arg: Option<String>,
+        profile: Option<String>,
+    ) -> Result<HashMap<String, String>> {
         let (_, backend) = self.get_provider_backend(provider_arg)?;
         let mut secrets = HashMap::new();
 
         for (name, _config) in &self.config.secrets {
-            let (required, default) = self.resolve_secret_config(name, profile.as_deref()).unwrap();
-            
+            let (required, default) = self
+                .resolve_secret_config(name, profile.as_deref())
+                .unwrap();
+
             match backend.get(&self.config.project.name, name, profile.as_deref())? {
                 Some(value) => {
                     secrets.insert(name.clone(), value);
@@ -418,7 +439,12 @@ impl SecretSpec {
         Ok(secrets)
     }
 
-    pub fn run(&self, command: Vec<String>, provider_arg: Option<String>, profile: Option<String>) -> Result<()> {
+    pub fn run(
+        &self,
+        command: Vec<String>,
+        provider_arg: Option<String>,
+        profile: Option<String>,
+    ) -> Result<()> {
         if command.is_empty() {
             return Err(SecretSpecError::Io(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -427,7 +453,7 @@ impl SecretSpec {
         }
 
         let secrets = self.get_all_secrets(provider_arg, profile)?;
-        
+
         let mut env_vars = env::vars().collect::<HashMap<_, _>>();
         env_vars.extend(secrets);
 
@@ -448,8 +474,7 @@ fn get_config_path() -> Result<PathBuf> {
 }
 
 fn load_project_config() -> Result<ProjectConfig> {
-    let content = fs::read_to_string("secretspec.toml")
-        .map_err(|_| SecretSpecError::NoManifest)?;
+    let content = fs::read_to_string("secretspec.toml").map_err(|_| SecretSpecError::NoManifest)?;
     Ok(toml::from_str(&content)?)
 }
 

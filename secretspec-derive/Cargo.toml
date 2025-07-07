@@ -1,0 +1,19 @@
+[package]
+name = "secretspec-derive"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "2.0"
+quote = "1.0"
+proc-macro2 = "1.0"
+toml = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+trybuild = "1.0"
+secretspec = { path = ".." }
+insta = "1.34"
