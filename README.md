@@ -1,5 +1,11 @@
 # SecretSpec
 
+[![CI](https://github.com/cachix/secretspec/actions/workflows/ci.yml/badge.svg)](https://github.com/cachix/secretspec/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/secretspec)](https://crates.io/crates/secretspec)
+[![docs.rs](https://docs.rs/secretspec/badge.svg)](https://docs.rs/secretspec)
+[![Discord channel](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FnaMgvexb6q%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&logo=discord&logoColor=white&label=Discord%20users&color=green&style=flat)](https://discord.gg/naMgvexb6q)
+![License: Apache 2.0](https://img.shields.io/github/license/cachix/secretspec)
+
 Declarative secrets manager for development workflows, supporting a variety of storage backends.
 
 See [announcement blog post for motivation](XXX).
@@ -8,7 +14,7 @@ See [announcement blog post for motivation](XXX).
 
 - **Declarative Configuration**: Define your secrets in `secretspec.toml` with descriptions and requirements
 - **Multiple Provider Backends**: [Keyring](https://docs.rs/keyring/latest/keyring/) (system credential store), [.env](https://www.dotenv.org/), and environment variable support
-- **Type-Safe Rust Library**: Generate strongly-typed structs from your `secretspec.toml` for compile-time safety
+- **Type-Safe Rust SDK**: Generate strongly-typed structs from your `secretspec.toml` for compile-time safety
 - **Profile Support**: Override secret requirements and defaults per profile (development, production, etc.)
 - **Simple Migration**: `secretspec init` to migrate from existing `.env` files
 
@@ -37,6 +43,9 @@ See [announcement blog post for motivation](XXX).
 
 5. **Run your application with secrets:**
    ```bash
+   $ secretspec run -- npm start
+   
+   # Or with a specific profile
    $ secretspec run --profile production -- npm start
    ```
 
@@ -88,16 +97,13 @@ required = false
 required = true  # no default - must be set
 ```
 
-### Global Configuration
+### Provider Configuration
 
-Global configuration is stored at `~/.config/secretspec/config.toml` on Linux/macOS or `%APPDATA%\secretspec\config.toml` on Windows.
+SecretSpec provider can be configured through three methods (in order of precedence):
 
-Provider is specified in global configuration using `secretspec config init` or via `--provider` on CLI.
-
-```toml
-[defaults]
-provider = "keyring"  # or "dotenv"
-```
+1. **User config file** (preferred): Set via `secretspec config init`. Stored at `~/.config/secretspec/config.toml` on Linux/macOS or `%APPDATA%\secretspec\config.toml` on Windows
+2. **Environment variable**: `SECRETSPEC_PROVIDER`
+3. **CLI arguments**: `--provider` flag on any command
 
 ## Provider Backends
 
@@ -149,49 +155,8 @@ your-connection-string
 $ secretspec check --provider env
 ```
 
-### Adding a New Provider Backend
 
-To implement a new provider backend in this repository:
-
-1. **Create a new backend module** in `src/provider/your_backend.rs`:
-   ```rust
-   use crate::Result;
-   use super::Provider;
-
-   pub struct YourBackendProvider {
-       // Your backend-specific configuration
-   }
-
-   impl Provider for YourBackendProvider {
-       fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>> {
-           // Implementation
-       }
-
-       fn set(&self, project: &str, key: &str, value: &str, profile: Option<&str>) -> Result<()> {
-           // Implementation
-       }
-   }
-   ```
-
-2. **Register your backend** in `src/provider/mod.rs`:
-   ```rust
-   // Add to module exports
-   pub mod your_backend;
-   pub use your_backend::YourBackendProvider;
-
-   // Add to ProviderRegistry::new()
-   backends.insert(
-       "your_backend".to_string(),
-       Box::new(YourBackendProvider::new()) as Box<dyn Provider>,
-   );
-   ```
-
-3. **Use your new backend**:
-   ```bash
-   $ secretspec set SECRET_NAME --provider your_backend
-   ```
-
-## Using SecretSpec as a Rust Library
+## Rust SDK with Type-Safe Code Generation
 
 ### Basic Usage
 
@@ -268,31 +233,47 @@ The macro generates:
 - Required secrets as `String` or `Option<String>` based on profile requirements
 - Compile-time type safety
 
-## Profile Support
+## Adding a New Provider Backend
 
-SecretSpec supports profile-specific configuration overrides:
+To implement a new provider backend in this repository:
 
-```toml
-[secrets.API_KEY]
-description = "API key for external service"
-required = true
+1. **Create a new backend module** in `src/provider/your_backend.rs`:
+   ```rust
+   use crate::Result;
+   use super::Provider;
 
-[secrets.API_KEY.development]
-required = false
-default = "dev-api-key"
+   pub struct YourBackendProvider {
+       // Your backend-specific configuration
+   }
 
-[secrets.API_KEY.production]
-required = true  # No default - must be explicitly set
-```
+   impl Provider for YourBackendProvider {
+       fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>> {
+           // Implementation
+       }
 
-Use profiles with any command:
-```bash
-# Development profile
-$ secretspec check --profile development
+       fn set(&self, project: &str, key: &str, value: &str, profile: Option<&str>) -> Result<()> {
+           // Implementation
+       }
+   }
+   ```
 
-# Production profile  
-$ secretspec run --profile production -- npm start
-```
+2. **Register your backend** in `src/provider/mod.rs`:
+   ```rust
+   // Add to module exports
+   pub mod your_backend;
+   pub use your_backend::YourBackendProvider;
+
+   // Add to ProviderRegistry::new()
+   backends.insert(
+       "your_backend".to_string(),
+       Box::new(YourBackendProvider::new()) as Box<dyn Provider>,
+   );
+   ```
+
+3. **Use your new backend**:
+   ```bash
+   $ secretspec set SECRET_NAME --provider your_backend
+   ```
 
 ## License
 
