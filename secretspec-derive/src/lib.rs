@@ -19,7 +19,7 @@ use secretspec_types::ProjectConfig;
 ///     println!("Database URL: {}", secrets.database_url);
 ///     
 ///     // Load with profile-specific types
-///     match SecretSpec::load_as(Provider::Keyring, Profile::Production)? {
+///     match SecretSpec::load_profile(Provider::Keyring, Profile::Production)? {
 ///         SecretSpecProfile::Production { api_key, database_url, .. } => {
 ///             println!("Production API key: {}", api_key);
 ///         }
@@ -203,8 +203,8 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
     }).collect()
     };
     
-    // Generate load_as match arms
-    let load_as_arms: Vec<_> = if all_profiles.is_empty() {
+    // Generate load_profile match arms
+    let load_profile_arms: Vec<_> = if all_profiles.is_empty() {
         // If no profiles, handle Default
         let assignments = config.secrets.iter().map(|(secret_name, secret_config)| {
             let field_name = format_ident!("{}", secret_name.to_lowercase());
@@ -305,7 +305,7 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
             }
             
             /// Load with specific provider and profile, returns profile-specific types
-            pub fn load_as(provider: Provider, profile: Profile) -> Result<SecretSpecProfile, secretspec::SecretSpecError> {
+            pub fn load_profile(provider: Provider, profile: Profile) -> Result<SecretSpecProfile, secretspec::SecretSpecError> {
                 let spec = secretspec::SecretSpec::load()?;
                 let provider_str = match provider {
                     Provider::Keyring => "keyring",
@@ -322,7 +322,7 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
                 )?;
                 
                 match profile {
-                    #(#load_as_arms,)*
+                    #(#load_profile_arms,)*
                 }
             }
             

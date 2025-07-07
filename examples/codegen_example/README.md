@@ -52,7 +52,7 @@ pub enum SecretSpecProfile {
 
 impl SecretSpec {
     pub fn load(provider: Provider) -> Result<Self, SecretSpecError> { ... }
-    pub fn load_as(provider: Provider, profile: Profile) -> Result<SecretSpecProfile, SecretSpecError> { ... }
+    pub fn load_profile(provider: Provider, profile: Profile) -> Result<SecretSpecProfile, SecretSpecError> { ... }
     pub fn set_as_env_vars(&self) { ... }
 }
 ```
@@ -60,7 +60,7 @@ impl SecretSpec {
 ## Benefits
 
 - **Type Safety**: Required secrets are guaranteed at compile time
-- **Profile-Aware Types**: Get exact types for each profile with `load_as()`
+- **Profile-Aware Types**: Get exact types for each profile with `load_profile()`
 - **No build.rs**: Direct proc macro usage, no build script needed
 - **IDE Support**: Auto-completion for all secret fields
 - **No Runtime Surprises**: If it compiles, all required secrets are available

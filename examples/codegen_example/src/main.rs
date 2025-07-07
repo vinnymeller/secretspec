@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Example 2: Load development profile with exact types
     println!("\n2. Loading development profile:");
-    match SecretSpec::load_as(Provider::Dotenv, Profile::Development) {
+    match SecretSpec::load_profile(Provider::Dotenv, Profile::Development) {
         Ok(SecretSpecProfile::Development { database_url, api_key, redis_url, log_level }) => {
             println!("   ✓ Loaded development profile");
             // In development profile, both database_url and api_key have defaults

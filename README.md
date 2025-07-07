@@ -252,7 +252,7 @@ SecretSpec uses a proc macro to generate strongly-typed Rust structs from your `
 3. **Load with specific profile for exact types:**
    ```rust
    // Load with profile-specific types
-   match SecretSpec::load_as(Provider::Keyring, Profile::Production) {
+   match SecretSpec::load_profile(Provider::Keyring, Profile::Production) {
        Ok(SecretSpecProfile::Production { api_key, database_url, .. }) => {
            // In production, api_key is String (required)
            println!("API Key: {}", api_key);
