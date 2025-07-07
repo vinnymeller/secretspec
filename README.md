@@ -201,8 +201,8 @@ use secretspec::SecretSpec;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let spec = SecretSpec::load()?;
     
-    // Get all secrets for the current environment
-    let secrets = spec.get_all_secrets(None, None)?;
+    // Validate and get all secrets for the current environment
+    let secrets = spec.validate(None, None)?;
     
     // Access individual secrets
     let db_url = secrets.get("DATABASE_URL")

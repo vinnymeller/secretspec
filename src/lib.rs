@@ -409,7 +409,8 @@ impl SecretSpec {
         Ok(())
     }
 
-    pub fn get_all_secrets(
+
+    pub fn validate(
         &self,
         provider_arg: Option<String>,
         profile: Option<String>,
@@ -452,7 +453,7 @@ impl SecretSpec {
             )));
         }
 
-        let secrets = self.get_all_secrets(provider_arg, profile)?;
+        let secrets = self.validate(provider_arg, profile)?;
 
         let mut env_vars = env::vars().collect::<HashMap<_, _>>();
         env_vars.extend(secrets);
