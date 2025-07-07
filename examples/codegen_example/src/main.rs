@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 1: Load with union types (safe for any profile)
     println!("1. Loading secrets with union types:");
-    match SecretSpec::load(Provider::Dotenv) {
+    match SecretSpec::load(Some(Provider::Dotenv), None) {
         Ok(secrets) => {
             println!("   ✓ Loaded successfully");
             if let Some(database_url) = &secrets.database_url {
@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 2: Load development profile with exact types
     println!("\n2. Loading development profile:");
-    match SecretSpec::load_profile(Provider::Dotenv, Profile::Development) {
+    match SecretSpec::load_as_profile(Some(Provider::Dotenv), Some(Profile::Development)) {
         Ok(SecretSpecProfile::Development {
             database_url,
             api_key,
@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n3. Setting secrets as environment variables:");
-    if let Ok(secrets) = SecretSpec::load(Provider::Dotenv) {
+    if let Ok(secrets) = SecretSpec::load(Some(Provider::Dotenv), None) {
         secrets.set_as_env_vars();
         println!("   ✓ Set all secrets as environment variables");
 

@@ -15,11 +15,11 @@ use syn::{LitStr, parse_macro_input};
 ///
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     // Load with union types (safe for any profile)
-///     let secrets = SecretSpec::load(Provider::Keyring)?;
+///     let secrets = SecretSpec::load(Some(Provider::Keyring), None)?;
 ///     println!("Database URL: {}", secrets.database_url);
 ///
 ///     // Load with profile-specific types
-///     match SecretSpec::load_profile(Provider::Keyring, Profile::Production)? {
+///     match SecretSpec::load_as_profile(Some(Provider::Keyring), Some(Profile::Production))? {
 ///         SecretSpecProfile::Production { api_key, database_url, .. } => {
 ///             println!("Production API key: {}", api_key);
 ///         }
@@ -160,6 +160,28 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
             .collect()
     };
 
+    // Generate string to Profile enum mapping
+    let str_to_profile = if all_profiles.is_empty() {
+        vec![quote! { "default" => Profile::Default }]
+    } else {
+        all_profiles
+            .iter()
+            .map(|name| {
+                let variant = format_ident!("{}", capitalize_first(name));
+                let str_val = name.clone();
+                quote! { #str_val => Profile::#variant }
+            })
+            .collect()
+    };
+
+    // Get first profile variant for defaults
+    let first_profile_variant = if all_profiles.is_empty() {
+        format_ident!("Default")
+    } else {
+        let first_profile = all_profiles.iter().next().unwrap();
+        format_ident!("{}", capitalize_first(first_profile))
+    };
+
     // Generate SecretSpecProfile enum variants
     let profile_enum_variants: Vec<_> = if all_profiles.is_empty() {
         // If no profiles, create a Default variant with all fields
@@ -297,16 +319,31 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
         }
 
         impl SecretSpec {
-            /// Load with provider, returns union type (safest for all profiles)
-            pub fn load(provider: Provider) -> Result<Self, secretspec::SecretSpecError> {
+            /// Load secrets with optional provider and/or profile
+            /// If provider is None, uses SECRETSPEC_PROVIDER env var or global config
+            /// If profile is None, uses SECRETSPEC_PROFILE env var if set
+            pub fn load(provider: Option<Provider>, profile: Option<Profile>) -> Result<Self, secretspec::SecretSpecError> {
                 let spec = secretspec::SecretSpec::load()?;
+
+                // Convert provider enum to string if provided, otherwise check env var
                 let provider_str = match provider {
-                    Provider::Keyring => "keyring",
-                    Provider::Dotenv => "dotenv",
-                    Provider::Env => "env",
+                    Some(p) => Some(match p {
+                        Provider::Keyring => "keyring".to_string(),
+                        Provider::Dotenv => "dotenv".to_string(),
+                        Provider::Env => "env".to_string(),
+                    }),
+                    None => std::env::var("SECRETSPEC_PROVIDER").ok(),
                 };
 
-                let validation_result = spec.validate(Some(provider_str.to_string()), None)?;
+                // Convert profile enum to string if provided, otherwise check env var
+                let profile_str = match profile {
+                    Some(p) => Some(match p {
+                        #(#profile_to_str,)*
+                    }.to_string()),
+                    None => std::env::var("SECRETSPEC_PROFILE").ok(),
+                };
+
+                let validation_result = spec.validate(provider_str, profile_str)?;
                 let secrets = validation_result.secrets;
 
                 Ok(Self {
@@ -314,25 +351,48 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
                 })
             }
 
-            /// Load with specific provider and profile, returns profile-specific types
-            pub fn load_with_profile(provider: Provider, profile: Profile) -> Result<SecretSpecProfile, secretspec::SecretSpecError> {
+            /// Load secrets as profile-specific enum type
+            /// If provider is None, uses SECRETSPEC_PROVIDER env var or global config
+            /// If profile is None, uses SECRETSPEC_PROFILE env var if set
+            pub fn load_as_profile(provider: Option<Provider>, profile: Option<Profile>) -> Result<SecretSpecProfile, secretspec::SecretSpecError> {
                 let spec = secretspec::SecretSpec::load()?;
+
+                // Convert provider enum to string if provided, otherwise check env var
                 let provider_str = match provider {
-                    Provider::Keyring => "keyring",
-                    Provider::Dotenv => "dotenv",
-                    Provider::Env => "env",
-                };
-                let profile_str = match profile {
-                    #(#profile_to_str,)*
+                    Some(p) => Some(match p {
+                        Provider::Keyring => "keyring".to_string(),
+                        Provider::Dotenv => "dotenv".to_string(),
+                        Provider::Env => "env".to_string(),
+                    }),
+                    None => std::env::var("SECRETSPEC_PROVIDER").ok(),
                 };
 
-                let validation_result = spec.validate(
-                    Some(provider_str.to_string()),
-                    Some(profile_str.to_string())
-                )?;
+                // Convert profile enum to string if provided, otherwise check env var
+                let profile_str = match profile {
+                    Some(p) => Some(match p {
+                        #(#profile_to_str,)*
+                    }.to_string()),
+                    None => std::env::var("SECRETSPEC_PROFILE").ok(),
+                };
+
+                let validation_result = spec.validate(provider_str, profile_str.clone())?;
                 let secrets = validation_result.secrets;
 
-                match profile {
+                // Determine which profile to use
+                let selected_profile = if let Some(p) = profile {
+                    p
+                } else if let Some(profile_name) = profile_str.as_deref() {
+                    // Convert string to Profile enum
+                    match profile_name {
+                        #(#str_to_profile,)*
+                        _ => return Err(secretspec::SecretSpecError::InvalidProfile(profile_name.to_string())),
+                    }
+                } else {
+                    // Default to first profile
+                    Profile::#first_profile_variant
+                };
+
+                match selected_profile {
                     #(#load_profile_arms,)*
                 }
             }

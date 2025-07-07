@@ -53,6 +53,8 @@ pub enum SecretSpecError {
     InquireError(#[from] inquire::InquireError),
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("Invalid profile: {0}")]
+    InvalidProfile(String),
 }
 
 pub type Result<T> = std::result::Result<T, SecretSpecError>;
