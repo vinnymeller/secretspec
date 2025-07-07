@@ -28,6 +28,7 @@ mod tests {
         let config: ProjectConfig = toml::from_str(&format!(
             r#"[project]
 name = "test"
+revision = "1.0"
 {}"#,
             toml_str
         ))
@@ -61,6 +62,7 @@ name = "test"
         let config: ProjectConfig = toml::from_str(&format!(
             r#"[project]
 name = "test"
+revision = "1.0"
 {}"#,
             toml_str
         ))
@@ -94,6 +96,7 @@ name = "test"
         let config: ProjectConfig = toml::from_str(&format!(
             r#"[project]
 name = "test"
+revision = "1.0"
 {}"#,
             toml_str
         ))
@@ -139,6 +142,7 @@ name = "test"
         let config: ProjectConfig = toml::from_str(&format!(
             r#"[project]
 name = "test"
+revision = "1.0"
 {}"#,
             toml_str
         ))
@@ -174,6 +178,7 @@ name = "test"
         let config: ProjectConfig = toml::from_str(&format!(
             r#"[project]
 name = "test"
+revision = "1.0"
 {}"#,
             toml_str
         ))

@@ -1,5 +1,6 @@
 [project]
 name = "complex-project"
+revision = "1.0"
 
 # Always required, no default
 [secrets.ALWAYS_REQUIRED]

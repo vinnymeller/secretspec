@@ -10,6 +10,12 @@ pub struct ProjectConfig {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectInfo {
     pub name: String,
+    #[serde(default = "default_revision")]
+    pub revision: String,
+}
+
+fn default_revision() -> String {
+    "1.0".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -78,6 +78,7 @@ Each project has a `secretspec.toml` file that declares the required secrets:
 ```toml
 [project]
 name = "my-app"  # Inferred from current directory name when using `secretspec init`
+revision = "1.0"
 
 [secrets.DATABASE_URL]
 description = "PostgreSQL connection string"

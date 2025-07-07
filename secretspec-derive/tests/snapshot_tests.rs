@@ -32,6 +32,7 @@ fn test_basic_generation_snapshot() {
     let toml_content = r#"
 [project]
 name = "test"
+revision = "1.0"
 
 [secrets.API_KEY]
 required = true
@@ -49,6 +50,7 @@ fn test_profile_generation_snapshot() {
     let toml_content = r#"
 [project]
 name = "test"
+revision = "1.0"
 
 [secrets.API_KEY]
 required = true

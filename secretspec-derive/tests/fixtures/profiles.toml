@@ -1,5 +1,6 @@
 [project]
 name = "profile-test"
+revision = "1.0"
 
 [secrets.API_KEY]
 description = "API key"

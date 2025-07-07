@@ -23,6 +23,10 @@ pub enum SecretSpecError {
     Io(#[from] std::io::Error),
     #[error("TOML parsing error: {0}")]
     Toml(#[from] toml::de::Error),
+    #[error(
+        "Unsupported secretspec revision '{0}'. This version of secretspec only supports revision '1.0'"
+    )]
+    UnsupportedRevision(String),
     #[error("TOML serialization error: {0}")]
     TomlSer(#[from] toml::ser::Error),
     #[error("Keyring error: {0}")]
@@ -92,6 +96,7 @@ pub fn project_config_from_path(from: &Path) -> Result<ProjectConfig> {
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string(),
+            revision: "1.0".to_string(),
         },
         secrets,
     })
@@ -531,11 +536,20 @@ fn get_config_path() -> Result<PathBuf> {
 
 pub fn parse_spec(path: &Path) -> Result<ProjectConfig> {
     let content = fs::read_to_string(path).map_err(|_| SecretSpecError::NoManifest)?;
-    Ok(toml::from_str(&content)?)
+    parse_spec_from_str(&content)
 }
 
 pub fn parse_spec_from_str(content: &str) -> Result<ProjectConfig> {
-    Ok(toml::from_str(content)?)
+    let config: ProjectConfig = toml::from_str(content)?;
+
+    // Validate revision
+    if config.project.revision != "1.0" {
+        return Err(SecretSpecError::UnsupportedRevision(
+            config.project.revision,
+        ));
+    }
+
+    Ok(config)
 }
 
 fn load_project_config() -> Result<ProjectConfig> {
@@ -560,6 +574,7 @@ mod tests {
         let project_config = ProjectConfig {
             project: ProjectInfo {
                 name: "test_project".to_string(),
+                revision: "1.0".to_string(),
             },
             secrets: {
                 let mut secrets = HashMap::new();
@@ -618,6 +633,7 @@ mod tests {
         let project_config = ProjectConfig {
             project: ProjectInfo {
                 name: "test_project".to_string(),
+                revision: "1.0".to_string(),
             },
             secrets: {
                 let mut secrets = HashMap::new();
@@ -663,6 +679,7 @@ mod tests {
         let project_config = ProjectConfig {
             project: ProjectInfo {
                 name: "test_project".to_string(),
+                revision: "1.0".to_string(),
             },
             secrets: {
                 let mut secrets = HashMap::new();

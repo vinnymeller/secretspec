@@ -315,7 +315,7 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
             }
 
             /// Load with specific provider and profile, returns profile-specific types
-            pub fn load_profile(provider: Provider, profile: Profile) -> Result<SecretSpecProfile, secretspec::SecretSpecError> {
+            pub fn load_with_profile(provider: Provider, profile: Profile) -> Result<SecretSpecProfile, secretspec::SecretSpecError> {
                 let spec = secretspec::SecretSpec::load()?;
                 let provider_str = match provider {
                     Provider::Keyring => "keyring",
