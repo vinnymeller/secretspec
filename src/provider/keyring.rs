@@ -12,7 +12,7 @@ impl Provider for KeyringProvider {
         } else {
             key.to_string()
         };
-        
+
         let entry = Entry::new(&service, &username)?;
         match entry.get_password() {
             Ok(password) => Ok(Some(password)),
@@ -28,7 +28,7 @@ impl Provider for KeyringProvider {
         } else {
             key.to_string()
         };
-        
+
         let entry = Entry::new(&service, &username)?;
         entry.set_password(value)?;
         Ok(())

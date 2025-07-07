@@ -13,7 +13,7 @@ pub use keyring::KeyringProvider;
 pub trait Provider: Send + Sync {
     fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>>;
     fn set(&self, project: &str, key: &str, value: &str, profile: Option<&str>) -> Result<()>;
-    
+
     /// Returns whether this provider supports setting values.
     /// Defaults to true, but can be overridden by read-only providers.
     fn allows_set(&self) -> bool {

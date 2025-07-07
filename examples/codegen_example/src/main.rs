@@ -6,7 +6,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("SecretSpec Code Generation Example\n");
 
     // Create a .env file for testing
-    std::fs::write(".env", "DATABASE_URL=postgres://localhost/testdb\nAPI_KEY=test-key-123\n")?;
+    std::fs::write(
+        ".env",
+        "DATABASE_URL=postgres://localhost/testdb\nAPI_KEY=test-key-123\n",
+    )?;
 
     // Example 1: Load with union types (safe for any profile)
     println!("1. Loading secrets with union types:");
@@ -32,11 +35,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("   ✗ Failed to load secrets: {}", e);
         }
     }
-    
+
     // Example 2: Load development profile with exact types
     println!("\n2. Loading development profile:");
     match SecretSpec::load_profile(Provider::Dotenv, Profile::Development) {
-        Ok(SecretSpecProfile::Development { database_url, api_key, redis_url, log_level }) => {
+        Ok(SecretSpecProfile::Development {
+            database_url,
+            api_key,
+            redis_url,
+            log_level,
+        }) => {
             println!("   ✓ Loaded development profile");
             // In development profile, both database_url and api_key have defaults
             if let Some(url) = database_url {
@@ -61,9 +69,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(secrets) = SecretSpec::load(Provider::Dotenv) {
         secrets.set_as_env_vars();
         println!("   ✓ Set all secrets as environment variables");
-        
+
         // Verify they were set
-        println!("   - DATABASE_URL env: {:?}", std::env::var("DATABASE_URL").ok());
+        println!(
+            "   - DATABASE_URL env: {:?}",
+            std::env::var("DATABASE_URL").ok()
+        );
         println!("   - API_KEY env: {:?}", std::env::var("API_KEY").ok());
     }
 

@@ -8,7 +8,7 @@ use secretspec_derive::define_secrets;
 fn test_basic_secrets() {
     // This should compile without errors
     define_secrets!("tests/fixtures/basic.toml");
-    
+
     // The macro should generate:
     // - struct SecretSpec with api_key: String, database_url: String, optional_secret: Option<String>
     // - enum SecretSpecProfile (empty since no profiles defined)
@@ -19,7 +19,7 @@ fn test_basic_secrets() {
 fn test_profile_specific_secrets() {
     // This should compile without errors
     define_secrets!("tests/fixtures/profiles.toml");
-    
+
     // The macro should generate:
     // - struct SecretSpec with:
     //   - api_key: Option<String> (optional in development)
@@ -33,6 +33,6 @@ fn test_profile_specific_secrets() {
 fn test_empty_secrets() {
     // This should compile without errors
     define_secrets!("tests/fixtures/empty.toml");
-    
+
     // The macro should generate empty structs
 }

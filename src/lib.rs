@@ -51,7 +51,6 @@ pub enum SecretSpecError {
 
 pub type Result<T> = std::result::Result<T, SecretSpecError>;
 
-
 // Extension methods for ProjectConfig
 pub fn project_config_from_path(from: &Path) -> Result<ProjectConfig> {
     let mut secrets = HashMap::new();
@@ -127,7 +126,6 @@ pub fn get_example_toml() -> &'static str {
 # required = false
 "#
 }
-
 
 pub struct SecretSpec {
     registry: ProviderRegistry,
@@ -251,9 +249,10 @@ impl SecretSpec {
 
         // Check if the provider supports setting values
         if !backend.allows_set() {
-            return Err(SecretSpecError::ProviderOperationFailed(
-                format!("Provider '{}' is read-only and does not support setting values", provider_name)
-            ));
+            return Err(SecretSpecError::ProviderOperationFailed(format!(
+                "Provider '{}' is read-only and does not support setting values",
+                provider_name
+            )));
         }
 
         let value = if let Some(v) = value {
@@ -318,7 +317,8 @@ impl SecretSpec {
         let mut found = vec![];
 
         for (name, config) in &self.config.secrets {
-            let Some((required, default)) = self.resolve_secret_config(name, profile.as_deref()) else {
+            let Some((required, default)) = self.resolve_secret_config(name, profile.as_deref())
+            else {
                 // This should never happen since we're iterating over the config
                 continue;
             };
@@ -366,14 +366,38 @@ impl SecretSpec {
         );
 
         if !missing.is_empty() {
-            return Err(SecretSpecError::RequiredSecretMissing(
-                missing[0].to_string(),
-            ));
+            println!("\nThe following required secrets are missing:");
+            for secret_name in &missing {
+                if let Some(config) = self.config.secrets.get(*secret_name) {
+                    println!("\n{} - {}", secret_name.bold(), config.description);
+                    print!(
+                        "Enter value for {} (profile: {}): ",
+                        secret_name, profile_display
+                    );
+                    io::stdout().flush()?;
+                    let value = rpassword::read_password()?;
+
+                    backend.set(
+                        &self.config.project.name,
+                        secret_name,
+                        &value,
+                        profile.as_deref(),
+                    )?;
+                    println!(
+                        "{} Secret '{}' saved to {} (profile: {})",
+                        "✓".green(),
+                        secret_name,
+                        provider_name,
+                        profile_display
+                    );
+                }
+            }
+
+            println!("\nAll required secrets have been set.");
         }
 
         Ok(())
     }
-
 
     pub fn validate(
         &self,

@@ -22,7 +22,7 @@ impl Provider for EnvProvider {
             "Environment variable provider is read-only. Set variables in your shell or process environment.".to_string()
         ))
     }
-    
+
     fn allows_set(&self) -> bool {
         false
     }

@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::{Result, WrapErr};
 use directories::ProjectDirs;
-use secretspec::{SecretSpec, GlobalConfig, DefaultConfig};
+use secretspec::{DefaultConfig, GlobalConfig, SecretSpec};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
@@ -146,12 +146,12 @@ fn main() -> Result<()> {
         Commands::Config { action } => match action {
             ConfigAction::Init => {
                 use inquire::Select;
-                
+
                 let providers = vec!["keyring", "dotenv", "env"];
                 let provider = Select::new("Select your preferred provider backend:", providers)
                     .with_help_message("keyring: Uses system keychain (Recommended)\ndotenv: Traditional .env files\nenv: Read-only environment variables")
                     .prompt()?;
-                
+
                 let config = GlobalConfig {
                     defaults: DefaultConfig {
                         provider: provider.to_string(),
@@ -160,7 +160,10 @@ fn main() -> Result<()> {
                 };
 
                 save_global_config(&config)?;
-                println!("\n✓ Configuration saved to {}", get_config_path()?.display());
+                println!(
+                    "\n✓ Configuration saved to {}",
+                    get_config_path()?.display()
+                );
                 Ok(())
             }
             ConfigAction::Show => {
@@ -185,12 +188,18 @@ fn main() -> Result<()> {
             profile,
         } => {
             let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
-            app.set(&name, value, provider, profile).wrap_err("Failed to set secret")?;
+            app.set(&name, value, provider, profile)
+                .wrap_err("Failed to set secret")?;
             Ok(())
         }
-        Commands::Get { name, provider, profile } => {
+        Commands::Get {
+            name,
+            provider,
+            profile,
+        } => {
             let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
-            app.get(&name, provider, profile).wrap_err("Failed to get secret")?;
+            app.get(&name, provider, profile)
+                .wrap_err("Failed to get secret")?;
             Ok(())
         }
         Commands::Run {
@@ -199,12 +208,14 @@ fn main() -> Result<()> {
             profile,
         } => {
             let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
-            app.run(command, provider, profile).wrap_err("Failed to run command")?;
+            app.run(command, provider, profile)
+                .wrap_err("Failed to run command")?;
             Ok(())
         }
         Commands::Check { provider, profile } => {
             let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
-            app.check(provider, profile).wrap_err("Failed to check secrets")?;
+            app.check(provider, profile)
+                .wrap_err("Failed to check secrets")?;
             Ok(())
         }
     }
