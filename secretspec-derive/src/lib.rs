@@ -17,7 +17,7 @@ use syn::{LitStr, parse_macro_input};
 ///     // Load with union types (safe for any profile)
 ///     let secrets = SecretSpec::load(Provider::Keyring)?;
 ///     println!("Database URL: {}", secrets.database_url);
-///     
+///
 ///     // Load with profile-specific types
 ///     match SecretSpec::load_profile(Provider::Keyring, Profile::Production)? {
 ///         SecretSpecProfile::Production { api_key, database_url, .. } => {
@@ -25,7 +25,7 @@ use syn::{LitStr, parse_macro_input};
 ///         }
 ///         _ => unreachable!(),
 ///     }
-///     
+///
 ///     Ok(())
 /// }
 /// ```
@@ -98,7 +98,7 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
     let load_assignments = field_info.iter().map(|(name, (_, is_optional))| {
         let field_name = format_ident!("{}", name.to_lowercase());
         let secret_name = name.clone();
-        
+
         if *is_optional {
             quote! {
                 #field_name: secrets.get(#secret_name).cloned()
@@ -217,7 +217,7 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
         // If no profiles, handle Default
         let assignments = config.secrets.iter().map(|(secret_name, secret_config)| {
             let field_name = format_ident!("{}", secret_name.to_lowercase());
-            
+
             if secret_config.required && secret_config.default.is_none() {
                 quote! {
                     #field_name: secrets.get(#secret_name)
@@ -241,16 +241,16 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
         let variant_name = format_ident!("{}", capitalize_first(profile));
         let assignments = config.secrets.iter().map(|(secret_name, secret_config)| {
             let field_name = format_ident!("{}", secret_name.to_lowercase());
-            
+
             // Determine if this field is required for this profile
             let mut is_required = secret_config.required;
             let mut has_default = secret_config.default.is_some();
-            
+
             if let Some(profile_override) = secret_config.profiles.get(profile) {
                 is_required = profile_override.required.unwrap_or(is_required);
                 has_default = profile_override.default.is_some() || has_default;
             }
-            
+
             if is_required && !has_default {
                 quote! {
                     #field_name: secrets.get(#secret_name)
@@ -263,7 +263,7 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
                 }
             }
         });
-        
+
         quote! {
             Profile::#variant_name => Ok(SecretSpecProfile::#variant_name {
                 #(#assignments,)*
