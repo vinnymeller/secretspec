@@ -17,9 +17,11 @@ mod tests {
     fn test_parse_basic_config() {
         let toml_str = r#"
             [secrets.API_KEY]
+            description = "API key"
             required = true
             
             [secrets.DATABASE_URL]
+            description = "Database URL"
             required = false
             default = "postgres://localhost"
         "#;
@@ -46,6 +48,7 @@ name = "test"
     fn test_parse_profile_overrides() {
         let toml_str = r#"
             [secrets.API_KEY]
+            description = "API key"
             required = true
             
             [secrets.API_KEY.development]
@@ -82,6 +85,7 @@ name = "test"
         // Test that a field that's optional in any profile becomes Option<String>
         let toml_str = r#"
             [secrets.SOMETIMES_REQUIRED]
+            description = "Sometimes required secret"
             required = true
             
             [secrets.SOMETIMES_REQUIRED.development]
@@ -123,6 +127,7 @@ name = "test"
     fn test_always_required_field() {
         let toml_str = r#"
             [secrets.ALWAYS_REQUIRED]
+            description = "Always required secret"
             required = true
             
             [secrets.ALWAYS_REQUIRED.development]
@@ -162,6 +167,7 @@ name = "test"
     fn test_default_makes_optional() {
         let toml_str = r#"
             [secrets.HAS_DEFAULT]
+            description = "Secret with default"
             required = true
             default = "some-default"
         "#;

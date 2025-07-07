@@ -3,3 +3,5 @@ error: Failed to read this/file/does/not/exist.toml: No such file or directory (
   |
 4 | define_secrets!("this/file/does/not/exist.toml");
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the macro `define_secrets` (in Nightly builds, run with -Z macro-backtrace for more info)

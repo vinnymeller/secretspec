@@ -42,7 +42,7 @@ mod profile_generation {
                     redis_url,
                 } => {
                     let _: Option<String> = api_key; // Optional in dev
-                    let _: String = database_url; // Required but has default
+                    let _: Option<String> = database_url; // Required but has default
                     let _: Option<String> = redis_url; // Optional
                 }
                 _ => panic!("Expected Development variant"),
@@ -70,7 +70,7 @@ mod profile_generation {
         // Verify the union struct has Option for fields that are optional in any profile
         fn _test_field_types(s: SecretSpec) {
             let _: Option<String> = s.api_key; // Optional in development
-            let _: String = s.database_url; // Always required (has default in dev)
+            let _: Option<String> = s.database_url; // Has default in dev, so optional in union type
             let _: Option<String> = s.redis_url; // Optional by default
         }
     }

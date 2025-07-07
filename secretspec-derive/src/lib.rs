@@ -306,7 +306,8 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
                     Provider::Env => "env",
                 };
 
-                let secrets = spec.validate(Some(provider_str.to_string()), None)?;
+                let validation_result = spec.validate(Some(provider_str.to_string()), None)?;
+                let secrets = validation_result.secrets;
 
                 Ok(Self {
                     #(#load_assignments,)*
@@ -325,10 +326,11 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
                     #(#profile_to_str,)*
                 };
 
-                let secrets = spec.validate(
+                let validation_result = spec.validate(
                     Some(provider_str.to_string()),
                     Some(profile_str.to_string())
                 )?;
+                let secrets = validation_result.secrets;
 
                 match profile {
                     #(#load_profile_arms,)*

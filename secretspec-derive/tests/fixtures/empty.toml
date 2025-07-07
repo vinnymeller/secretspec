@@ -1,4 +1,5 @@
 [project]
 name = "empty-project"
 
+[secrets]
 # No secrets defined
