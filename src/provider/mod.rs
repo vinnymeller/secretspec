@@ -5,10 +5,14 @@ use std::path::PathBuf;
 pub mod dotenv;
 pub mod env;
 pub mod keyring;
+pub mod lastpass;
+pub mod onepassword;
 
 pub use dotenv::DotEnvProvider;
 pub use env::EnvProvider;
 pub use keyring::KeyringProvider;
+pub use lastpass::LastPassProvider;
+pub use onepassword::OnePasswordProvider;
 
 pub trait Provider: Send + Sync {
     fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>>;
@@ -39,6 +43,14 @@ impl ProviderRegistry {
         backends.insert(
             "env".to_string(),
             Box::new(EnvProvider::new()) as Box<dyn Provider>,
+        );
+        backends.insert(
+            "1password".to_string(),
+            Box::new(OnePasswordProvider::new()) as Box<dyn Provider>,
+        );
+        backends.insert(
+            "lastpass".to_string(),
+            Box::new(LastPassProvider::new()) as Box<dyn Provider>,
         );
         Self { backends }
     }

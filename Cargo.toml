@@ -29,10 +29,11 @@ inquire = "0.6"
 color-eyre = "0.6"
 secretspec-derive = { path = "./secretspec-derive", optional = true }
 secretspec-types = { path = "./secretspec-types" }
+serde_json = "1.0"
+tempfile = "3.0"
 
 [features]
 default = ["codegen"]
 codegen = ["secretspec-derive"]
 
 [dev-dependencies]
-tempfile = "3.0"

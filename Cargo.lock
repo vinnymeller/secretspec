@@ -1534,6 +1534,7 @@ dependencies = [
  "secretspec-derive",
  "secretspec-types",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "toml",

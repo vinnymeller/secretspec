@@ -51,6 +51,8 @@ pub enum SecretSpecError {
     ProviderOperationFailed(String),
     #[error("User interaction error: {0}")]
     InquireError(#[from] inquire::InquireError),
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, SecretSpecError>;
