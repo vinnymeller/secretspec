@@ -258,6 +258,20 @@ impl SecretSpec {
         provider_arg: Option<String>,
         profile: Option<String>,
     ) -> Result<()> {
+        // Check if the secret exists in the spec
+        if !self.config.secrets.contains_key(name) {
+            return Err(SecretSpecError::SecretNotFound(format!(
+                "Secret '{}' is not defined in secretspec.toml. Available secrets: {}",
+                name,
+                self.config
+                    .secrets
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        }
+
         let (provider_name, backend) = self.get_provider_backend(provider_arg)?;
         let profile_display = profile.as_deref().unwrap_or("default");
 
@@ -535,4 +549,159 @@ fn load_global_config() -> Result<Option<GlobalConfig>> {
     }
     let content = fs::read_to_string(&config_path)?;
     Ok(Some(toml::from_str(&content)?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_set_with_undefined_secret() {
+        let project_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test_project".to_string(),
+            },
+            secrets: {
+                let mut secrets = HashMap::new();
+                secrets.insert(
+                    "DEFINED_SECRET".to_string(),
+                    SecretConfig {
+                        description: "A defined secret".to_string(),
+                        required: true,
+                        default: None,
+                        profiles: HashMap::new(),
+                    },
+                );
+                secrets
+            },
+        };
+
+        let global_config = GlobalConfig {
+            defaults: DefaultConfig {
+                provider: "env".to_string(),
+            },
+            projects: HashMap::new(),
+        };
+
+        let spec = SecretSpec::new(project_config, Some(global_config));
+
+        // Test setting an undefined secret - env provider is read-only,
+        // but we should get the SecretNotFound error before the provider error
+        let result = spec.set(
+            "UNDEFINED_SECRET",
+            Some("test_value".to_string()),
+            Some("env".to_string()),
+            None,
+        );
+
+        assert!(result.is_err());
+        match result {
+            Err(SecretSpecError::SecretNotFound(msg)) => {
+                assert!(msg.contains("UNDEFINED_SECRET"));
+                assert!(msg.contains("not defined in secretspec.toml"));
+                assert!(msg.contains("DEFINED_SECRET"));
+            }
+            _ => panic!("Expected SecretNotFound error"),
+        }
+    }
+
+    #[test]
+    fn test_set_with_defined_secret() {
+        use std::env;
+        use tempfile::TempDir;
+
+        // Create a temporary directory for dotenv file
+        let temp_dir = TempDir::new().unwrap();
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(&temp_dir).unwrap();
+
+        let project_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test_project".to_string(),
+            },
+            secrets: {
+                let mut secrets = HashMap::new();
+                secrets.insert(
+                    "DEFINED_SECRET".to_string(),
+                    SecretConfig {
+                        description: "A defined secret".to_string(),
+                        required: true,
+                        default: None,
+                        profiles: HashMap::new(),
+                    },
+                );
+                secrets
+            },
+        };
+
+        let global_config = GlobalConfig {
+            defaults: DefaultConfig {
+                provider: "dotenv".to_string(),
+            },
+            projects: HashMap::new(),
+        };
+
+        let spec = SecretSpec::new(project_config, Some(global_config));
+
+        // This should succeed with dotenv provider
+        let result = spec.set(
+            "DEFINED_SECRET",
+            Some("test_value".to_string()),
+            Some("dotenv".to_string()),
+            None,
+        );
+
+        // Restore original directory
+        env::set_current_dir(original_dir).unwrap();
+
+        // The set operation should succeed for a defined secret
+        assert!(result.is_ok(), "Setting a defined secret should succeed");
+    }
+
+    #[test]
+    fn test_set_with_readonly_provider() {
+        let project_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test_project".to_string(),
+            },
+            secrets: {
+                let mut secrets = HashMap::new();
+                secrets.insert(
+                    "DEFINED_SECRET".to_string(),
+                    SecretConfig {
+                        description: "A defined secret".to_string(),
+                        required: true,
+                        default: None,
+                        profiles: HashMap::new(),
+                    },
+                );
+                secrets
+            },
+        };
+
+        let global_config = GlobalConfig {
+            defaults: DefaultConfig {
+                provider: "env".to_string(),
+            },
+            projects: HashMap::new(),
+        };
+
+        let spec = SecretSpec::new(project_config, Some(global_config));
+
+        // Test setting a defined secret with env provider (which is read-only)
+        let result = spec.set(
+            "DEFINED_SECRET",
+            Some("test_value".to_string()),
+            Some("env".to_string()),
+            None,
+        );
+
+        assert!(result.is_err());
+        match result {
+            Err(SecretSpecError::ProviderOperationFailed(msg)) => {
+                assert!(msg.contains("read-only"));
+            }
+            _ => panic!("Expected ProviderOperationFailed error for read-only provider"),
+        }
+    }
 }
