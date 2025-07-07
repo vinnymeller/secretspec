@@ -2,33 +2,7 @@ use proc_macro::TokenStream;
 use quote::{quote, format_ident};
 use syn::{parse_macro_input, LitStr};
 use std::collections::{HashMap, HashSet};
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
-struct Config {
-    secrets: HashMap<String, SecretConfig>,
-}
-
-#[derive(Debug, Deserialize)]
-struct SecretConfig {
-    #[serde(default)]
-    #[allow(dead_code)]
-    description: Option<String>,
-    #[serde(default)]
-    required: bool,
-    #[serde(default)]
-    default: Option<String>,
-    #[serde(flatten)]
-    profiles: HashMap<String, ProfileOverride>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ProfileOverride {
-    #[serde(default)]
-    required: Option<bool>,
-    #[serde(default)]
-    default: Option<String>,
-}
+use secretspec_types::ProjectConfig;
 
 /// Generates typed SecretSpec structs from your secretspec.toml file.
 /// 
@@ -72,7 +46,7 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
         }
     };
     
-    let config: Config = match toml::from_str(&toml_content) {
+    let config: ProjectConfig = match toml::from_str(&toml_content) {
         Ok(config) => config,
         Err(e) => {
             let error = format!("Failed to parse TOML: {}", e);

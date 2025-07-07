@@ -1,6 +1,5 @@
 use colored::Colorize;
 use directories::ProjectDirs;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -14,6 +13,9 @@ use provider::{Provider, ProviderRegistry};
 
 #[cfg(feature = "codegen")]
 pub use secretspec_derive::define_secrets;
+
+// Re-export types for convenience
+pub use secretspec_types::*;
 
 #[derive(Error, Debug)]
 pub enum SecretSpecError {
@@ -49,51 +51,41 @@ pub enum SecretSpecError {
 
 pub type Result<T> = std::result::Result<T, SecretSpecError>;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ProjectConfig {
-    pub project: ProjectInfo,
-    pub secrets: HashMap<String, SecretConfig>,
-}
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ProjectInfo {
-    pub name: String,
-}
+// Extension methods for ProjectConfig
+pub fn project_config_from_path(from: &Path) -> Result<ProjectConfig> {
+    let mut secrets = HashMap::new();
 
-impl ProjectConfig {
-    pub fn from_path(from: &Path) -> Result<Self> {
-        let mut secrets = HashMap::new();
-
-        if from.exists() {
-            let env_vars = dotenvy::from_path_iter(from)?;
-            for item in env_vars {
-                let (key, _) = item?;
-                secrets.insert(
-                    key.clone(),
-                    SecretConfig {
-                        description: format!("{} secret", key),
-                        required: true,
-                        default: None,
-                        profiles: HashMap::new(),
-                    },
-                );
-            }
+    if from.exists() {
+        let env_vars = dotenvy::from_path_iter(from)?;
+        for item in env_vars {
+            let (key, _) = item?;
+            secrets.insert(
+                key.clone(),
+                SecretConfig {
+                    description: format!("{} secret", key),
+                    required: true,
+                    default: None,
+                    profiles: HashMap::new(),
+                },
+            );
         }
-
-        Ok(Self {
-            project: ProjectInfo {
-                name: std::env::current_dir()?
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string(),
-            },
-            secrets,
-        })
     }
 
-    pub fn get_example_toml() -> &'static str {
-        r#"
+    Ok(ProjectConfig {
+        project: ProjectInfo {
+            name: std::env::current_dir()?
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string(),
+        },
+        secrets,
+    })
+}
+
+pub fn get_example_toml() -> &'static str {
+    r#"
 # Example secrets configuration
 # Uncomment and modify the sections you need
 
@@ -134,43 +126,8 @@ impl ProjectConfig {
 # description = "OAuth client secret"
 # required = false
 "#
-    }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SecretConfig {
-    pub description: String,
-    pub required: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub default: Option<String>,
-    #[serde(default, flatten)]
-    pub profiles: HashMap<String, ProfileOverride>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProfileOverride {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub required: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub default: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GlobalConfig {
-    pub defaults: DefaultConfig,
-    #[serde(default)]
-    pub projects: HashMap<String, ProjectUserConfig>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DefaultConfig {
-    pub provider: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ProjectUserConfig {
-    pub provider: String,
-}
 
 pub struct SecretSpec {
     registry: ProviderRegistry,
@@ -259,7 +216,7 @@ impl SecretSpec {
             }
         }
 
-        let manifest = ProjectConfig::from_path(from)?;
+        let manifest = project_config_from_path(from)?;
 
         let content = toml::to_string_pretty(&manifest)?;
         fs::write("secretspec.toml", content)?;
@@ -354,9 +311,10 @@ impl SecretSpec {
         let mut found = vec![];
 
         for (name, config) in &self.config.secrets {
-            let (required, default) = self
-                .resolve_secret_config(name, profile.as_deref())
-                .unwrap();
+            let Some((required, default)) = self.resolve_secret_config(name, profile.as_deref()) else {
+                // This should never happen since we're iterating over the config
+                continue;
+            };
 
             match backend.get(&self.config.project.name, name, profile.as_deref())? {
                 Some(_) => {
@@ -421,7 +379,7 @@ impl SecretSpec {
         for (name, _config) in &self.config.secrets {
             let (required, default) = self
                 .resolve_secret_config(name, profile.as_deref())
-                .unwrap();
+                .expect("Secret should exist in config since we're iterating over it");
 
             match backend.get(&self.config.project.name, name, profile.as_deref())? {
                 Some(value) => {
@@ -474,9 +432,17 @@ fn get_config_path() -> Result<PathBuf> {
     Ok(dirs.config_dir().join("config.toml"))
 }
 
-fn load_project_config() -> Result<ProjectConfig> {
-    let content = fs::read_to_string("secretspec.toml").map_err(|_| SecretSpecError::NoManifest)?;
+pub fn parse_spec(path: &Path) -> Result<ProjectConfig> {
+    let content = fs::read_to_string(path).map_err(|_| SecretSpecError::NoManifest)?;
     Ok(toml::from_str(&content)?)
+}
+
+pub fn parse_spec_from_str(content: &str) -> Result<ProjectConfig> {
+    Ok(toml::from_str(content)?)
+}
+
+fn load_project_config() -> Result<ProjectConfig> {
+    parse_spec(Path::new("secretspec.toml"))
 }
 
 fn load_global_config() -> Result<Option<GlobalConfig>> {

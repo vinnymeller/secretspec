@@ -1532,6 +1532,7 @@ dependencies = [
  "keyring",
  "rpassword",
  "secretspec-derive",
+ "secretspec-types",
  "serde",
  "tempfile",
  "thiserror",
@@ -1546,10 +1547,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "secretspec",
+ "secretspec-types",
  "serde",
  "syn 2.0.104",
  "toml",
  "trybuild",
+]
+
+[[package]]
+name = "secretspec-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

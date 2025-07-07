@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "secretspec-derive", "examples/codegen_example"]
+members = [".", "secretspec-derive", "secretspec-types", "examples/codegen_example"]
 resolver = "2"
 
 [package]
@@ -28,6 +28,7 @@ dotenvy = "0.15"
 inquire = "0.6"
 color-eyre = "0.6"
 secretspec-derive = { path = "./secretspec-derive", optional = true }
+secretspec-types = { path = "./secretspec-types" }
 
 [features]
 default = ["codegen"]

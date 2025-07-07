@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::{Result, WrapErr};
 use directories::ProjectDirs;
-use secretspec::{DefaultConfig, GlobalConfig, ProjectConfig, SecretSpec};
+use secretspec::{SecretSpec, GlobalConfig, DefaultConfig};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
@@ -114,11 +114,11 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Init { from } => {
-            let project_config = ProjectConfig::from_path(&from)?;
+            let project_config = secretspec::project_config_from_path(&from)?;
             let mut content = toml::to_string_pretty(&project_config)?;
 
             // Append comprehensive example
-            content.push_str(ProjectConfig::get_example_toml());
+            content.push_str(secretspec::get_example_toml());
 
             fs::write("secretspec.toml", content)?;
 

@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::{capitalize_first, Config, SecretConfig, ProfileOverride};
+    use crate::capitalize_first;
+    use secretspec_types::{ProjectConfig, SecretConfig, ProfileOverride};
+    use std::collections::HashMap;
     
     #[test]
     fn test_capitalize_first() {
@@ -22,7 +24,9 @@ mod tests {
             default = "postgres://localhost"
         "#;
         
-        let config: Config = toml::from_str(toml_str).unwrap();
+        let config: ProjectConfig = toml::from_str(&format!(r#"[project]
+name = "test"
+{}"#, toml_str)).unwrap();
         assert_eq!(config.secrets.len(), 2);
         
         let api_key = &config.secrets["API_KEY"];
@@ -48,7 +52,9 @@ mod tests {
             required = true
         "#;
         
-        let config: Config = toml::from_str(toml_str).unwrap();
+        let config: ProjectConfig = toml::from_str(&format!(r#"[project]
+name = "test"
+{}"#, toml_str)).unwrap();
         let api_key = &config.secrets["API_KEY"];
         
         assert!(api_key.required);
@@ -74,7 +80,9 @@ mod tests {
             required = false
         "#;
         
-        let config: Config = toml::from_str(toml_str).unwrap();
+        let config: ProjectConfig = toml::from_str(&format!(r#"[project]
+name = "test"
+{}"#, toml_str)).unwrap();
         
         // Simulate the logic from the macro
         let secret_config = &config.secrets["SOMETIMES_REQUIRED"];
@@ -109,7 +117,9 @@ mod tests {
             required = true
         "#;
         
-        let config: Config = toml::from_str(toml_str).unwrap();
+        let config: ProjectConfig = toml::from_str(&format!(r#"[project]
+name = "test"
+{}"#, toml_str)).unwrap();
         let secret_config = &config.secrets["ALWAYS_REQUIRED"];
         let mut is_ever_optional = false;
         
@@ -137,7 +147,9 @@ mod tests {
             default = "some-default"
         "#;
         
-        let config: Config = toml::from_str(toml_str).unwrap();
+        let config: ProjectConfig = toml::from_str(&format!(r#"[project]
+name = "test"
+{}"#, toml_str)).unwrap();
         let secret_config = &config.secrets["HAS_DEFAULT"];
         
         let is_ever_optional = !secret_config.required || secret_config.default.is_some();
