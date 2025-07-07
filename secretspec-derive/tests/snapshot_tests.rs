@@ -1,10 +1,7 @@
 // Snapshot tests to verify the generated code structure
 // These tests ensure the macro generates the expected output
 
-use proc_macro2::TokenStream;
 use quote::quote;
-use secretspec_derive::*;
-use std::str::FromStr;
 
 fn expand_macro(toml_content: &str) -> String {
     // Create a temporary file with the TOML content
@@ -16,13 +13,13 @@ fn expand_macro(toml_content: &str) -> String {
     let path = temp_file.to_str().unwrap();
 
     // Create a token stream with the macro input
-    let input = quote! { #path };
+    let _input = quote! { #path };
 
     // This would need access to the actual macro implementation
     // For now, we'll just test that the files can be created and parsed
 
     // Clean up
-    std::fs::remove_file(temp_file).unwrap();
+    let _ = std::fs::remove_file(temp_file);
 
     format!(
         "Generated code for: {}",

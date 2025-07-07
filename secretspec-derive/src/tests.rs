@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::capitalize_first;
-    use secretspec_types::{ProfileOverride, ProjectConfig, SecretConfig};
-    use std::collections::HashMap;
+    use secretspec_types::ProjectConfig;
 
     #[test]
     fn test_capitalize_first() {
