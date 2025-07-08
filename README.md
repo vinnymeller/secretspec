@@ -232,7 +232,7 @@ SecretSpec provides a proc macro that generates strongly-typed Rust structs from
 ### Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-secretspec = { version = "0.1", features = ["codegen"] }
+secretspec = { version = "0.1" }
 ```
 
 ### Basic Usage
