@@ -1505,6 +1505,7 @@ NEW_SECRET = { description = "New secret", required = true }
         let global_config = GlobalConfig {
             defaults: DefaultConfig {
                 provider: "env".to_string(),
+                profile: None,
             },
             projects: HashMap::new(),
         };
@@ -1566,6 +1567,7 @@ NEW_SECRET = { description = "New secret", required = true }
         let global_config = GlobalConfig {
             defaults: DefaultConfig {
                 provider: "dotenv".to_string(),
+                profile: None,
             },
             projects: HashMap::new(),
         };
@@ -1614,6 +1616,7 @@ NEW_SECRET = { description = "New secret", required = true }
         let global_config = GlobalConfig {
             defaults: DefaultConfig {
                 provider: "env".to_string(),
+                profile: None,
             },
             projects: HashMap::new(),
         };
