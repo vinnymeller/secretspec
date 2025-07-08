@@ -8,7 +8,9 @@
 
 Declarative secrets for development workflows, supporting a variety of storage backends.
 
-## Abstract
+See [announcement blog post for motivation](XXX).
+
+## Introduction
 
 Modern applications require secrets - API keys, database credentials, service tokens. Yet we lack a standard way to declare these requirements. Applications either hard-code retrieval mechanisms or fail at runtime with missing environment variables.
 
@@ -65,9 +67,8 @@ See [announcement blog post for motivation](XXX).
 
    Next steps:
      1. secretspec config init    # Set up user configuration
-     2. secretspec set API_KEY    # Store your secrets
-     3. secretspec check          # Verify all secrets are set
-     4. secretspec run -- your-command  # Run with secrets
+     2. secretspec check          # Verify all secrets are set
+     3. secretspec run -- your-command  # Run with secrets
    ```
 
 2. **Set up provider backend:**

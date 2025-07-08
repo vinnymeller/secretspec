@@ -163,9 +163,8 @@ fn main() -> Result<()> {
 
             println!("\nNext steps:");
             println!("  1. secretspec config init    # Set up user configuration");
-            println!("  2. secretspec set API_KEY    # Store your secrets");
-            println!("  3. secretspec check          # Verify all secrets are set");
-            println!("  4. secretspec run -- your-command  # Run with secrets");
+            println!("  2. secretspec check          # Verify all secrets and set them");
+            println!("  3. secretspec run -- your-command  # Run with secrets");
 
             Ok(())
         }
