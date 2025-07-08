@@ -116,6 +116,19 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Init { from } => {
+            // Check if secretspec.toml already exists
+            if PathBuf::from("secretspec.toml").exists() {
+                use inquire::Confirm;
+                let overwrite = Confirm::new("secretspec.toml already exists. Overwrite?")
+                    .with_default(false)
+                    .prompt()?;
+
+                if !overwrite {
+                    println!("Cancelled.");
+                    return Ok(());
+                }
+            }
+
             let project_config = secretspec::project_config_from_path(&from)?;
             let mut content = secretspec::generate_toml_with_comments(&project_config)?;
 
