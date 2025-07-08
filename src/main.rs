@@ -224,7 +224,11 @@ fn main() -> Result<()> {
                 match load_global_config()? {
                     Some(config) => {
                         println!("Configuration file: {}\n", get_config_path()?.display());
-                        println!("{}", toml::to_string_pretty(&config)?);
+                        println!("Provider: {}", config.defaults.provider);
+                        match config.defaults.profile {
+                            Some(profile) => println!("Profile:  {}", profile),
+                            None => println!("Profile:  (none)"),
+                        }
                     }
                     None => {
                         println!(
