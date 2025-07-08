@@ -1,12 +1,43 @@
-# SecretSpec
-
 [![Build Status](https://img.shields.io/github/check-runs/cachix/secretspec/main)](https://github.com/cachix/secretspec/actions)
 [![Crates.io](https://img.shields.io/crates/v/secretspec)](https://crates.io/crates/secretspec)
 [![docs.rs](https://docs.rs/secretspec/badge.svg)](https://docs.rs/secretspec)
 [![Discord channel](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FnaMgvexb6q%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&logo=discord&logoColor=white&label=Discord%20users&color=green&style=flat)](https://discord.gg/naMgvexb6q)
 ![License: Apache 2.0](https://img.shields.io/github/license/cachix/secretspec)
 
+# SecretSpec
+
 Declarative secrets for development workflows, supporting a variety of storage backends.
+
+## Abstract
+
+Modern applications require secrets - API keys, database credentials, service tokens. Yet we lack a standard way to declare these requirements. Applications either hard-code retrieval mechanisms or fail at runtime with missing environment variables.
+
+### The Problem: Conflating What, How, and Where
+
+Current secret management approaches force applications to simultaneously answer three distinct questions:
+
+- **WHAT** - Which secrets does the application need? (DATABASE_URL, API_KEY)
+- **HOW** - What are the requirements? (required vs optional, defaults, validation, environment)
+- **WHERE** - Where are these secrets stored? (environment variables, Vault, AWS Secrets Manager)
+
+This coupling creates several problems:
+
+1. **Lack of Portability**: Applications become tightly coupled to specific storage backends, making it difficult to switch providers or adapt to different environments
+2. **Runtime Failures**: Missing secrets are only discovered when the application attempts to use them, leading to crashes in production
+3. **Poor Developer Experience**: Each developer must understand the specific storage mechanism and manually configure their environment
+4. **Inconsistent Practices**: Every application implements its own ad-hoc solution, leading to a fragmented ecosystem
+
+### The Solution: Declarative Secret Requirements
+
+SecretSpec introduces a declarative approach that separates the "what" and "how" from the "where". Applications declare their secret requirements in a `secretspec.toml` file, while the runtime environment determines the storage backend through `provider` configuration and context via `profile` selection.
+
+This separation enables:
+- **Portable Applications**: The same application works across different secret storage backends without code changes
+- **Early Validation**: Check that all required secrets are available before starting the application
+- **Better Tooling**: Standardized format enables ecosystem-wide tooling for secret management
+- **Type Safety**: Generate strongly-typed code from declarations for compile-time guarantees
+
+SecretSpec is a declarative secrets specification for development workflows, supporting a variety of storage backends including system keyrings, .env files, environment variables, and password managers.
 
 See [announcement blog post for motivation](XXX).
 
@@ -21,7 +52,7 @@ See [announcement blog post for motivation](XXX).
 
 ## Quick Start
 
-1. **Initialize `secretspec.toml` (automatically detects .env)**
+1. **Initialize `secretspec.toml` (automatically import secrets from .env)**
    ```bash
    $ secretspec init
    ```
@@ -45,7 +76,7 @@ See [announcement blog post for motivation](XXX).
 5. **Run your application with secrets:**
    ```bash
    $ secretspec run -- npm start
-   
+
    # Or with a specific profile
    $ secretspec run --profile production -- npm start
    ```
@@ -244,18 +275,18 @@ secretspec::define_secrets!("secretspec.toml");
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load secrets with type-safe struct
     let secrets = SecretSpec::load(Provider::Keyring)?;
-    
+
     // Field names are lowercased versions of secret names
     println!("Database: {}", secrets.database_url);  // DATABASE_URL -> database_url
-    
+
     // Optional secrets are Option<String>
     if let Some(redis) = &secrets.redis_url {
         println!("Redis: {}", redis);
     }
-    
+
     // Set all secrets as environment variables
     secrets.set_as_env_vars();
-    
+
     Ok(())
 }
 ```
@@ -269,7 +300,7 @@ The macro generates exact types for each profile, ensuring compile-time safety:
 match SecretSpec::load_profile(Provider::Keyring, Profile::Production)? {
     SecretSpecProfile::Production { api_key, database_url, redis_url, .. } => {
         // In production: api_key is String (required)
-        // database_url is String (required) 
+        // database_url is String (required)
         // redis_url might be String or Option<String> based on config
         println!("Production API key: {}", api_key);
     }
