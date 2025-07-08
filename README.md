@@ -48,7 +48,7 @@ See [announcement blog post for motivation](XXX).
 - **Type-Safe Rust SDK**: Generate strongly-typed structs from your `secretspec.toml` for compile-time safety
 - **Profile Support**: Override secret requirements and defaults per profile (development, production, etc.)
 - **Configuration Inheritance**: Extend and override shared configurations using the `extends` feature
-- **Simple Migration**: `secretspec init` to migrate from existing `.env` files
+- **Discovery**: `secretspec init` to discover secrets from existing `.env` files
 
 ## Quick Start
 
