@@ -45,10 +45,6 @@ This separation enables:
 - **Better Tooling**: Standardized format enables ecosystem-wide tooling for secret management
 - **Type Safety**: Generate strongly-typed code from declarations for compile-time guarantees
 
-SecretSpec is a declarative secrets specification for development workflows, supporting a variety of storage backends including system keyrings, .env files, environment variables, and password managers.
-
-See [announcement blog post for motivation](XXX).
-
 ## Features
 
 - **Declarative Configuration**: Define your secrets in `secretspec.toml` with descriptions and requirements
