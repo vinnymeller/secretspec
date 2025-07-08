@@ -67,7 +67,15 @@ impl OnePasswordProvider {
 
         cmd.args(args);
 
-        let output = cmd.output()?;
+        let output = match cmd.output() {
+            Ok(output) => output,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Err(SecretSpecError::ProviderOperationFailed(
+                    "1Password CLI (op) is not installed.\n\nTo install it:\n  - macOS: brew install 1password-cli\n  - Linux: Download from https://1password.com/downloads/command-line/\n  - Windows: Download from https://1password.com/downloads/command-line/\n  - NixOS: nix-env -iA nixpkgs.onepassword\n\nAfter installation, run 'op signin' to authenticate.".to_string(),
+                ));
+            }
+            Err(e) => return Err(e.into()),
+        };
 
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);

@@ -22,7 +22,15 @@ impl LastPassProvider {
         let mut cmd = Command::new("lpass");
         cmd.args(args);
 
-        let output = cmd.output()?;
+        let output = match cmd.output() {
+            Ok(output) => output,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Err(SecretSpecError::ProviderOperationFailed(
+                    "LastPass CLI (lpass) is not installed.\n\nTo install it:\n  - macOS: brew install lastpass-cli\n  - Linux: Check your package manager (apt install lastpass-cli, yum install lastpass-cli, etc.)\n  - NixOS: nix-env -iA nixpkgs.lastpass-cli\n\nAfter installation, run 'lpass login <your-email>' to authenticate.".to_string(),
+                ));
+            }
+            Err(e) => return Err(e.into()),
+        };
 
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
