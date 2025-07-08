@@ -14,25 +14,16 @@ mod tests {
 
     #[test]
     fn test_parse_basic_config() {
-        let toml_str = r#"
-            [secrets.API_KEY]
-            description = "API key"
-            required = true
-            
-            [secrets.DATABASE_URL]
-            description = "Database URL"
-            required = false
-            default = "postgres://localhost"
-        "#;
-
-        let config: ProjectConfig = toml::from_str(&format!(
-            r#"[project]
+        let toml_str = r#"[project]
 name = "test"
 revision = "1.0"
-{}"#,
-            toml_str
-        ))
-        .unwrap();
+
+[profiles.default]
+API_KEY = { description = "API key", required = true }
+DATABASE_URL = { description = "Database URL", required = false, default = "postgres://localhost" }
+"#;
+
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.profiles.len(), 1);
         let default_profile = &config.profiles["default"];
         assert_eq!(default_profile.secrets.len(), 2);
@@ -84,23 +75,18 @@ revision = "1.0"
     #[test]
     fn test_field_type_determination() {
         // Test that a field that's optional in any profile becomes Option<String>
-        let toml_str = r#"
-            [secrets.SOMETIMES_REQUIRED]
-            description = "Sometimes required secret"
-            required = true
-            
-            [secrets.SOMETIMES_REQUIRED.development]
-            required = false
-        "#;
-
-        let config: ProjectConfig = toml::from_str(&format!(
-            r#"[project]
+        let toml_str = r#"[project]
 name = "test"
 revision = "1.0"
-{}"#,
-            toml_str
-        ))
-        .unwrap();
+
+[profiles.default]
+SOMETIMES_REQUIRED = { description = "Sometimes required secret", required = true }
+
+[profiles.development]
+SOMETIMES_REQUIRED = { description = "Sometimes required secret", required = false }
+"#;
+
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
 
         // Simulate the logic from the macro - check if secret is optional across all profiles
         let mut is_ever_optional = false;
@@ -126,26 +112,21 @@ revision = "1.0"
 
     #[test]
     fn test_always_required_field() {
-        let toml_str = r#"
-            [secrets.ALWAYS_REQUIRED]
-            description = "Always required secret"
-            required = true
-            
-            [secrets.ALWAYS_REQUIRED.development]
-            required = true
-            
-            [secrets.ALWAYS_REQUIRED.production]
-            required = true
-        "#;
-
-        let config: ProjectConfig = toml::from_str(&format!(
-            r#"[project]
+        let toml_str = r#"[project]
 name = "test"
 revision = "1.0"
-{}"#,
-            toml_str
-        ))
-        .unwrap();
+
+[profiles.default]
+ALWAYS_REQUIRED = { description = "Always required secret", required = true }
+
+[profiles.development]
+ALWAYS_REQUIRED = { description = "Always required secret", required = true }
+
+[profiles.production]
+ALWAYS_REQUIRED = { description = "Always required secret", required = true }
+"#;
+
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
         let secret_config = &config.profiles["default"].secrets["ALWAYS_REQUIRED"];
         let mut is_ever_optional = false;
 
@@ -161,21 +142,15 @@ revision = "1.0"
 
     #[test]
     fn test_default_makes_optional() {
-        let toml_str = r#"
-            [secrets.HAS_DEFAULT]
-            description = "Secret with default"
-            required = true
-            default = "some-default"
-        "#;
-
-        let config: ProjectConfig = toml::from_str(&format!(
-            r#"[project]
+        let toml_str = r#"[project]
 name = "test"
 revision = "1.0"
-{}"#,
-            toml_str
-        ))
-        .unwrap();
+
+[profiles.default]
+HAS_DEFAULT = { description = "Secret with default", required = true, default = "some-default" }
+"#;
+
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
         let secret_config = &config.profiles["default"].secrets["HAS_DEFAULT"];
 
         let is_ever_optional = !secret_config.required || secret_config.default.is_some();

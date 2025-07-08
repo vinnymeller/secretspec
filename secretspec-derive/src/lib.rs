@@ -46,13 +46,14 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
         }
     };
 
-    let config: ProjectConfig = match toml::from_str(&toml_content) {
-        Ok(config) => config,
-        Err(e) => {
-            let error = format!("Failed to parse TOML: {}", e);
-            return quote! { compile_error!(#error); }.into();
-        }
-    };
+    let config: ProjectConfig =
+        match secretspec_types::parse_spec_from_str(&toml_content, Some(&full_path)) {
+            Ok(config) => config,
+            Err(e) => {
+                let error = format!("Failed to parse TOML: {}", e);
+                return quote! { compile_error!(#error); }.into();
+            }
+        };
 
     // Collect all profiles and determine field types
     let mut all_profiles = HashSet::new();
@@ -212,10 +213,33 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
             .iter()
             .map(|profile| {
                 let variant_name = format_ident!("{}", capitalize_first(profile));
-                let fields = field_info.iter().map(|(secret_name, field_type)| {
-                    let field_name = format_ident!("{}", secret_name.to_lowercase());
-                    quote! { #field_name: #field_type }
-                });
+                let fields = field_info
+                    .iter()
+                    .filter_map(|(secret_name, _union_field_type)| {
+                        let field_name = format_ident!("{}", secret_name.to_lowercase());
+
+                        // Determine field type for this specific profile
+                        let profile_field_type = if let Some(profile_config) =
+                            config.profiles.get(profile)
+                        {
+                            if let Some(secret_config) = profile_config.secrets.get(secret_name) {
+                                // Check if it's optional in this specific profile
+                                if !secret_config.required || secret_config.default.is_some() {
+                                    quote! { Option<String> }
+                                } else {
+                                    quote! { String }
+                                }
+                            } else {
+                                // Secret doesn't exist in this profile, skip it
+                                return None;
+                            }
+                        } else {
+                            // Profile doesn't exist, skip
+                            return None;
+                        };
+
+                        Some(quote! { #field_name: #profile_field_type })
+                    });
 
                 quote! {
                     #variant_name {
@@ -255,30 +279,33 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
     } else {
         all_profiles.iter().map(|profile| {
         let variant_name = format_ident!("{}", capitalize_first(profile));
-        let assignments = field_info.iter().map(|(secret_name, field_type)| {
+        let assignments = field_info.iter().filter_map(|(secret_name, _field_type)| {
             let field_name = format_ident!("{}", secret_name.to_lowercase());
 
-            // Check if this is an Option type
-            let is_optional = if let Some(profile_config) = config.profiles.get(profile) {
+            // Check if this secret exists in this profile
+            if let Some(profile_config) = config.profiles.get(profile) {
                 if let Some(secret_config) = profile_config.secrets.get(secret_name) {
-                    !secret_config.required || secret_config.default.is_some()
-                } else {
-                    true // Secret doesn't exist in this profile, so it's optional
-                }
-            } else {
-                true
-            };
+                    // Check if this is an Option type
+                    let is_optional = !secret_config.required || secret_config.default.is_some();
 
-            if is_optional {
-                quote! {
-                    #field_name: secrets.get(#secret_name).cloned()
+                    if is_optional {
+                        Some(quote! {
+                            #field_name: secrets.get(#secret_name).cloned()
+                        })
+                    } else {
+                        Some(quote! {
+                            #field_name: secrets.get(#secret_name)
+                                .ok_or_else(|| secretspec::SecretSpecError::RequiredSecretMissing(#secret_name.to_string()))?
+                                .clone()
+                        })
+                    }
+                } else {
+                    // Secret doesn't exist in this profile, skip it
+                    None
                 }
             } else {
-                quote! {
-                    #field_name: secrets.get(#secret_name)
-                        .ok_or_else(|| secretspec::SecretSpecError::RequiredSecretMissing(#secret_name.to_string()))?
-                        .clone()
-                }
+                // Profile doesn't exist, skip
+                None
             }
         });
 

@@ -60,6 +60,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("   - Log Level: {}", level);
             }
         }
+        Ok(SecretSpecProfile::Default { .. }) => {
+            println!("   ✗ Got default profile instead of development");
+        }
+        Ok(SecretSpecProfile::Production { .. }) => {
+            println!("   ✗ Got production profile instead of development");
+        }
         Err(e) => {
             println!("   ✗ Failed to load development profile: {}", e);
         }
