@@ -461,6 +461,14 @@ To implement a new provider backend in this repository:
        // Your backend-specific configuration
    }
 
+   impl YourBackendProvider {
+       pub fn new() -> Self {
+           Self {
+               // Initialize your configuration
+           }
+       }
+   }
+
    impl Provider for YourBackendProvider {
        fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>> {
            // Implementation
@@ -469,6 +477,19 @@ To implement a new provider backend in this repository:
        fn set(&self, project: &str, key: &str, value: &str, profile: Option<&str>) -> Result<()> {
            // Implementation
        }
+
+       fn name(&self) -> &'static str {
+           "your_backend"
+       }
+
+       fn description(&self) -> &'static str {
+           "Your backend description"
+       }
+
+       // Optional: Override if your backend is read-only
+       // fn allows_set(&self) -> bool {
+       //     false
+       // }
    }
    ```
 
