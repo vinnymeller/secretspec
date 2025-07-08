@@ -161,6 +161,14 @@ impl Provider for LastPassProvider {
 
         Ok(())
     }
+
+    fn name(&self) -> &'static str {
+        "lastpass"
+    }
+
+    fn description(&self) -> &'static str {
+        "LastPass password manager"
+    }
 }
 
 impl Default for LastPassProvider {

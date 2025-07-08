@@ -26,4 +26,12 @@ impl Provider for EnvProvider {
     fn allows_set(&self) -> bool {
         false
     }
+
+    fn name(&self) -> &'static str {
+        "env"
+    }
+
+    fn description(&self) -> &'static str {
+        "Read-only environment variables"
+    }
 }

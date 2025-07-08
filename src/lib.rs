@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use thiserror::Error;
 
-mod provider;
+pub mod provider;
 use provider::{Provider as ProviderTrait, ProviderRegistry};
 
 #[cfg(feature = "macros")]

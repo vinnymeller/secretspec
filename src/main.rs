@@ -159,11 +159,26 @@ fn main() -> Result<()> {
         Commands::Config { action } => match action {
             ConfigAction::Init => {
                 use inquire::Select;
+                use secretspec::provider::ProviderRegistry;
 
-                let providers = vec!["keyring", "dotenv", "env"];
-                let provider = Select::new("Select your preferred provider backend:", providers)
-                    .with_help_message("keyring: Uses system keychain (Recommended)\ndotenv: Traditional .env files\nenv: Read-only environment variables")
-                    .prompt()?;
+                // Get providers from registry
+                let registry = ProviderRegistry::new();
+                let mut providers = registry.list_providers();
+                // Sort providers by name for consistent display
+                providers.sort_by_key(|(name, _)| *name);
+
+                // Create provider choices with descriptions
+                let provider_choices: Vec<String> = providers
+                    .iter()
+                    .map(|(name, provider)| format!("{}: {}", name, provider.description()))
+                    .collect();
+
+                let selected_choice =
+                    Select::new("Select your preferred provider backend:", provider_choices)
+                        .prompt()?;
+
+                // Extract provider name from the selected choice
+                let provider = selected_choice.split(':').next().unwrap_or("keyring");
 
                 let profiles = vec!["development", "default", "none"];
                 let profile_choice = Select::new("Select your default profile:", profiles)

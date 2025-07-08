@@ -33,4 +33,12 @@ impl Provider for KeyringProvider {
         entry.set_password(value)?;
         Ok(())
     }
+
+    fn name(&self) -> &'static str {
+        "keyring"
+    }
+
+    fn description(&self) -> &'static str {
+        "Uses system keychain (Recommended)"
+    }
 }

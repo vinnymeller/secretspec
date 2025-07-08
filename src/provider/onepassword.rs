@@ -207,6 +207,14 @@ impl Provider for OnePasswordProvider {
 
         Ok(())
     }
+
+    fn name(&self) -> &'static str {
+        "1password"
+    }
+
+    fn description(&self) -> &'static str {
+        "1Password password manager"
+    }
 }
 
 impl Default for OnePasswordProvider {

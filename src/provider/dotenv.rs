@@ -48,4 +48,12 @@ impl Provider for DotEnvProvider {
         vars.insert(key.to_string(), value.to_string());
         self.save_env_vars(&vars)
     }
+
+    fn name(&self) -> &'static str {
+        "dotenv"
+    }
+
+    fn description(&self) -> &'static str {
+        "Traditional .env files"
+    }
 }

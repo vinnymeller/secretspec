@@ -23,6 +23,12 @@ pub trait Provider: Send + Sync {
     fn allows_set(&self) -> bool {
         true
     }
+
+    /// Returns the name of this provider for display purposes
+    fn name(&self) -> &'static str;
+
+    /// Returns a brief description of this provider
+    fn description(&self) -> &'static str;
 }
 
 pub struct ProviderRegistry {
@@ -57,5 +63,12 @@ impl ProviderRegistry {
 
     pub fn get(&self, name: &str) -> Option<&Box<dyn Provider>> {
         self.backends.get(name)
+    }
+
+    pub fn list_providers(&self) -> Vec<(&str, &dyn Provider)> {
+        self.backends
+            .iter()
+            .map(|(name, provider)| (name.as_str(), provider.as_ref()))
+            .collect()
     }
 }
