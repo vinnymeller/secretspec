@@ -29,7 +29,13 @@ This coupling creates several problems:
 
 ### The Solution: Declarative Secret Requirements
 
-SecretSpec introduces a declarative approach that separates the "what" and "how" from the "where". Applications declare their secret requirements in a `secretspec.toml` file, while the runtime environment determines the storage backend through `provider` configuration and context via `profile` selection.
+SecretSpec introduces a declarative approach that separates the "what" and "how" from the "where":
+
+- **WHAT** secrets are needed is declared in `secretspec.toml`
+- **HOW** requirements vary by environment is managed through `profile`
+- **WHERE** secrets are stored depends on where the application runs, configured via `provider`
+
+Applications declare their secret requirements in a `secretspec.toml` file, while the runtime environment determines the storage backend through `provider` configuration and context via `profile` selection.
 
 This separation enables:
 - **Portable Applications**: The same application works across different secret storage backends without code changes
@@ -139,7 +145,110 @@ DATABASE_URL = { description = "PostgreSQL connection string", required = true }
 REDIS_URL = { description = "Redis connection string", required = true }
 ```
 
+## Profiles
+
+Profiles define **HOW** your secret requirements vary across different environments. They allow you to specify different requirements, defaults, and validation rules for development, staging, production, or any custom environment.
+
+### Understanding Profiles
+
+Each profile can override the base secret definitions with environment-specific settings:
+
+- **required**: Whether the secret must be provided (no default value)
+- **default**: A default value to use if the secret isn't set
+- **description**: Human-readable explanation of the secret's purpose
+
+### Default Profile
+
+The `default` profile serves as the base configuration. Other profiles inherit from it and can override specific settings:
+
+```toml
+[profiles.default]
+DATABASE_URL = { description = "PostgreSQL connection string", required = true }
+API_KEY = { description = "External API key", required = true }
+CACHE_TTL = { description = "Cache time-to-live in seconds", required = false, default = "3600" }
+```
+
+### Environment-Specific Profiles
+
+Define profiles for each environment where your application runs:
+
+```toml
+# Development: Use local defaults, make most secrets optional
+[profiles.development]
+DATABASE_URL = { description = "PostgreSQL connection string", required = false, default = "postgresql://localhost/myapp_dev" }
+API_KEY = { description = "External API key", required = false, default = "dev-key-12345" }
+DEBUG = { description = "Enable debug mode", required = false, default = "true" }
+
+# Staging: Similar to production but with some relaxed requirements
+[profiles.staging]
+DATABASE_URL = { description = "PostgreSQL connection string", required = true }
+API_KEY = { description = "External API key", required = true }
+DEBUG = { description = "Enable debug mode", required = false, default = "false" }
+
+# Production: All secrets required, no defaults
+[profiles.production]
+DATABASE_URL = { description = "PostgreSQL connection string", required = true }
+API_KEY = { description = "External API key", required = true }
+DEBUG = { description = "Enable debug mode", required = false, default = "false" }
+SENTRY_DSN = { description = "Error tracking endpoint", required = true }
+```
+
+### Using Profiles
+
+Select a profile when running commands:
+
+```bash
+# Use development profile
+$ secretspec check --profile development
+$ secretspec run --profile development -- npm start
+
+# Use production profile
+$ secretspec check --profile production
+$ secretspec run --profile production -- npm start
+
+# Set default profile in config
+$ secretspec config init
+? Select your default profile:
+> development
+  staging
+  production
+  default
+```
+
+### Profile Selection Priority
+
+Profiles are selected in the following order:
+
+1. **CLI argument**: `--profile` flag
+2. **Environment variable**: `SECRETSPEC_PROFILE`
+3. **User config**: Default profile in `~/.config/secretspec/config.toml`
+4. **Fallback**: `default` profile
+
+### Best Practices for Profiles
+
+1. **Development Profile**: Use safe defaults that work locally
+   - Make most secrets optional with local defaults
+   - Use development-specific values (localhost URLs, test keys)
+   - Enable debug/development features
+
+2. **Production Profile**: Enforce strict requirements
+   - Make all critical secrets required
+   - Never include default values for sensitive data
+   - Add production-only secrets (monitoring, analytics)
+
+3. **Staging Profile**: Mirror production closely
+   - Same requirements as production
+   - May have different secret values
+   - Useful for testing deployment workflows
+
+4. **Custom Profiles**: Create profiles for specific needs
+   - CI/CD environments
+   - Testing configurations
+   - Regional deployments
+
 ### Provider Configuration
+
+The **WHERE** of secret storage depends on where your application runs. SecretSpec uses providers to abstract different storage backends, allowing the same `secretspec.toml` to work across development machines, CI/CD pipelines, and production environments.
 
 SecretSpec provider can be configured through three methods (in order of precedence):
 
