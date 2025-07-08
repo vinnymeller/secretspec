@@ -1,0 +1,101 @@
+---
+title: Quick Start
+description: Get up and running with SecretSpec in minutes
+---
+
+Follow these steps to get started with SecretSpec:
+
+## 1. Initialize `secretspec.toml`
+
+Discover secrets from existing `.env` files:
+
+```bash
+$ secretspec init
+✓ Created secretspec.toml with 0 secrets
+
+Next steps:
+  1. secretspec config init    # Set up user configuration
+  2. secretspec check          # Verify all secrets are set
+  3. secretspec run -- your-command  # Run with secrets
+```
+
+If you have an existing `.env` file, you can import secrets from it:
+
+```bash
+$ secretspec init --from .env
+```
+
+## 2. Set up provider backend
+
+Configure your preferred secrets storage backend:
+
+```bash
+$ secretspec config init
+? Select your preferred provider backend:
+> 1password: 1Password password manager
+  dotenv: Traditional .env files
+  env: Read-only environment variables
+  keyring: Uses system keychain (Recommended)
+  lastpass: LastPass password manager
+? Select your default profile:
+> development
+  default
+  none
+✓ Configuration saved to /home/user/.config/secretspec/config.toml
+```
+
+## 3. Check and configure secrets
+
+Verify that all required secrets are configured:
+
+```bash
+$ secretspec check
+```
+
+If any secrets are missing, you'll be prompted to set them. You can also set secrets manually:
+
+```bash
+$ secretspec set DATABASE_URL
+Enter value for DATABASE_URL: postgresql://localhost/myapp
+✓ Secret DATABASE_URL saved
+```
+
+## 4. Run your application
+
+Run your application with secrets injected as environment variables:
+
+```bash
+$ secretspec run -- npm start
+
+# Or with a specific profile and provider
+$ secretspec run --profile production --provider dotenv -- npm start
+```
+
+## Example `secretspec.toml`
+
+Here's a simple example configuration:
+
+```toml
+[project]
+name = "my-app"
+revision = "1.0"
+
+[profiles.default]
+DATABASE_URL = { description = "PostgreSQL connection string", required = true }
+REDIS_URL = { description = "Redis connection string", required = false, default = "redis://localhost:6379" }
+
+# Profile-specific configurations
+[profiles.development]
+DATABASE_URL = { description = "PostgreSQL connection string", required = false, default = "sqlite://./dev.db" }
+REDIS_URL = { description = "Redis connection string", required = false, default = "redis://localhost:6379" }
+
+[profiles.production]
+DATABASE_URL = { description = "PostgreSQL connection string", required = true }
+REDIS_URL = { description = "Redis connection string", required = true }
+```
+
+## Next Steps
+
+- Learn about [Profiles](/concepts/profiles/) to manage environment-specific configurations
+- Explore different [Providers](/concepts/providers/) for secret storage
+- Set up the [Rust SDK](/sdk/rust/) for type-safe secret access in your code
