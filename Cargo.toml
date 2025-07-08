@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "secretspec-derive", "secretspec-types", "examples/codegen_example"]
+members = [".", "secretspec-derive", "secretspec-types", "examples/derive"]
 resolver = "2"
 
 [package]
@@ -33,7 +33,7 @@ serde_json = "1.0"
 tempfile = "3.0"
 
 [features]
-default = ["codegen"]
-codegen = ["secretspec-derive"]
+default = ["macros"]
+macros = ["secretspec-derive"]
 
 [dev-dependencies]

@@ -1,7 +1,0 @@
-[package]
-name = "codegen-example"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-secretspec = { path = "../..", features = ["codegen"] }

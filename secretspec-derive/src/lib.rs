@@ -11,7 +11,7 @@ use syn::{LitStr, parse_macro_input};
 /// // In your main.rs or lib.rs:
 /// secretspec::define_secrets!("secretspec.toml");
 ///
-/// use secretspec::codegen::Provider;
+/// use secretspec::macros::Provider;
 ///
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     // Load with union types (safe for any profile)

@@ -11,7 +11,7 @@ use thiserror::Error;
 mod provider;
 use provider::{Provider, ProviderRegistry};
 
-#[cfg(feature = "codegen")]
+#[cfg(feature = "macros")]
 pub use secretspec_derive::define_secrets;
 
 // Re-export types for convenience
