@@ -12,14 +12,8 @@ SecretSpec is a declarative secrets manager for development workflows written in
 # Enter development environment
 devenv shell
 
-# Build all workspace members
-cargo build
-cargo build --release
-
 # Run tests
-cargo test                      # All tests
-cargo test -p secretspec-derive # Package-specific tests
-cargo test -v                   # Verbose output
+cargo test --all
 
 # Run the CLI
 cargo run -- <command>

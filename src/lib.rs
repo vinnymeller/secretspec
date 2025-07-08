@@ -9,7 +9,7 @@ use std::process::Command;
 use thiserror::Error;
 
 mod provider;
-use provider::{Provider, ProviderRegistry};
+use provider::{Provider as ProviderTrait, ProviderRegistry};
 
 #[cfg(feature = "macros")]
 pub use secretspec_derive::define_secrets;
@@ -65,6 +65,8 @@ pub struct ValidationResult {
     pub missing_required: Vec<String>,
     pub missing_optional: Vec<String>,
     pub with_defaults: Vec<(String, String)>,
+    pub provider: secretspec_types::Provider,
+    pub profile: String,
 }
 
 impl ValidationResult {
@@ -174,7 +176,7 @@ impl SecretSpec {
     fn get_provider_backend(
         &self,
         provider_arg: Option<String>,
-    ) -> Result<(String, &Box<dyn Provider>)> {
+    ) -> Result<(String, &Box<dyn ProviderTrait>)> {
         let provider_name = if let Some(name) = provider_arg {
             name
         } else if let Some(global_config) = &self.global_config {
@@ -476,7 +478,7 @@ impl SecretSpec {
         provider_arg: Option<String>,
         profile: Option<String>,
     ) -> Result<ValidationResult> {
-        let (_, backend) = self.get_provider_backend(provider_arg)?;
+        let (provider_name, backend) = self.get_provider_backend(provider_arg)?;
         let mut secrets = HashMap::new();
         let mut missing_required = Vec::new();
         let mut missing_optional = Vec::new();
@@ -509,11 +511,16 @@ impl SecretSpec {
             }
         }
 
+        let provider = secretspec_types::Provider::from_str(&provider_name)
+            .ok_or_else(|| SecretSpecError::ProviderNotFound(provider_name.clone()))?;
+
         Ok(ValidationResult {
             secrets,
             missing_required,
             missing_optional,
             with_defaults,
+            provider,
+            profile: profile_name.to_string(),
         })
     }
 

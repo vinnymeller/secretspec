@@ -14,8 +14,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 1: Load with union types (safe for any profile)
     println!("1. Loading secrets with union types:");
     match SecretSpec::load(Some(Provider::Dotenv), None) {
-        Ok(secrets) => {
-            println!("   ✓ Loaded successfully");
+        Ok(result) => {
+            println!(
+                "   ✓ Loaded successfully using provider: {:?}, profile: {}",
+                result.provider, result.profile
+            );
+            let secrets = &result.secrets;
             if let Some(database_url) = &secrets.database_url {
                 println!("   - Database URL: {}", database_url);
             }
@@ -39,32 +43,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 2: Load development profile with exact types
     println!("\n2. Loading development profile:");
     match SecretSpec::load_as_profile(Some(Provider::Dotenv), Some(Profile::Development)) {
-        Ok(SecretSpecProfile::Development {
-            database_url,
-            api_key,
-            redis_url,
-            log_level,
-        }) => {
-            println!("   ✓ Loaded development profile");
-            // In development profile, both database_url and api_key have defaults
-            if let Some(url) = database_url {
-                println!("   - Database URL: {}", url);
+        Ok(result) => {
+            println!(
+                "   ✓ Loaded using provider: {:?}, profile: {}",
+                result.provider, result.profile
+            );
+            match result.secrets {
+                SecretSpecProfile::Development {
+                    database_url,
+                    api_key,
+                    redis_url,
+                    log_level,
+                } => {
+                    println!("   ✓ Got development profile");
+                    // In development profile, both database_url and api_key have defaults
+                    if let Some(url) = database_url {
+                        println!("   - Database URL: {}", url);
+                    }
+                    if let Some(key) = api_key {
+                        println!("   - API Key: {}", key);
+                    }
+                    if let Some(url) = redis_url {
+                        println!("   - Redis URL: {}", url);
+                    }
+                    if let Some(level) = log_level {
+                        println!("   - Log Level: {}", level);
+                    }
+                }
+                SecretSpecProfile::Default { .. } => {
+                    println!("   ✗ Got default profile instead of development");
+                }
+                SecretSpecProfile::Production { .. } => {
+                    println!("   ✗ Got production profile instead of development");
+                }
             }
-            if let Some(key) = api_key {
-                println!("   - API Key: {}", key);
-            }
-            if let Some(url) = redis_url {
-                println!("   - Redis URL: {}", url);
-            }
-            if let Some(level) = log_level {
-                println!("   - Log Level: {}", level);
-            }
-        }
-        Ok(SecretSpecProfile::Default { .. }) => {
-            println!("   ✗ Got default profile instead of development");
-        }
-        Ok(SecretSpecProfile::Production { .. }) => {
-            println!("   ✗ Got production profile instead of development");
         }
         Err(e) => {
             println!("   ✗ Failed to load development profile: {}", e);
@@ -72,8 +84,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n3. Setting secrets as environment variables:");
-    if let Ok(secrets) = SecretSpec::load(Some(Provider::Dotenv), None) {
-        secrets.set_as_env_vars();
+    if let Ok(result) = SecretSpec::load(Some(Provider::Dotenv), None) {
+        result.secrets.set_as_env_vars();
         println!("   ✓ Set all secrets as environment variables");
 
         // Verify they were set

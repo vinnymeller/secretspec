@@ -87,6 +87,63 @@ impl std::fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Provider {
+    Keyring,
+    Dotenv,
+    Env,
+    #[serde(rename = "1password")]
+    OnePassword,
+    Lastpass,
+}
+
+impl Provider {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "keyring" => Some(Provider::Keyring),
+            "dotenv" => Some(Provider::Dotenv),
+            "env" => Some(Provider::Env),
+            "1password" => Some(Provider::OnePassword),
+            "lastpass" => Some(Provider::Lastpass),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Provider::Keyring => "keyring",
+            Provider::Dotenv => "dotenv",
+            Provider::Env => "env",
+            Provider::OnePassword => "1password",
+            Provider::Lastpass => "lastpass",
+        }
+    }
+}
+
+impl std::fmt::Display for Provider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SecretSpecSecrets<T> {
+    pub secrets: T,
+    pub provider: Provider,
+    pub profile: String,
+}
+
+impl<T> SecretSpecSecrets<T> {
+    pub fn new(secrets: T, provider: Provider, profile: String) -> Self {
+        Self {
+            secrets,
+            provider,
+            profile,
+        }
+    }
+}
+
 impl From<io::Error> for ParseError {
     fn from(e: io::Error) -> Self {
         ParseError::Io(e)

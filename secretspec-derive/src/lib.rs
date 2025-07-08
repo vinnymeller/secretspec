@@ -333,28 +333,22 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
             #(#profile_variants,)*
         }
 
-        /// Provider enum for typed access to secret providers
-        #[derive(Debug, Clone, Copy)]
-        pub enum Provider {
-            Keyring,
-            Dotenv,
-            Env,
-        }
+        // Use Provider from secretspec_types
+        pub use secretspec::Provider;
+
+        // Type alias to help with type inference
+        type LoadResult<T> = Result<T, secretspec::SecretSpecError>;
 
         impl SecretSpec {
             /// Load secrets with optional provider and/or profile
             /// If provider is None, uses SECRETSPEC_PROVIDER env var or global config
             /// If profile is None, uses SECRETSPEC_PROFILE env var if set
-            pub fn load(provider: Option<Provider>, profile: Option<Profile>) -> Result<Self, secretspec::SecretSpecError> {
+            pub fn load(provider: Option<Provider>, profile: Option<Profile>) -> Result<secretspec::SecretSpecSecrets<Self>, secretspec::SecretSpecError> {
                 let spec = secretspec::SecretSpec::load()?;
 
                 // Convert provider enum to string if provided, otherwise check env var
                 let provider_str = match provider {
-                    Some(p) => Some(match p {
-                        Provider::Keyring => "keyring".to_string(),
-                        Provider::Dotenv => "dotenv".to_string(),
-                        Provider::Env => "env".to_string(),
-                    }),
+                    Some(p) => Some(p.to_string()),
                     None => std::env::var("SECRETSPEC_PROVIDER").ok(),
                 };
 
@@ -369,24 +363,26 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
                 let validation_result = spec.validate(provider_str, profile_str)?;
                 let secrets = validation_result.secrets;
 
-                Ok(Self {
+                let data = Self {
                     #(#load_assignments,)*
-                })
+                };
+
+                Ok(secretspec::SecretSpecSecrets::new(
+                    data,
+                    validation_result.provider,
+                    validation_result.profile,
+                ))
             }
 
             /// Load secrets as profile-specific enum type
             /// If provider is None, uses SECRETSPEC_PROVIDER env var or global config
             /// If profile is None, uses SECRETSPEC_PROFILE env var if set
-            pub fn load_as_profile(provider: Option<Provider>, profile: Option<Profile>) -> Result<SecretSpecProfile, secretspec::SecretSpecError> {
+            pub fn load_as_profile(provider: Option<Provider>, profile: Option<Profile>) -> Result<secretspec::SecretSpecSecrets<SecretSpecProfile>, secretspec::SecretSpecError> {
                 let spec = secretspec::SecretSpec::load()?;
 
                 // Convert provider enum to string if provided, otherwise check env var
                 let provider_str = match provider {
-                    Some(p) => Some(match p {
-                        Provider::Keyring => "keyring".to_string(),
-                        Provider::Dotenv => "dotenv".to_string(),
-                        Provider::Env => "env".to_string(),
-                    }),
+                    Some(p) => Some(p.to_string()),
                     None => std::env::var("SECRETSPEC_PROVIDER").ok(),
                 };
 
@@ -415,9 +411,16 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
                     Profile::#first_profile_variant
                 };
 
-                match selected_profile {
+                let data_result: LoadResult<SecretSpecProfile> = match selected_profile {
                     #(#load_profile_arms,)*
-                }
+                };
+                let data = data_result?;
+
+                Ok(secretspec::SecretSpecSecrets::new(
+                    data,
+                    validation_result.provider,
+                    validation_result.profile,
+                ))
             }
 
             pub fn set_as_env_vars(&self) {
