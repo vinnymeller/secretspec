@@ -117,7 +117,7 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Init { from } => {
             let project_config = secretspec::project_config_from_path(&from)?;
-            let mut content = toml::to_string_pretty(&project_config)?;
+            let mut content = secretspec::generate_toml_with_comments(&project_config)?;
 
             // Append comprehensive example
             content.push_str(secretspec::get_example_toml());

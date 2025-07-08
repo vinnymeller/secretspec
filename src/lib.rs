@@ -112,15 +112,8 @@ pub fn project_config_from_path(from: &Path) -> Result<ProjectConfig> {
 }
 
 pub fn get_example_toml() -> &'static str {
-    r#"
-# Example secrets configuration
-# Uncomment and modify the sections you need
-
-# API_KEY = { description = "API key for external service", required = true }
+    r#"# API_KEY = { description = "API key for external service", required = true }
 # DATABASE_URL = { description = "Database connection string", required = true }
-
-# Extend configurations from subdirectories
-# extends = [ "subdir1", "subdir2" ]
 
 [profiles.development]
 # API_KEY = { description = "API key for external service", required = false, default = "dev-api-key" }
@@ -131,6 +124,39 @@ pub fn get_example_toml() -> &'static str {
 # OAUTH_CLIENT_ID = { description = "OAuth client ID", required = false }
 # OAUTH_CLIENT_SECRET = { description = "OAuth client secret", required = false }
 "#
+}
+
+pub fn generate_toml_with_comments(config: &ProjectConfig) -> Result<String> {
+    let mut output = String::new();
+
+    // Project section
+    output.push_str("[project]\n");
+    output.push_str(&format!("name = \"{}\"\n", config.project.name));
+    output.push_str(&format!("revision = \"{}\"\n", config.project.revision));
+
+    // Add extends comment and field if needed
+    output.push_str("# Extend configurations from subdirectories\n");
+    output.push_str("# extends = [ \"subdir1\", \"subdir2\" ]\n");
+
+    // Profile sections
+    for (profile_name, profile_config) in &config.profiles {
+        output.push_str(&format!("\n[profiles.{}]\n", profile_name));
+
+        for (secret_name, secret_config) in &profile_config.secrets {
+            output.push_str(&format!(
+                "{} = {{ description = \"{}\", required = {}",
+                secret_name, secret_config.description, secret_config.required
+            ));
+
+            if let Some(default) = &secret_config.default {
+                output.push_str(&format!(", default = \"{}\"", default));
+            }
+
+            output.push_str(" }\n");
+        }
+    }
+
+    Ok(output)
 }
 
 pub struct SecretSpec {
@@ -241,7 +267,7 @@ impl SecretSpec {
                 "!".yellow(),
                 from.display()
             );
-            println!("  secretspec set <SECRET_NAME>");
+            println!("  secretspec check");
         }
 
         Ok(())
