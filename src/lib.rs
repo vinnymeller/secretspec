@@ -116,11 +116,13 @@ pub fn get_example_toml() -> &'static str {
 # Example secrets configuration
 # Uncomment and modify the sections you need
 
-# [profiles.default]
 # API_KEY = { description = "API key for external service", required = true }
 # DATABASE_URL = { description = "Database connection string", required = true }
-#
-# [profiles.development]
+
+# Extend configurations from subdirectories
+# extends = [ "subdir1", "subdir2" ]
+
+[profiles.development]
 # API_KEY = { description = "API key for external service", required = false, default = "dev-api-key" }
 # DATABASE_URL = { description = "Database connection string", required = true, default = "sqlite:///dev.db" }
 # JWT_SECRET = { description = "Secret key for JWT token signing", required = true }
