@@ -225,7 +225,7 @@ impl SecretSpec {
         Ok((provider_name, backend))
     }
 
-    pub fn init(&self, from: &Path) -> Result<()> {
+    pub fn write(&self, from: &Path) -> Result<()> {
         println!("Initializing secretspec.toml from {}...", from.display());
 
         let mut secrets = HashMap::new();
