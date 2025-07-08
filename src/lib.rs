@@ -150,12 +150,21 @@ impl SecretSpec {
         Ok(Self::new(project_config, global_config))
     }
 
+    fn resolve_profile<'a>(&'a self, profile: Option<&'a str>) -> &'a str {
+        profile.unwrap_or_else(|| {
+            self.global_config
+                .as_ref()
+                .and_then(|gc| gc.defaults.profile.as_deref())
+                .unwrap_or("default")
+        })
+    }
+
     fn resolve_secret_config(
         &self,
         name: &str,
         profile: Option<&str>,
     ) -> Option<(bool, Option<String>)> {
-        let profile_name = profile.unwrap_or("default");
+        let profile_name = self.resolve_profile(profile);
         let profile_config = self.config.profiles.get(profile_name)?;
         let secret_config = profile_config.secrets.get(name)?;
 
@@ -242,7 +251,7 @@ impl SecretSpec {
         profile: Option<String>,
     ) -> Result<()> {
         // Check if the secret exists in the spec
-        let profile_name = profile.as_deref().unwrap_or("default");
+        let profile_name = self.resolve_profile(profile.as_deref());
         let profile_config = self.config.profiles.get(profile_name).ok_or_else(|| {
             SecretSpecError::SecretNotFound(format!(
                 "Profile '{}' is not defined in secretspec.toml. Available profiles: {}",
@@ -271,7 +280,7 @@ impl SecretSpec {
         }
 
         let (provider_name, backend) = self.get_provider_backend(provider_arg)?;
-        let profile_display = profile.as_deref().unwrap_or("default");
+        let profile_display = self.resolve_profile(profile.as_deref());
 
         // Check if the provider supports setting values
         if !backend.allows_set() {
@@ -335,7 +344,7 @@ impl SecretSpec {
         interactive: bool,
     ) -> Result<ValidationResult> {
         let (provider_name, backend) = self.get_provider_backend(provider_arg.clone())?;
-        let profile_display = profile.as_deref().unwrap_or("default");
+        let profile_display = self.resolve_profile(profile.as_deref());
 
         // First validate to see what's missing
         let mut validation_result = self.validate(provider_arg.clone(), profile.clone())?;
@@ -393,7 +402,7 @@ impl SecretSpec {
 
     pub fn check(&self, provider_arg: Option<String>, profile: Option<String>) -> Result<()> {
         let (provider_name, _) = self.get_provider_backend(provider_arg.clone())?;
-        let profile_display = profile.as_deref().unwrap_or("default");
+        let profile_display = self.resolve_profile(profile.as_deref());
 
         println!(
             "Checking secrets in {} using {} (profile: {})...\n",
@@ -406,7 +415,7 @@ impl SecretSpec {
         let initial_validation = self.validate(provider_arg.clone(), profile.clone())?;
 
         // Display status for each secret
-        let profile_name = profile.as_deref().unwrap_or("default");
+        let profile_name = self.resolve_profile(profile.as_deref());
         let profile_config = self.config.profiles.get(profile_name).ok_or_else(|| {
             SecretSpecError::SecretNotFound(format!("Profile '{}' not found", profile_name))
         })?;
@@ -473,7 +482,7 @@ impl SecretSpec {
         let mut missing_optional = Vec::new();
         let mut with_defaults = Vec::new();
 
-        let profile_name = profile.as_deref().unwrap_or("default");
+        let profile_name = self.resolve_profile(profile.as_deref());
         let profile_config = self.config.profiles.get(profile_name).ok_or_else(|| {
             SecretSpecError::SecretNotFound(format!("Profile '{}' not found", profile_name))
         })?;

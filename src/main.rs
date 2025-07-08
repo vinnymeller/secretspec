@@ -165,9 +165,23 @@ fn main() -> Result<()> {
                     .with_help_message("keyring: Uses system keychain (Recommended)\ndotenv: Traditional .env files\nenv: Read-only environment variables")
                     .prompt()?;
 
+                let profiles = vec!["development", "default", "none"];
+                let profile_choice = Select::new("Select your default profile:", profiles)
+                    .with_help_message(
+                        "'development' is recommended for local development environments",
+                    )
+                    .prompt()?;
+
+                let profile = if profile_choice == "none" {
+                    None
+                } else {
+                    Some(profile_choice.to_string())
+                };
+
                 let config = GlobalConfig {
                     defaults: DefaultConfig {
                         provider: provider.to_string(),
+                        profile,
                     },
                     projects: HashMap::new(),
                 };

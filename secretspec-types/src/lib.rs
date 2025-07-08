@@ -55,6 +55,8 @@ pub struct GlobalConfig {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DefaultConfig {
     pub provider: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
