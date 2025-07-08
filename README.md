@@ -52,33 +52,44 @@ See [announcement blog post for motivation](XXX).
 
 ## Quick Start
 
-1. **Initialize `secretspec.toml` (automatically import secrets from .env)**
+1. **Initialize `secretspec.toml` (discovers secrets from .env)**
    ```bash
    $ secretspec init
+   ✓ Created secretspec.toml with 0 secrets
+
+   Next steps:
+     1. secretspec config init    # Set up user configuration
+     2. secretspec set API_KEY    # Store your secrets
+     3. secretspec check          # Verify all secrets are set
+     4. secretspec run -- your-command  # Run with secrets
    ```
 
 2. **Set up provider backend:**
    ```bash
    $ secretspec config init
+   ? Select your preferred provider backend:
+   > 1password: 1Password password manager
+     dotenv: Traditional .env files
+     env: Read-only environment variables
+     keyring: Uses system keychain (Recommended)
+     lastpass: LastPass password manager
+   ? Select your default profile:
+   > development
+     default
+     none
+   ✓ Configuration saved to /home/user/.config/secretspec/config.toml
    ```
-
-3. **Set your secrets:**
-   ```bash
-   $ secretspec set DATABASE_URL
-   $ secretspec set API_KEY
-   ```
-
-4. **Check that all secrets are configured:**
+3. **Check that all secrets are configured and configure them**
    ```bash
    $ secretspec check
    ```
 
-5. **Run your application with secrets:**
+4. **Run your application with secrets:**
    ```bash
    $ secretspec run -- npm start
 
-   # Or with a specific profile
-   $ secretspec run --profile production -- npm start
+   # Or with a specific profile and provider
+   $ secretspec run --profile production --provider dotenv -- npm start
    ```
 
 ## Installation
