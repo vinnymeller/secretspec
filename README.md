@@ -16,6 +16,7 @@ See [announcement blog post for motivation](XXX).
 - **Multiple Provider Backends**: [Keyring](https://docs.rs/keyring/latest/keyring/) (system credential store), [.env](https://www.dotenv.org/), and environment variable support
 - **Type-Safe Rust SDK**: Generate strongly-typed structs from your `secretspec.toml` for compile-time safety
 - **Profile Support**: Override secret requirements and defaults per profile (development, production, etc.)
+- **Configuration Inheritance**: Extend and override shared configurations using the `extends` feature
 - **Simple Migration**: `secretspec init` to migrate from existing `.env` files
 
 ## Quick Start
@@ -79,23 +80,21 @@ Each project has a `secretspec.toml` file that declares the required secrets:
 [project]
 name = "my-app"  # Inferred from current directory name when using `secretspec init`
 revision = "1.0"
+# Optional: extend other configuration files
+extends = ["../shared/common", "../shared/auth"]
 
-[secrets.DATABASE_URL]
-description = "PostgreSQL connection string"
-required = true
+[profiles.default]
+DATABASE_URL = { description = "PostgreSQL connection string", required = true }
+REDIS_URL = { description = "Redis connection string", required = false, default = "redis://localhost:6379" }
 
-[secrets.REDIS_URL]
-description = "Redis connection string"
-required = false
-default = "redis://localhost:6379"
+# Profile-specific configurations
+[profiles.development]
+DATABASE_URL = { description = "PostgreSQL connection string", required = false, default = "sqlite://./dev.db" }
+REDIS_URL = { description = "Redis connection string", required = false, default = "redis://localhost:6379" }
 
-# Profile-specific overrides
-[secrets.DATABASE_URL.development]
-default = "sqlite://./dev.db"
-required = false
-
-[secrets.DATABASE_URL.production]
-required = true  # no default - must be set
+[profiles.production]
+DATABASE_URL = { description = "PostgreSQL connection string", required = true }
+REDIS_URL = { description = "Redis connection string", required = true }
 ```
 
 ### Provider Configuration
@@ -108,11 +107,13 @@ SecretSpec provider can be configured through three methods (in order of precede
 
 ## Provider Backends
 
-SecretSpec includes three built-in provider backends:
+SecretSpec includes five built-in provider backends:
 
 - **keyring** - Secure system credential store integration
 - **dotenv** - Local .env file storage
 - **env** - Read-only environment variable access
+- **lastpass** - LastPass password manager integration
+- **1password** - 1Password secrets management
 
 *Additional provider backends are welcome!**
 
@@ -156,6 +157,73 @@ your-connection-string
 $ secretspec check --provider env
 ```
 
+### LastPass Provider
+
+Integrates with LastPass password manager for secure cloud-based secret storage.
+
+```bash
+# Use LastPass for this command
+$ secretspec set DATABASE_URL --provider lastpass
+
+# Check secrets from LastPass
+$ secretspec check --provider lastpass
+```
+
+### 1Password Provider
+
+Integrates with 1Password for team-based secret management.
+
+```bash
+# Use 1Password for this command
+$ secretspec set DATABASE_URL --provider 1password
+
+# Run with 1Password secrets
+$ secretspec run --provider 1password -- npm start
+```
+
+
+## Configuration Inheritance
+
+SecretSpec supports configuration inheritance through the `extends` field in the `[project]` section. This allows you to:
+
+- Share common secrets across multiple projects
+- Build layered configurations (base → shared → project-specific)
+- Maintain DRY principles in your secret management
+
+### Example: Shared Configuration
+
+**shared/common/secretspec.toml:**
+```toml
+[project]
+name = "common"
+revision = "1.0"
+
+[profiles.default]
+DATABASE_URL = { description = "Main database", required = true }
+REDIS_URL = { description = "Cache server", required = false, default = "redis://localhost:6379" }
+```
+
+**myapp/secretspec.toml:**
+```toml
+[project]
+name = "myapp"
+revision = "1.0"
+extends = ["../shared/common"]
+
+[profiles.default]
+# Override DATABASE_URL description
+DATABASE_URL = { description = "MyApp database", required = true }
+# Add new app-specific secret
+API_KEY = { description = "External API key", required = true }
+```
+
+### Inheritance Rules
+
+- Multiple configs can be extended: `extends = ["../common", "../auth"]`
+- Paths are relative to the extending file's directory
+- The extending config takes precedence over extended configs
+- Secrets are merged at the profile level
+- Circular dependencies are detected and prevented
 
 ## Rust SDK
 
