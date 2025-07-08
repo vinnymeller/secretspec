@@ -1,8 +1,43 @@
 use super::Provider;
-use crate::Result;
+use crate::{Result, SecretSpecError};
+use http::Uri;
 use keyring::Entry;
+use serde::{Deserialize, Serialize};
 
-pub struct KeyringProvider;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct KeyringConfig {}
+
+impl KeyringConfig {
+    pub fn from_uri(uri: &Uri) -> Result<Self> {
+        let scheme = uri.scheme_str().ok_or_else(|| {
+            SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string())
+        })?;
+
+        if scheme != "keyring" {
+            return Err(SecretSpecError::ProviderOperationFailed(format!(
+                "Invalid scheme '{}' for keyring provider",
+                scheme
+            )));
+        }
+
+        Ok(Self::default())
+    }
+}
+
+pub struct KeyringProvider {
+    _config: KeyringConfig,
+}
+
+impl KeyringProvider {
+    pub fn new(config: KeyringConfig) -> Self {
+        Self { _config: config }
+    }
+
+    pub fn from_uri(uri: &Uri) -> Result<Self> {
+        let config = KeyringConfig::from_uri(uri)?;
+        Ok(Self::new(config))
+    }
+}
 
 impl Provider for KeyringProvider {
     fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>> {

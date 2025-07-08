@@ -160,7 +160,6 @@ pub fn generate_toml_with_comments(config: &ProjectConfig) -> Result<String> {
 }
 
 pub struct SecretSpec {
-    registry: ProviderRegistry,
     config: ProjectConfig,
     global_config: Option<GlobalConfig>,
 }
@@ -168,7 +167,6 @@ pub struct SecretSpec {
 impl SecretSpec {
     pub fn new(config: ProjectConfig, global_config: Option<GlobalConfig>) -> Self {
         Self {
-            registry: ProviderRegistry::new(),
             config,
             global_config,
         }
@@ -204,9 +202,9 @@ impl SecretSpec {
     fn get_provider_backend(
         &self,
         provider_arg: Option<String>,
-    ) -> Result<(String, &Box<dyn ProviderTrait>)> {
-        let provider_name = if let Some(name) = provider_arg {
-            name
+    ) -> Result<(String, Box<dyn ProviderTrait>)> {
+        let provider_spec = if let Some(spec) = provider_arg {
+            spec
         } else if let Some(global_config) = &self.global_config {
             global_config
                 .projects
@@ -217,10 +215,10 @@ impl SecretSpec {
             return Err(SecretSpecError::NoProviderConfigured);
         };
 
-        let backend = self
-            .registry
-            .get(&provider_name)
-            .ok_or_else(|| SecretSpecError::ProviderNotFound(provider_name.clone()))?;
+        let backend = ProviderRegistry::create_from_string(&provider_spec)?;
+
+        // Extract the provider name for display purposes
+        let provider_name = backend.name().to_string();
 
         Ok((provider_name, backend))
     }

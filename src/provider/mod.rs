@@ -1,18 +1,21 @@
 use crate::Result;
-use std::collections::HashMap;
-use std::path::PathBuf;
 
 pub mod dotenv;
 pub mod env;
 pub mod keyring;
 pub mod lastpass;
 pub mod onepassword;
+pub mod registry;
 
-pub use dotenv::DotEnvProvider;
-pub use env::EnvProvider;
-pub use keyring::KeyringProvider;
-pub use lastpass::LastPassProvider;
-pub use onepassword::OnePasswordProvider;
+#[cfg(test)]
+mod tests;
+
+pub use dotenv::{DotEnvConfig, DotEnvProvider};
+pub use env::{EnvConfig, EnvProvider};
+pub use keyring::{KeyringConfig, KeyringProvider};
+pub use lastpass::{LastPassConfig, LastPassProvider};
+pub use onepassword::{OnePasswordConfig, OnePasswordProvider};
+pub use registry::{ProviderInfo, ProviderRegistry};
 
 pub trait Provider: Send + Sync {
     fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>>;
@@ -29,46 +32,4 @@ pub trait Provider: Send + Sync {
 
     /// Returns a brief description of this provider
     fn description(&self) -> &'static str;
-}
-
-pub struct ProviderRegistry {
-    backends: HashMap<String, Box<dyn Provider>>,
-}
-
-impl ProviderRegistry {
-    pub fn new() -> Self {
-        let mut backends = HashMap::new();
-        backends.insert(
-            "keyring".to_string(),
-            Box::new(KeyringProvider) as Box<dyn Provider>,
-        );
-        backends.insert(
-            "dotenv".to_string(),
-            Box::new(DotEnvProvider::new(PathBuf::from(".env"))) as Box<dyn Provider>,
-        );
-        backends.insert(
-            "env".to_string(),
-            Box::new(EnvProvider::new()) as Box<dyn Provider>,
-        );
-        backends.insert(
-            "1password".to_string(),
-            Box::new(OnePasswordProvider::new()) as Box<dyn Provider>,
-        );
-        backends.insert(
-            "lastpass".to_string(),
-            Box::new(LastPassProvider::new()) as Box<dyn Provider>,
-        );
-        Self { backends }
-    }
-
-    pub fn get(&self, name: &str) -> Option<&Box<dyn Provider>> {
-        self.backends.get(name)
-    }
-
-    pub fn list_providers(&self) -> Vec<(&str, &dyn Provider)> {
-        self.backends
-            .iter()
-            .map(|(name, provider)| (name.as_str(), provider.as_ref()))
-            .collect()
-    }
 }

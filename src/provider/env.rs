@@ -1,12 +1,41 @@
 use super::Provider;
-use crate::Result;
+use crate::{Result, SecretSpecError};
+use http::Uri;
+use serde::{Deserialize, Serialize};
 use std::env;
 
-pub struct EnvProvider;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct EnvConfig {}
+
+impl EnvConfig {
+    pub fn from_uri(uri: &Uri) -> Result<Self> {
+        let scheme = uri.scheme_str().ok_or_else(|| {
+            SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string())
+        })?;
+
+        if scheme != "env" {
+            return Err(SecretSpecError::ProviderOperationFailed(format!(
+                "Invalid scheme '{}' for env provider",
+                scheme
+            )));
+        }
+
+        Ok(Self::default())
+    }
+}
+
+pub struct EnvProvider {
+    _config: EnvConfig,
+}
 
 impl EnvProvider {
-    pub fn new() -> Self {
-        Self
+    pub fn new(config: EnvConfig) -> Self {
+        Self { _config: config }
+    }
+
+    pub fn from_uri(uri: &Uri) -> Result<Self> {
+        let config = EnvConfig::from_uri(uri)?;
+        Ok(Self::new(config))
     }
 }
 

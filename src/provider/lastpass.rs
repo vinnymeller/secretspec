@@ -1,21 +1,75 @@
 use crate::provider::Provider;
 use crate::{Result, SecretSpecError};
+use http::Uri;
+use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-pub struct LastPassProvider {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LastPassConfig {
     /// Whether to sync before each operation
-    sync_on_access: bool,
+    #[serde(default = "default_sync_on_access")]
+    pub sync_on_access: bool,
     /// Default folder prefix
-    folder_prefix: Option<String>,
+    pub folder_prefix: Option<String>,
 }
 
-impl LastPassProvider {
-    pub fn new() -> Self {
+impl Default for LastPassConfig {
+    fn default() -> Self {
         Self {
             sync_on_access: true,
             folder_prefix: None,
         }
+    }
+}
+
+fn default_sync_on_access() -> bool {
+    true
+}
+
+impl LastPassConfig {
+    pub fn from_uri(uri: &Uri) -> Result<Self> {
+        let scheme = uri.scheme_str().ok_or_else(|| {
+            SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string())
+        })?;
+
+        if scheme != "lastpass" {
+            return Err(SecretSpecError::ProviderOperationFailed(format!(
+                "Invalid scheme '{}' for lastpass provider",
+                scheme
+            )));
+        }
+
+        let mut config = Self::default();
+
+        // Parse folder from authority or path, ignoring the dummy localhost
+        if let Some(auth) = uri.authority() {
+            let auth_str = auth.as_str();
+            if auth_str != "localhost" {
+                config.folder_prefix = Some(auth_str.to_string());
+            }
+        }
+
+        if config.folder_prefix.is_none() && !uri.path().is_empty() && uri.path() != "/" {
+            config.folder_prefix = Some(uri.path().trim_start_matches('/').to_string());
+        }
+
+        Ok(config)
+    }
+}
+
+pub struct LastPassProvider {
+    config: LastPassConfig,
+}
+
+impl LastPassProvider {
+    pub fn new(config: LastPassConfig) -> Self {
+        Self { config }
+    }
+
+    pub fn from_uri(uri: &Uri) -> Result<Self> {
+        let config = LastPassConfig::from_uri(uri)?;
+        Ok(Self::new(config))
     }
 
     fn execute_lpass_command(&self, args: &[&str]) -> Result<String> {
@@ -52,7 +106,7 @@ impl LastPassProvider {
 
     fn get_folder_name(&self, profile: Option<&str>) -> String {
         let base = profile.unwrap_or("default");
-        match &self.folder_prefix {
+        match &self.config.folder_prefix {
             Some(prefix) => format!("{}/{}", prefix, base),
             None => base.to_string(),
         }
@@ -64,7 +118,7 @@ impl LastPassProvider {
     }
 
     fn sync_if_needed(&self) -> Result<()> {
-        if self.sync_on_access {
+        if self.config.sync_on_access {
             self.execute_lpass_command(&["sync"])?;
         }
         Ok(())
@@ -181,6 +235,6 @@ impl Provider for LastPassProvider {
 
 impl Default for LastPassProvider {
     fn default() -> Self {
-        Self::new()
+        Self::new(LastPassConfig::default())
     }
 }

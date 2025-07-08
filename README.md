@@ -47,11 +47,11 @@ This separation enables:
 
 ## Features
 
-- **Declarative Configuration**: Define your secrets in `secretspec.toml` with descriptions and requirements
-- **Multiple Provider Backends**: [Keyring](https://docs.rs/keyring/latest/keyring/) (system credential store), [.env](https://www.dotenv.org/), and environment variable support
-- **Type-Safe Rust SDK**: Generate strongly-typed structs from your `secretspec.toml` for compile-time safety
-- **Profile Support**: Override secret requirements and defaults per profile (development, production, etc.)
-- **Configuration Inheritance**: Extend and override shared configurations using the `extends` feature
+- **[Declarative Configuration](https://secretspec.dev/docs/reference/configuration/)**: Define your secrets in `secretspec.toml` with descriptions and requirements
+- **[Multiple Provider Backends](https://secretspec.dev/docs/concepts/providers/)**: [Keyring](https://docs.rs/keyring/latest/keyring/) (system credential store), [.env](https://www.dotenv.org/), and environment variable support
+- **[Type-Safe Rust SDK](https://secretspec.dev/docs/sdk/rust/)**: Generate strongly-typed structs from your `secretspec.toml` for compile-time safety
+- **[Profile Support](https://secretspec.dev/docs/concepts/profiles/)**: Override secret requirements and defaults per profile (development, production, etc.)
+- **[Configuration Inheritance](https://secretspec.dev/docs/concepts/inheritance/)**: Extend and override shared configurations using the `extends` feature
 - **Discovery**: `secretspec init` to discover secrets from existing `.env` files
 
 ## Quick Start
@@ -258,12 +258,14 @@ SecretSpec provider can be configured through three methods (in order of precede
 SecretSpec includes five built-in provider backends:
 
 - **keyring** - Secure system credential store integration
-- **dotenv** - Local .env file storage
+- **dotenv** - Local .env file storage (e.g., `dotenv:/path/to/.env`)
 - **env** - Read-only environment variable access
-- **lastpass** - LastPass password manager integration
-- **1password** - 1Password secrets management
+- **lastpass** - LastPass password manager integration (e.g., `lastpass://folder`)
+- **1password** - 1Password secrets management (e.g., `1password://vault`, `1password://work@Production`)
 
-*Additional provider backends are welcome!**
+Providers can be specified as simple names (`keyring`) or as URIs with configuration (`1password://vault`).
+
+*Additional provider backends are welcome!*
 
 ### Keyring Provider (Recommended)
 
@@ -450,12 +452,13 @@ The macro generates several types based on your `secretspec.toml`:
 
 ## Adding a New Provider Backend
 
-To implement a new provider backend in this repository:
+To implement a new provider backend:
 
 1. **Create a new backend module** in `src/provider/your_backend.rs`:
    ```rust
-   use crate::Result;
-   use super::Provider;
+   use crate::{Result, SecretSpecError};
+   use crate::provider::Provider;
+   use http::Uri;
 
    pub struct YourBackendProvider {
        // Your backend-specific configuration
@@ -466,6 +469,22 @@ To implement a new provider backend in this repository:
            Self {
                // Initialize your configuration
            }
+       }
+       
+       pub fn from_uri(uri: &Uri) -> Result<Self> {
+           let scheme = uri.scheme_str()
+               .ok_or_else(|| SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string()))?;
+               
+           if scheme != "your_backend" {
+               return Err(SecretSpecError::ProviderOperationFailed(
+                   format!("Invalid scheme '{}' for your_backend provider", scheme)
+               ));
+           }
+           
+           // Parse any configuration from the URI
+           // e.g., authority, path, query parameters
+           
+           Ok(Self::new())
        }
    }
 
@@ -493,22 +512,44 @@ To implement a new provider backend in this repository:
    }
    ```
 
-2. **Register your backend** in `src/provider/mod.rs`:
+2. **Add your provider to the registry** in `src/provider/registry.rs`:
    ```rust
-   // Add to module exports
-   pub mod your_backend;
-   pub use your_backend::YourBackendProvider;
-
-   // Add to ProviderRegistry::new()
-   backends.insert(
-       "your_backend".to_string(),
-       Box::new(YourBackendProvider::new()) as Box<dyn Provider>,
-   );
+   impl ProviderRegistry {
+       pub fn providers() -> Vec<ProviderInfo> {
+           vec![
+               // ... existing providers ...
+               ProviderInfo {
+                   name: "your_backend",
+                   description: "Your backend description",
+                   examples: vec!["your_backend://example"],
+               },
+           ]
+       }
+       
+       pub fn create_from_string(s: &str) -> Result<Box<dyn Provider>> {
+           // ... existing code ...
+           match scheme {
+               // ... existing providers ...
+               "your_backend" => Ok(Box::new(YourBackendProvider::from_uri(&uri)?)),
+               // ...
+           }
+       }
+   }
    ```
 
-3. **Use your new backend**:
+3. **Export your module** in `src/provider/mod.rs`:
+   ```rust
+   pub mod your_backend;
+   pub use your_backend::YourBackendProvider;
+   ```
+
+4. **Use your new backend**:
    ```bash
+   # Simple usage
    $ secretspec set SECRET_NAME --provider your_backend
+   
+   # With URI configuration
+   $ secretspec set SECRET_NAME --provider "your_backend://config"
    ```
 
 ## License

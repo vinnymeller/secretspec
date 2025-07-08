@@ -1,25 +1,72 @@
 use super::Provider;
-use crate::Result;
+use crate::{Result, SecretSpecError};
+use http::Uri;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DotEnvConfig {
+    pub path: PathBuf,
+}
+
+impl Default for DotEnvConfig {
+    fn default() -> Self {
+        Self {
+            path: PathBuf::from(".env"),
+        }
+    }
+}
+
+impl DotEnvConfig {
+    pub fn from_uri(uri: &Uri) -> Result<Self> {
+        let scheme = uri.scheme_str().ok_or_else(|| {
+            SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string())
+        })?;
+
+        if scheme != "dotenv" {
+            return Err(SecretSpecError::ProviderOperationFailed(format!(
+                "Invalid scheme '{}' for dotenv provider",
+                scheme
+            )));
+        }
+
+        // Extract path from URI, default to .env if not specified
+        let path = uri.path().trim_start_matches('/');
+        let path = if path.is_empty() || path == "/" {
+            ".env"
+        } else {
+            path
+        };
+
+        Ok(Self {
+            path: PathBuf::from(path),
+        })
+    }
+}
+
 pub struct DotEnvProvider {
-    dotenv_path: PathBuf,
+    config: DotEnvConfig,
 }
 
 impl DotEnvProvider {
-    pub fn new(dotenv_path: PathBuf) -> Self {
-        Self { dotenv_path }
+    pub fn new(config: DotEnvConfig) -> Self {
+        Self { config }
+    }
+
+    pub fn from_uri(uri: &Uri) -> Result<Self> {
+        let config = DotEnvConfig::from_uri(uri)?;
+        Ok(Self::new(config))
     }
 
     fn load_env_vars(&self) -> Result<HashMap<String, String>> {
-        if !self.dotenv_path.exists() {
+        if !self.config.path.exists() {
             return Ok(HashMap::new());
         }
 
         let mut vars = HashMap::new();
-        let env_vars = dotenvy::from_path_iter(&self.dotenv_path)?;
+        let env_vars = dotenvy::from_path_iter(&self.config.path)?;
         for item in env_vars {
             let (key, value) = item?;
             vars.insert(key, value);
@@ -32,7 +79,7 @@ impl DotEnvProvider {
         for (key, value) in vars {
             content.push_str(&format!("{}={}\n", key, value));
         }
-        fs::write(&self.dotenv_path, content)?;
+        fs::write(&self.config.path, content)?;
         Ok(())
     }
 }

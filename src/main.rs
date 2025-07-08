@@ -173,16 +173,10 @@ fn main() -> Result<()> {
                 use inquire::Select;
                 use secretspec::provider::ProviderRegistry;
 
-                // Get providers from registry
-                let registry = ProviderRegistry::new();
-                let mut providers = registry.list_providers();
-                // Sort providers by name for consistent display
-                providers.sort_by_key(|(name, _)| *name);
-
-                // Create provider choices with descriptions
-                let provider_choices: Vec<String> = providers
-                    .iter()
-                    .map(|(name, provider)| format!("{}: {}", name, provider.description()))
+                // Get provider choices from the centralized registry
+                let provider_choices: Vec<String> = ProviderRegistry::providers()
+                    .into_iter()
+                    .map(|info| info.display_with_examples())
                     .collect();
 
                 let selected_choice =

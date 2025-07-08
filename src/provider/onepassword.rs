@@ -1,5 +1,6 @@
 use crate::provider::Provider;
 use crate::{Result, SecretSpecError};
+use http::Uri;
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 
@@ -34,34 +35,95 @@ struct OnePasswordFieldTemplate {
     value: String,
 }
 
-pub struct OnePasswordProvider {
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OnePasswordConfig {
     /// Optional account shorthand (for multiple accounts)
-    account: Option<String>,
+    pub account: Option<String>,
     /// Default vault to use when profile is not specified
-    default_vault: Option<String>,
+    pub default_vault: Option<String>,
     /// Service account token (alternative to interactive auth)
-    service_account_token: Option<String>,
+    pub service_account_token: Option<String>,
+}
+
+impl OnePasswordConfig {
+    pub fn from_uri(uri: &Uri) -> Result<Self> {
+        let scheme = uri.scheme_str().ok_or_else(|| {
+            SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string())
+        })?;
+
+        match scheme {
+            "onepassword" => {
+                return Err(SecretSpecError::ProviderOperationFailed(
+                    "Invalid scheme 'onepassword'. Use '1password' instead (e.g., 1password://vault/path)".to_string()
+                ));
+            }
+            "1password" | "1password+token" => {}
+            _ => {
+                return Err(SecretSpecError::ProviderOperationFailed(format!(
+                    "Invalid scheme '{}' for 1Password provider",
+                    scheme
+                )));
+            }
+        }
+
+        let authority = uri.authority().map(|a| a.as_str());
+        let mut config = Self::default();
+
+        // Parse authority for account@vault format, ignoring dummy localhost
+        if let Some(auth) = authority {
+            if auth != "localhost" {
+                if let Some(at_pos) = auth.find('@') {
+                    let user_info = &auth[..at_pos];
+                    let vault = &auth[at_pos + 1..];
+
+                    // Handle user:token format for service account tokens
+                    if scheme == "1password+token" {
+                        if let Some(colon_pos) = user_info.find(':') {
+                            config.service_account_token =
+                                Some(user_info[colon_pos + 1..].to_string());
+                        } else {
+                            config.service_account_token = Some(user_info.to_string());
+                        }
+                    } else {
+                        config.account = Some(user_info.to_string());
+                    }
+
+                    config.default_vault = Some(vault.to_string());
+                } else {
+                    // No @, so the entire authority is the vault
+                    config.default_vault = Some(auth.to_string());
+                }
+            }
+        }
+
+        Ok(config)
+    }
+}
+
+pub struct OnePasswordProvider {
+    config: OnePasswordConfig,
 }
 
 impl OnePasswordProvider {
-    pub fn new() -> Self {
-        Self {
-            account: None,
-            default_vault: None,
-            service_account_token: None,
-        }
+    pub fn new(config: OnePasswordConfig) -> Self {
+        Self { config }
+    }
+
+    pub fn from_uri(uri: &Uri) -> Result<Self> {
+        let config = OnePasswordConfig::from_uri(uri)?;
+        Ok(Self::new(config))
     }
 
     fn execute_op_command(&self, args: &[&str]) -> Result<String> {
         let mut cmd = Command::new("op");
 
         // Set service account token if provided
-        if let Some(token) = &self.service_account_token {
+        if let Some(token) = &self.config.service_account_token {
             cmd.env("OP_SERVICE_ACCOUNT_TOKEN", token);
         }
 
         // Add account if specified
-        if let Some(account) = &self.account {
+        if let Some(account) = &self.config.account {
             cmd.arg("--account").arg(account);
         }
 
@@ -96,7 +158,7 @@ impl OnePasswordProvider {
     fn get_vault_name(&self, profile: Option<&str>) -> String {
         profile
             .map(|p| p.to_string())
-            .or_else(|| self.default_vault.clone())
+            .or_else(|| self.config.default_vault.clone())
             .unwrap_or_else(|| "Private".to_string())
     }
 
@@ -227,6 +289,6 @@ impl Provider for OnePasswordProvider {
 
 impl Default for OnePasswordProvider {
     fn default() -> Self {
-        Self::new()
+        Self::new(OnePasswordConfig::default())
     }
 }
