@@ -8,7 +8,7 @@ hero:
     file: ../../assets/houston.webp
   actions:
     - text: Get Started
-      link: /introduction/
+      link: /quick-start/
       icon: right-arrow
       variant: primary
     - text: View on GitHub
@@ -33,18 +33,18 @@ This coupling creates vendor lock-in, runtime failures, poor developer experienc
 SecretSpec separates these concerns:
 
 <CardGrid>
-	<LinkCard 
-		title="WHAT secrets are needed" 
+	<LinkCard
+		title="WHAT secrets are needed"
 		href="/reference/configuration/"
 		description="Declared in secretspec.toml"
 	/>
-	<LinkCard 
-		title="HOW requirements vary" 
+	<LinkCard
+		title="HOW requirements vary"
 		href="/concepts/profiles/"
 		description="Managed through profiles"
 	/>
-	<LinkCard 
-		title="WHERE secrets are stored" 
+	<LinkCard
+		title="WHERE secrets are stored"
 		href="/concepts/providers/"
 		description="Configured via providers"
 	/>
@@ -55,33 +55,33 @@ This separation enables portable applications, early validation, better tooling,
 ## Features
 
 <CardGrid>
-	<LinkCard 
-		title="Configuration Inheritance" 
+	<LinkCard
+		title="Configuration Inheritance"
 		href="/concepts/inheritance/"
 		description="Share common secrets across projects using extends"
 	/>
-	<LinkCard 
-		title="Type-Safe Rust SDK" 
+	<LinkCard
+		title="Type-Safe Rust SDK"
 		href="/sdk/rust/"
 		description="Generate strongly-typed structs from your configuration"
 	/>
-	<LinkCard 
-		title="Smart Discovery" 
+	<LinkCard
+		title="Smart Discovery"
 		href="/quick-start/"
 		description="Import existing secrets from .env files automatically"
 	/>
-	<LinkCard 
-		title="CLI Tools" 
+	<LinkCard
+		title="CLI Tools"
 		href="/reference/cli/"
 		description="Check, set, and run commands with secrets injected"
 	/>
-	<LinkCard 
-		title="Multiple Providers" 
+	<LinkCard
+		title="Multiple Providers"
 		href="/concepts/providers/"
 		description="Support for Keyring, dotenv, 1Password, LastPass, and more"
 	/>
-	<LinkCard 
-		title="Early Validation" 
+	<LinkCard
+		title="Early Validation"
 		href="/concepts/overview/"
 		description="Catch missing secrets before your application starts"
 	/>
