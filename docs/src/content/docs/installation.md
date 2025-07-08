@@ -43,19 +43,6 @@ environment.systemPackages = with pkgs; [
 ];
 ```
 
-## From Source
-
-To build from source, you'll need Rust installed:
-
-```bash
-# Clone the repository
-$ git clone https://github.com/cachix/secretspec
-$ cd secretspec
-
-# Build and install
-$ cargo install --path .
-```
-
 ## Verify Installation
 
 After installation, verify that SecretSpec is available:

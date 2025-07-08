@@ -16,7 +16,6 @@ export default defineConfig({
 				{
 					label: 'Getting Started',
 					items: [
-						{ label: 'Introduction', slug: 'introduction' },
 						{ label: 'Quick Start', slug: 'quick-start' },
 						{ label: 'Installation', slug: 'installation' },
 					],
@@ -24,10 +23,9 @@ export default defineConfig({
 				{
 					label: 'Concepts',
 					items: [
-						{ label: 'Overview', slug: 'concepts/overview' },
+						{ label: 'Declarative Configuration', slug: 'concepts/declarative' },
 						{ label: 'Profiles', slug: 'concepts/profiles' },
 						{ label: 'Providers', slug: 'concepts/providers' },
-						{ label: 'Configuration Inheritance', slug: 'concepts/inheritance' },
 					],
 				},
 				{
