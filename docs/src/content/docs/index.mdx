@@ -1,9 +1,9 @@
 ---
 title: SecretSpec
-description: Declarative secrets for development workflows, supporting a variety of storage backends.
+description: Declarative secrets for development workflows, supporting a variety of provisioning backends.
 template: splash
 hero:
-  tagline: Declarative secrets for development workflows, supporting a variety of storage backends.
+  tagline: Declarative secrets for development workflows, supporting a variety of provisioning backends.
   image:
     file: ../../assets/logo.png
   actions:
@@ -18,7 +18,7 @@ hero:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-## The Problem
+## Why Secrets Are Still Hard
 
 Current secret management forces applications to answer three questions at once:
 
@@ -28,66 +28,11 @@ Current secret management forces applications to answer three questions at once:
 
 This coupling creates vendor lock-in, runtime failures, poor developer experience, and inconsistent practices.
 
-## The Solution
+## WHAT - Declaring Your Secrets
 
-SecretSpec separates these concerns:
+Applications declare their secret requirements in a `secretspec.toml` file.
 
-<CardGrid>
-	<LinkCard
-		title="WHAT secrets are needed"
-		href="/reference/configuration/"
-		description="Declared in secretspec.toml"
-	/>
-	<LinkCard
-		title="HOW requirements vary"
-		href="/concepts/profiles/"
-		description="Managed through profiles"
-	/>
-	<LinkCard
-		title="WHERE secrets are stored"
-		href="/reference/providers/"
-		description="Configured via providers"
-	/>
-</CardGrid>
-
-This separation enables portable applications, early validation, better tooling, and type safety.
-
-## Features
-
-<CardGrid>
-	<LinkCard
-		title="Configuration Inheritance"
-		href="/concepts/inheritance/"
-		description="Share common secrets across projects using extends"
-	/>
-	<LinkCard
-		title="Type-Safe Rust SDK"
-		href="/sdk/rust/"
-		description="Generate strongly-typed structs from your configuration"
-	/>
-	<LinkCard
-		title="Smart Discovery"
-		href="/quick-start/"
-		description="Import existing secrets from .env files automatically"
-	/>
-	<LinkCard
-		title="CLI Tools"
-		href="/reference/cli/"
-		description="Check, set, and run commands with secrets injected"
-	/>
-	<LinkCard
-		title="Multiple Providers"
-		href="/reference/providers/"
-		description="Support for Keyring, dotenv, 1Password, LastPass, and more"
-	/>
-	<LinkCard
-		title="Early Validation"
-		href="/concepts/overview/"
-		description="Catch missing secrets before your application starts"
-	/>
-</CardGrid>
-
-## Quick Example
+Each secret is defined with its name and description, creating a single source of truth that's version controlled alongside your code. This standardized format enables ecosystem-wide tooling and ensures every developer knows exactly what secrets the application needs.
 
 ```toml
 [project]
@@ -96,25 +41,128 @@ revision = "1.0"
 
 [profiles.default]
 DATABASE_URL = { description = "PostgreSQL connection string", required = true }
-REDIS_URL = { description = "Redis connection string", required = false, default = "redis://localhost:6379" }
-
-[profiles.production]
-DATABASE_URL = { description = "PostgreSQL connection string", required = true }
-REDIS_URL = { description = "Redis connection string", required = true }
+REDIS_URL = { description = "Redis connection string", required = false }
 ```
-
-## Get Started in Minutes
 
 ```bash
-# Initialize from existing .env file
+# Initialize secretspec.toml from existing .env files
 $ secretspec init --from .env
-
-# Set up your preferred provider
-$ secretspec config init
-
-# Run your application with secrets
-$ secretspec run -- npm start
 ```
+
+[Learn more about declarative configuration →](/concepts/declarative/)
+
+## HOW - Managing Requirements with Profiles
+
+SecretSpec's profile system allows you to specify different requirements, defaults, and validation rules for development, staging, production, or any custom environment.
+
+A secret might be optional with a local default in development but required in production - all without changing your application code.
+
+```toml
+[project]
+name = "my-app"
+revision = "1.0"
+
+[profiles.default]
+DATABASE_URL = { description = "PostgreSQL connection string", required = true }
+REDIS_URL = { description = "Redis connection string", required = false }
+
+[profiles.development]
+# Override with development-friendly defaults
+DATABASE_URL = { default = "postgresql://localhost/myapp_dev" }
+REDIS_URL = { default = "redis://localhost:6379" }
+```
+
+```bash
+# Run with a specific profile
+$ secretspec run --profile development -- npm start
+$ secretspec run --profile production -- npm start
+
+# Or use environment variables
+$ SECRETSPEC_PROFILE=development secretspec run -- npm start
+$ SECRETSPEC_PROFILE=production secretspec run -- npm start
+```
+
+[Learn more about profiles →](/concepts/profiles/)
+
+## WHERE - Flexible provisioning with Providers
+
+The same application works across different secret storage backends without any code changes.
+
+```bash
+# Configure your default provider interactively
+$ secretspec config init
+? Select your preferred provider backend:
+> keyring: Uses system keychain (Recommended)
+  1password: 1Password password manager
+  dotenv: Traditional .env files
+  env: Read-only environment variables
+  lastpass: LastPass password manager
+? Select your default profile:
+> development
+  default
+  none
+✓ Configuration saved to ~/.config/secretspec/config.toml
+```
+
+**Supported providers:**
+- [**Keyring**](/providers/keyring/) - System credential store (Keychain on macOS, Credential Manager on Windows, Secret Service on Linux)
+- [**Dotenv**](/providers/dotenv/) - Traditional .env files for local development
+- [**Environment**](/providers/env/) - Read-only access to environment variables for CI/CD
+- [**1Password**](/providers/1password/) - Team-based password management
+- [**LastPass**](/providers/lastpass/) - Cloud-based password manager
+
+```bash
+# Check all secrets are available and set them if not
+$ secretspec check
+$ secretspec set DATABASE_URL
+
+# Override provider for specific commands
+$ secretspec run --provider env -- npm test
+$ secretspec run --provider 1password://vault -- npm start
+
+# Or use environment variables
+$ SECRETSPEC_PROVIDER=env secretspec run -- npm test
+$ SECRETSPEC_PROVIDER=1password://vault secretspec run -- npm start
+```
+
+[Learn more about providers →](/concepts/providers/)
+
+This separation enables portable applications, early validation, better tooling, and type safety.
+
+## Type-Safe Rust SDK
+
+While the CLI is great for development workflows, integrating SecretSpec directly into your application provides better type safety and error handling.
+
+The Rust SDK generates strongly-typed structs from your `secretspec.toml`, ensuring compile-time verification of your secret access.
+
+```rust
+// Generate typed structs from secretspec.toml
+secretspec::define_secrets!("secretspec.toml");
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Load secrets with type-safe struct
+    let secretspec = SecretSpec::load(Some(Provider::Keyring), Some(Profile::Production))?;
+
+    // Field names are lowercased versions of secret names
+    if let Some(database_url) = &secretspec.secrets.database_url {
+        println!("Database: {}", database_url);  // DATABASE_URL -> database_url
+    }
+
+    // Optional secrets are Option<String>
+    if let Some(redis_url) = &secretspec.secrets.redis_url {
+        println!("Redis: {}", redis_url);
+    }
+
+    // Set all secrets as environment variables
+    secretspec.secrets.set_as_env_vars();
+
+    Ok(())
+}
+```
+
+[Learn more about the Rust SDK →](/sdk/rust/)
+
+*SDKs for other languages are welcome! Please see our [contribution guide](https://github.com/cachix/secretspec) if you'd like to help.*
 
 ---
 
