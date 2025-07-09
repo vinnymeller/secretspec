@@ -1,8 +1,12 @@
 {
   languages.rust.enable = true;
-  languages.javascript.enable = true;
-  languages.javascript.npm.enable = true;
-  languages.javascript.npm.install.enable = true;
+  languages.javascript = {
+    enable = true;
+    npm = {
+      enable = true;
+      install.enable = true;
+    };
+  };
 
   git-hooks.hooks = {
     cargo-check.enable = true;
