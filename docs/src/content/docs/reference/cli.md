@@ -124,20 +124,6 @@ secretspec run [OPTIONS] -- <COMMAND>
 $ secretspec run --profile production -- npm run deploy
 ```
 
-## Provider URIs
-
-```bash
-# Simple provider names
---provider keyring
---provider dotenv
---provider env
-
-# URIs with configuration
---provider dotenv:/path/to/.env
---provider 1password://vault
---provider "1password://account@vault"
-```
-
 ## Environment Variables
 
 | Variable | Description |

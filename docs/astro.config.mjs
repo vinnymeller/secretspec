@@ -48,6 +48,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Configuration', slug: 'reference/configuration' },
 						{ label: 'CLI Commands', slug: 'reference/cli' },
+						{ label: 'Providers', slug: 'reference/providers' },
 						{ label: 'Adding Providers', slug: 'reference/adding-providers' },
 					],
 				},
