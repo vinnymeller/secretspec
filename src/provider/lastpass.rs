@@ -7,9 +7,6 @@ use std::process::{Command, Stdio};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LastPassConfig {
-    /// Whether to sync before each operation
-    #[serde(default = "default_sync_on_access")]
-    pub sync_on_access: bool,
     /// Default folder prefix
     pub folder_prefix: Option<String>,
 }
@@ -17,14 +14,9 @@ pub struct LastPassConfig {
 impl Default for LastPassConfig {
     fn default() -> Self {
         Self {
-            sync_on_access: true,
             folder_prefix: None,
         }
     }
-}
-
-fn default_sync_on_access() -> bool {
-    true
 }
 
 impl LastPassConfig {
@@ -117,17 +109,13 @@ impl LastPassProvider {
         format!("{}/{}/{}", folder, project, key)
     }
 
-    fn sync_if_needed(&self) -> Result<()> {
+    fn check_if_logged_in(&self) -> Result<()> {
         // Check if we're logged in first
         if !self.check_login_status()? {
             return Err(SecretSpecError::ProviderOperationFailed(
                 "LastPass authentication required. Please run 'lpass login <your-email>' first."
                     .to_string(),
             ));
-        }
-
-        if self.config.sync_on_access {
-            self.execute_lpass_command(&["sync"])?;
         }
         Ok(())
     }
@@ -148,11 +136,11 @@ impl LastPassProvider {
 
 impl Provider for LastPassProvider {
     fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>> {
-        self.sync_if_needed()?;
+        self.check_if_logged_in()?;
 
         let item_name = self.format_item_name(project, key, profile);
 
-        match self.execute_lpass_command(&["show", "--password", &item_name]) {
+        match self.execute_lpass_command(&["show", "--sync=now", "--password", &item_name]) {
             Ok(output) => {
                 let password = output.trim();
                 if password.is_empty() {
@@ -171,14 +159,20 @@ impl Provider for LastPassProvider {
     }
 
     fn set(&self, project: &str, key: &str, value: &str, profile: Option<&str>) -> Result<()> {
-        self.sync_if_needed()?;
+        self.check_if_logged_in()?;
 
         let item_name = self.format_item_name(project, key, profile);
 
         // Check if item exists
         if self.get(project, key, profile)?.is_some() {
             // Update existing item
-            let args = vec!["edit", &item_name, "--password", "--non-interactive"];
+            let args = vec![
+                "edit",
+                "--sync=now",
+                &item_name,
+                "--password",
+                "--non-interactive",
+            ];
 
             let mut cmd = Command::new("lpass");
             cmd.args(&args);
@@ -202,22 +196,14 @@ impl Provider for LastPassProvider {
                 ));
             }
         } else {
-            // Create new item
-            let folder = self.get_folder_name(profile);
-
-            // Create folder if it doesn't exist
-            let _ = self.execute_lpass_command(&["mkdir", &folder]);
-
-            let url = format!("project://{}/{}", project, key);
-            let username = format!("{}:{}", project, key);
-
-            let note_content = format!(
-                "URL: {}\nUsername: {}\nPassword: {}\nNotes: Managed by secrets provider\nProject: {}\nKey: {}",
-                url, username, value, project, key
-            );
-
-            // Use lpass add with piped input
-            let args = vec!["add", &item_name, "--non-interactive", "--note"];
+            // Create new item using lpass set
+            let args = vec![
+                "set",
+                "--sync=now",
+                &item_name,
+                "--password",
+                "--non-interactive",
+            ];
 
             let mut cmd = Command::new("lpass");
             cmd.args(&args);
@@ -230,7 +216,7 @@ impl Provider for LastPassProvider {
                 .spawn()?;
 
             if let Some(stdin) = child.stdin.as_mut() {
-                stdin.write_all(note_content.as_bytes())?;
+                stdin.write_all(value.as_bytes())?;
             }
 
             let output = child.wait_with_output()?;
