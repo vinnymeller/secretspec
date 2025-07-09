@@ -118,10 +118,31 @@ impl LastPassProvider {
     }
 
     fn sync_if_needed(&self) -> Result<()> {
+        // Check if we're logged in first
+        if !self.check_login_status()? {
+            return Err(SecretSpecError::ProviderOperationFailed(
+                "LastPass authentication required. Please run 'lpass login <your-email>' first."
+                    .to_string(),
+            ));
+        }
+
         if self.config.sync_on_access {
             self.execute_lpass_command(&["sync"])?;
         }
         Ok(())
+    }
+
+    fn check_login_status(&self) -> Result<bool> {
+        match self.execute_lpass_command(&["status"]) {
+            Ok(output) => Ok(!output.contains("Not logged in")),
+            Err(SecretSpecError::ProviderOperationFailed(msg))
+                if msg.contains("Not logged in")
+                    || msg.contains("LastPass authentication required") =>
+            {
+                Ok(false)
+            }
+            Err(e) => Err(e),
+        }
     }
 }
 
