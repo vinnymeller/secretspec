@@ -199,10 +199,7 @@ impl SecretSpec {
         Some((secret_config.required, secret_config.default.clone()))
     }
 
-    fn get_provider_backend(
-        &self,
-        provider_arg: Option<String>,
-    ) -> Result<(String, Box<dyn ProviderTrait>)> {
+    fn get_provider(&self, provider_arg: Option<String>) -> Result<Box<dyn ProviderTrait>> {
         let provider_spec = if let Some(spec) = provider_arg {
             spec
         } else if let Some(global_config) = &self.global_config {
@@ -217,10 +214,7 @@ impl SecretSpec {
 
         let backend = ProviderRegistry::create_from_string(&provider_spec)?;
 
-        // Extract the provider name for display purposes
-        let provider_name = backend.name().to_string();
-
-        Ok((provider_name, backend))
+        Ok(backend)
     }
 
     pub fn write(&self, from: &Path) -> Result<()> {
@@ -307,14 +301,14 @@ impl SecretSpec {
             )));
         }
 
-        let (provider_name, backend) = self.get_provider_backend(provider_arg)?;
+        let backend = self.get_provider(provider_arg)?;
         let profile_display = self.resolve_profile(profile.as_deref());
 
         // Check if the provider supports setting values
         if !backend.allows_set() {
             return Err(SecretSpecError::ProviderOperationFailed(format!(
                 "Provider '{}' is read-only and does not support setting values",
-                provider_name
+                backend.name()
             )));
         }
 
@@ -331,7 +325,7 @@ impl SecretSpec {
             "{} Secret '{}' saved to {} (profile: {})",
             "✓".green(),
             name,
-            provider_name,
+            backend.name(),
             profile_display
         );
 
@@ -344,7 +338,7 @@ impl SecretSpec {
         provider_arg: Option<String>,
         profile: Option<String>,
     ) -> Result<()> {
-        let (_, backend) = self.get_provider_backend(provider_arg)?;
+        let backend = self.get_provider(provider_arg)?;
         let (_, default) = self
             .resolve_secret_config(name, profile.as_deref())
             .ok_or_else(|| SecretSpecError::SecretNotFound(name.to_string()))?;
@@ -371,7 +365,7 @@ impl SecretSpec {
         profile: Option<String>,
         interactive: bool,
     ) -> Result<ValidationResult> {
-        let (provider_name, backend) = self.get_provider_backend(provider_arg.clone())?;
+        let backend = self.get_provider(provider_arg.clone())?;
         let profile_display = self.resolve_profile(profile.as_deref());
 
         // First validate to see what's missing
@@ -404,7 +398,7 @@ impl SecretSpec {
                                 "{} Secret '{}' saved to {} (profile: {})",
                                 "✓".green(),
                                 secret_name,
-                                provider_name,
+                                backend.name(),
                                 profile_display
                             );
                         }
@@ -429,13 +423,13 @@ impl SecretSpec {
     }
 
     pub fn check(&self, provider_arg: Option<String>, profile: Option<String>) -> Result<()> {
-        let (provider_name, _) = self.get_provider_backend(provider_arg.clone())?;
+        let provider = self.get_provider(provider_arg.clone())?;
         let profile_display = self.resolve_profile(profile.as_deref());
 
         println!(
             "Checking secrets in {} using {} (profile: {})...\n",
             self.config.project.name.bold(),
-            provider_name.blue(),
+            provider.name().blue(),
             profile_display.cyan()
         );
 
@@ -504,7 +498,7 @@ impl SecretSpec {
         provider_arg: Option<String>,
         profile: Option<String>,
     ) -> Result<ValidationResult> {
-        let (provider_name, backend) = self.get_provider_backend(provider_arg)?;
+        let backend = self.get_provider(provider_arg)?;
         let mut secrets = HashMap::new();
         let mut missing_required = Vec::new();
         let mut missing_optional = Vec::new();
@@ -537,8 +531,8 @@ impl SecretSpec {
             }
         }
 
-        let provider = secretspec_types::Provider::from_str(&provider_name)
-            .ok_or_else(|| SecretSpecError::ProviderNotFound(provider_name.clone()))?;
+        let provider = secretspec_types::Provider::from_str(backend.name())
+            .ok_or_else(|| SecretSpecError::ProviderNotFound(backend.name().to_string()))?;
 
         Ok(ValidationResult {
             secrets,
