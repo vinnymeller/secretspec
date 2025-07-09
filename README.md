@@ -8,116 +8,67 @@
 
 Declarative secrets for development workflows, supporting a variety of storage backends.
 
-See [announcement blog post for motivation](XXX).
+SecretSpec separates the declaration of what secrets an application needs from where they are stored, enabling portable applications that work across different secret storage backends without code changes.
 
-## Introduction
-
-Modern applications require secrets - API keys, database credentials, service tokens. Yet we lack a standard way to declare these requirements. Applications either hard-code retrieval mechanisms or fail at runtime with missing environment variables.
-
-### The Problem: Conflating What, How, and Where
-
-Current secret management approaches force applications to simultaneously answer three distinct questions:
-
-- **WHAT** - Which secrets does the application need? (DATABASE_URL, API_KEY)
-- **HOW** - What are the requirements? (required vs optional, defaults, validation, environment)
-- **WHERE** - Where are these secrets stored? (environment variables, Vault, AWS Secrets Manager)
-
-This coupling creates several problems:
-
-1. **Lack of Portability**: Applications become tightly coupled to specific storage backends, making it difficult to switch providers or adapt to different environments
-2. **Runtime Failures**: Missing secrets are only discovered when the application attempts to use them, leading to crashes in production
-3. **Poor Developer Experience**: Each developer must understand the specific storage mechanism and manually configure their environment
-4. **Inconsistent Practices**: Every application implements its own ad-hoc solution, leading to a fragmented ecosystem
-
-### The Solution: Declarative Secret Requirements
-
-SecretSpec introduces a declarative approach that separates the "what" and "how" from the "where":
-
-- **WHAT** secrets are needed is declared in `secretspec.toml`
-- **HOW** requirements vary by environment is managed through `profile`
-- **WHERE** secrets are stored depends on where the application runs, configured via `provider`
-
-Applications declare their secret requirements in a `secretspec.toml` file, while the runtime environment determines the storage backend through `provider` configuration and context via `profile` selection.
-
-This separation enables:
-- **Portable Applications**: The same application works across different secret storage backends without code changes
-- **Early Validation**: Check that all required secrets are available before starting the application
-- **Better Tooling**: Standardized format enables ecosystem-wide tooling for secret management
-- **Type Safety**: Generate strongly-typed code from declarations for compile-time guarantees
+[Documentation](https://secretspec.dev) | [Quick Start](https://secretspec.dev/docs/quick-start) | [Announcement Blog Post](XXX)
 
 ## Features
 
 - **[Declarative Configuration](https://secretspec.dev/docs/reference/configuration/)**: Define your secrets in `secretspec.toml` with descriptions and requirements
-- **[Multiple Provider Backends](https://secretspec.dev/docs/concepts/providers/)**: [Keyring](https://docs.rs/keyring/latest/keyring/) (system credential store), [.env](https://www.dotenv.org/), and environment variable support
+- **[Multiple Provider Backends](https://secretspec.dev/docs/concepts/providers/)**: [Keyring](https://secretspec.dev/docs/providers/keyring), [.env](https://secretspec.dev/docs/providers/dotenv), [1Password](https://secretspec.dev/docs/providers/1password), [LastPass](https://secretspec.dev/docs/providers/lastpass), and [environment variables](https://secretspec.dev/docs/providers/env)
 - **[Type-Safe Rust SDK](https://secretspec.dev/docs/sdk/rust/)**: Generate strongly-typed structs from your `secretspec.toml` for compile-time safety
 - **[Profile Support](https://secretspec.dev/docs/concepts/profiles/)**: Override secret requirements and defaults per profile (development, production, etc.)
-- **[Configuration Inheritance](https://secretspec.dev/docs/concepts/inheritance/)**: Extend and override shared configurations using the `extends` feature
+- **Configuration Inheritance**: Extend and override shared configurations using the `extends` feature
 - **Discovery**: `secretspec init` to discover secrets from existing `.env` files
 
 ## Quick Start
 
-1. **Initialize `secretspec.toml` (discovers secrets from .env)**
-   ```bash
-   $ secretspec init
-   ✓ Created secretspec.toml with 0 secrets
+```bash
+# 1. Initialize secretspec.toml (discovers secrets from .env)
+$ secretspec init
+✓ Created secretspec.toml with 0 secrets
 
-   Next steps:
-     1. secretspec config init    # Set up user configuration
-     2. secretspec check          # Verify all secrets are set
-     3. secretspec run -- your-command  # Run with secrets
-   ```
+Next steps:
+  1. secretspec config init    # Set up user configuration
+  2. secretspec check          # Verify all secrets are set
+  3. secretspec run -- your-command  # Run with secrets
 
-2. **Set up provider backend:**
-   ```bash
-   $ secretspec config init
-   ? Select your preferred provider backend:
-   > 1password: 1Password password manager
-     dotenv: Traditional .env files
-     env: Read-only environment variables
-     keyring: Uses system keychain (Recommended)
-     lastpass: LastPass password manager
-   ? Select your default profile:
-   > development
-     default
-     none
-   ✓ Configuration saved to /home/user/.config/secretspec/config.toml
-   ```
-3. **Check that all secrets are configured and configure them**
-   ```bash
-   $ secretspec check
-   ```
+# 2. Set up provider backend
+$ secretspec config init
+? Select your preferred provider backend:
+> 1password: 1Password password manager
+  dotenv: Traditional .env files
+  env: Read-only environment variables
+  keyring: Uses system keychain (Recommended)
+  lastpass: LastPass password manager
+? Select your default profile:
+> development
+  default
+  none
+✓ Configuration saved to /home/user/.config/secretspec/config.toml
 
-4. **Run your application with secrets:**
-   ```bash
-   $ secretspec run -- npm start
+# 3. Check and configure secrets
+$ secretspec check
 
-   # Or with a specific profile and provider
-   $ secretspec run --profile production --provider dotenv -- npm start
-   ```
+# 4. Run your application with secrets
+$ secretspec run -- npm start
+
+# Or with a specific profile and provider
+$ secretspec run --profile production --provider dotenv -- npm start
+```
+
+See the [Quick Start Guide](https://secretspec.dev/docs/quick-start) for detailed instructions.
 
 ## Installation
 
-### Static binary
-
 ```bash
+# Quick install
 $ curl -sSL https://secretspec.dev/install | sh
 ```
 
-### Devenv.sh
-
-See the [devenv integration guide](https://secretspec.dev/docs/devenv) for setup instructions.
-
-### Nix
-
-```bash
-$ nix-env -iA secretspec -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
-```
-
-*Please, open pull requests once these hit your favorite distribution.*
+See the [installation guide](https://secretspec.dev/docs/quick-start#installation) for more options including Nix, Homebrew, and Docker.
 
 ## Configuration
-
-### Project Configuration (`secretspec.toml`)
 
 Each project has a `secretspec.toml` file that declares the required secrets:
 
@@ -142,415 +93,101 @@ DATABASE_URL = { description = "PostgreSQL connection string", required = true }
 REDIS_URL = { description = "Redis connection string", required = true }
 ```
 
+See the [configuration reference](https://secretspec.dev/docs/reference/configuration) for all available options.
+
 ## Profiles
 
-Profiles define **HOW** your secret requirements vary across different environments. They allow you to specify different requirements, defaults, and validation rules for development, staging, production, or any custom environment.
-
-### Understanding Profiles
-
-Each profile can override the base secret definitions with environment-specific settings:
-
-- **required**: Whether the secret must be provided (no default value)
-- **default**: A default value to use if the secret isn't set
-- **description**: Human-readable explanation of the secret's purpose
-
-### Default Profile
-
-The `default` profile serves as the base configuration. Other profiles inherit from it and can override specific settings:
-
-```toml
-[profiles.default]
-DATABASE_URL = { description = "PostgreSQL connection string", required = true }
-API_KEY = { description = "External API key", required = true }
-CACHE_TTL = { description = "Cache time-to-live in seconds", required = false, default = "3600" }
-```
-
-### Environment-Specific Profiles
-
-Define profiles for each environment where your application runs:
-
-```toml
-# Development: Use local defaults, make most secrets optional
-[profiles.development]
-DATABASE_URL = { description = "PostgreSQL connection string", required = false, default = "postgresql://localhost/myapp_dev" }
-API_KEY = { description = "External API key", required = false, default = "dev-key-12345" }
-DEBUG = { description = "Enable debug mode", required = false, default = "true" }
-
-# Staging: Similar to production but with some relaxed requirements
-[profiles.staging]
-DATABASE_URL = { description = "PostgreSQL connection string", required = true }
-API_KEY = { description = "External API key", required = true }
-DEBUG = { description = "Enable debug mode", required = false, default = "false" }
-
-# Production: All secrets required, no defaults
-[profiles.production]
-DATABASE_URL = { description = "PostgreSQL connection string", required = true }
-API_KEY = { description = "External API key", required = true }
-DEBUG = { description = "Enable debug mode", required = false, default = "false" }
-SENTRY_DSN = { description = "Error tracking endpoint", required = true }
-```
-
-### Using Profiles
-
-Select a profile when running commands:
+Profiles allow you to define different secret requirements for each environment (development, production, etc.):
 
 ```bash
-# Use development profile
-$ secretspec check --profile development
+# Use specific profile
 $ secretspec run --profile development -- npm start
-
-# Use production profile
-$ secretspec check --profile production
 $ secretspec run --profile production -- npm start
 
-# Set default profile in config
+# Set default profile
 $ secretspec config init
-? Select your default profile:
-> development
-  staging
-  production
-  default
 ```
 
-### Profile Selection Priority
+Learn more about [profiles](https://secretspec.dev/docs/concepts/profiles) and [profile selection](https://secretspec.dev/docs/concepts/profiles#profile-selection).
 
-Profiles are selected in the following order:
+## Providers
 
-1. **CLI argument**: `--profile` flag
-2. **Environment variable**: `SECRETSPEC_PROFILE`
-3. **User config**: Default profile in `~/.config/secretspec/config.toml`
-4. **Fallback**: `default` profile
+SecretSpec supports multiple storage backends for secrets:
 
-### Best Practices for Profiles
-
-1. **Development Profile**: Use safe defaults that work locally
-   - Make most secrets optional with local defaults
-   - Use development-specific values (localhost URLs, test keys)
-   - Enable debug/development features
-
-2. **Production Profile**: Enforce strict requirements
-   - Make all critical secrets required
-   - Never include default values for sensitive data
-   - Add production-only secrets (monitoring, analytics)
-
-3. **Staging Profile**: Mirror production closely
-   - Same requirements as production
-   - May have different secret values
-   - Useful for testing deployment workflows
-
-4. **Custom Profiles**: Create profiles for specific needs
-   - CI/CD environments
-   - Testing configurations
-   - Regional deployments
-
-### Provider Configuration
-
-The **WHERE** of secret storage depends on where your application runs. SecretSpec uses providers to abstract different storage backends, allowing the same `secretspec.toml` to work across development machines, CI/CD pipelines, and production environments.
-
-SecretSpec provider can be configured through three methods (in order of precedence):
-
-1. **User config file** (preferred): Set via `secretspec config init`. Stored at `~/.config/secretspec/config.toml` on Linux/macOS or `%APPDATA%\secretspec\config.toml` on Windows
-2. **Environment variable**: `SECRETSPEC_PROVIDER`
-3. **CLI arguments**: `--provider` flag on any command
-
-## Provider Backends
-
-SecretSpec includes five built-in provider backends:
-
-- **keyring** - Secure system credential store integration
-- **dotenv** - Local .env file storage (e.g., `dotenv:/path/to/.env`)
-- **env** - Read-only environment variable access
-- **lastpass** - LastPass password manager integration (e.g., `lastpass://folder`)
-- **1password** - 1Password secrets management (e.g., `1password://vault`, `1password://work@Production`)
-
-Providers can be specified as simple names (`keyring`) or as URIs with configuration (`1password://vault`).
-
-*Additional provider backends are welcome!*
-
-### Keyring Provider (Recommended)
-
-Stores secrets securely in your system's credential store (Keychain on macOS, Credential Manager on Windows, Secret Service on Linux).
+- **[Keyring](https://secretspec.dev/docs/providers/keyring)** - System credential store (recommended)
+- **[.env files](https://secretspec.dev/docs/providers/dotenv)** - Traditional dotenv files
+- **[Environment variables](https://secretspec.dev/docs/providers/env)** - Read-only for CI/CD
+- **[1Password](https://secretspec.dev/docs/providers/1password)** - Team secret management
+- **[LastPass](https://secretspec.dev/docs/providers/lastpass)** - Cloud password manager
 
 ```bash
-# Use keyring for this command
-$ secretspec check --provider keyring
+# Use specific provider
+$ secretspec run --provider keyring -- npm start
+$ secretspec run --provider dotenv -- npm start
 
-# Set as default in global config
-$ secretspec config init  # sets keyring as default
+# Configure default provider
+$ secretspec config init
 ```
 
-### .env File Provider
-
-Stores secrets in a local `.env` file. Useful for development environments.
-
-```bash
-# Use .env file for this command
-$ secretspec set DATABASE_URL --provider dotenv
-
-# Set as default for this project
-# Edit ~/.config/secretspec/config.toml to set project-specific provider
-```
-
-### Environment Variable Provider
-
-⚠️ **Read-only backend for CI/CD compatibility**
-
-Reads secrets directly from process environment variables. **Not encrypted** - primarily for backwards compatibility in CI/CD pipelines where secrets are already set as environment variables.
-
-```bash
-export DATABASE_URL="your-connection-string"
-
-# Use environment variables (read-only)
-$ secretspec get DATABASE_URL --provider env
-your-connection-string
-
-$ secretspec check --provider env
-```
-
-### LastPass Provider
-
-Integrates with LastPass password manager for secure cloud-based secret storage.
-
-```bash
-# Use LastPass for this command
-$ secretspec set DATABASE_URL --provider lastpass
-
-# Check secrets from LastPass
-$ secretspec check --provider lastpass
-```
-
-### 1Password Provider
-
-Integrates with 1Password for team-based secret management.
-
-```bash
-# Use 1Password for this command
-$ secretspec set DATABASE_URL --provider 1password
-
-# Run with 1Password secrets
-$ secretspec run --provider 1password -- npm start
-```
-
-
-## Configuration Inheritance
-
-SecretSpec supports configuration inheritance through the `extends` field in the `[project]` section. This allows you to:
-
-- Share common secrets across multiple projects
-- Build layered configurations (base → shared → project-specific)
-- Maintain DRY principles in your secret management
-
-### Example: Shared Configuration
-
-**shared/common/secretspec.toml:**
-```toml
-[project]
-name = "common"
-revision = "1.0"
-
-[profiles.default]
-DATABASE_URL = { description = "Main database", required = true }
-REDIS_URL = { description = "Cache server", required = false, default = "redis://localhost:6379" }
-```
-
-**myapp/secretspec.toml:**
-```toml
-[project]
-name = "myapp"
-revision = "1.0"
-extends = ["../shared/common"]
-
-[profiles.default]
-# Override DATABASE_URL description
-DATABASE_URL = { description = "MyApp database", required = true }
-# Add new app-specific secret
-API_KEY = { description = "External API key", required = true }
-```
-
-### Inheritance Rules
-
-- Multiple configs can be extended: `extends = ["../common", "../auth"]`
-- Paths are relative to the extending file's directory
-- The extending config takes precedence over extended configs
-- Secrets are merged at the profile level
-- Circular dependencies are detected and prevented
+See [provider concepts](https://secretspec.dev/docs/concepts/providers) and [provider reference](https://secretspec.dev/docs/reference/providers) for details.
 
 ## Rust SDK
 
-SecretSpec provides a proc macro that generates strongly-typed Rust structs from your `secretspec.toml` file at compile time.
-
-### Add to your `Cargo.toml`:
-```toml
-[dependencies]
-secretspec = { version = "0.1" }
-```
-
-### Basic Usage
+Generate strongly-typed Rust structs from your `secretspec.toml`:
 
 ```rust
 // Generate typed structs from secretspec.toml
 secretspec::define_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load secrets with type-safe struct
+    // Load secrets with type safety
     let secrets = SecretSpec::load(Provider::Keyring)?;
-
-    // Field names are lowercased versions of secret names
-    println!("Database: {}", secrets.database_url);  // DATABASE_URL -> database_url
-
+    
+    // Access secrets as struct fields
+    println!("Database: {}", secrets.database_url);
+    
     // Optional secrets are Option<String>
     if let Some(redis) = &secrets.redis_url {
         println!("Redis: {}", redis);
     }
-
-    // Set all secrets as environment variables
-    secrets.set_as_env_vars();
-
+    
     Ok(())
 }
 ```
 
-### Profile-Specific Types
+See the [Rust SDK documentation](https://secretspec.dev/docs/sdk/rust) for advanced usage including profile-specific types.
 
-The macro generates exact types for each profile, ensuring compile-time safety:
+## CLI Reference
 
-```rust
-// Load with profile-specific types for maximum type safety
-match SecretSpec::load_profile(Provider::Keyring, Profile::Production)? {
-    SecretSpecProfile::Production { api_key, database_url, redis_url, .. } => {
-        // In production: api_key is String (required)
-        // database_url is String (required)
-        // redis_url might be String or Option<String> based on config
-        println!("Production API key: {}", api_key);
-    }
-    SecretSpecProfile::Development { api_key, database_url, .. } => {
-        // In development: api_key is Option<String> (has default)
-        // database_url is Option<String> (has default)
-        if let Some(key) = api_key {
-            println!("Dev API key: {}", key);
-        }
-    }
-    _ => {}
-}
+Common commands:
+
+```bash
+# Initialize and configure
+secretspec init                    # Create secretspec.toml
+secretspec config init            # Set up user configuration
+
+# Manage secrets
+secretspec check                  # Verify all secrets are set
+secretspec set KEY               # Set a secret interactively
+secretspec get KEY               # Retrieve a secret
+secretspec list                  # List all configured secrets
+
+# Run with secrets
+secretspec run -- command        # Run command with secrets as env vars
 ```
 
-### Generated Types
+See the [full CLI reference](https://secretspec.dev/docs/reference/cli) for all commands and options.
 
-The macro generates several types based on your `secretspec.toml`:
+## Contributing
 
-- **`SecretSpec`** - Main struct with union types (fields are `Option<String>` if optional in *any* profile)
-- **`SecretSpecProfile`** - Enum with profile-specific variants containing exact types
-- **`Profile`** - Enum of all profiles from your config (e.g., `Development`, `Production`)
-- **`Provider`** - Type-safe provider selection (`Keyring`, `Dotenv`, `Env`)
+We welcome contributions! Areas where you can help:
 
-### Type Rules
+- **New provider backends** - See the [provider implementation guide](https://secretspec.dev/docs/reference/adding-providers)
+- **Language SDKs** - Help us support more languages beyond Rust
+- **Package managers** - Get SecretSpec into your favorite package manager
+- **Documentation** - Improve guides and examples
 
-- Secret fields are named as lowercase versions of the environment variable (e.g., `DATABASE_URL` → `database_url`)
-- A field is `String` if it's required and has no default in ALL profiles
-- A field is `Option<String>` if it's optional or has a default in ANY profile
-- Profile-specific types reflect the exact requirements for that profile
-
-## Adding a New Provider Backend
-
-To implement a new provider backend:
-
-1. **Create a new backend module** in `src/provider/your_backend.rs`:
-   ```rust
-   use crate::{Result, SecretSpecError};
-   use crate::provider::Provider;
-   use http::Uri;
-
-   pub struct YourBackendProvider {
-       // Your backend-specific configuration
-   }
-
-   impl YourBackendProvider {
-       pub fn new() -> Self {
-           Self {
-               // Initialize your configuration
-           }
-       }
-       
-       pub fn from_uri(uri: &Uri) -> Result<Self> {
-           let scheme = uri.scheme_str()
-               .ok_or_else(|| SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string()))?;
-               
-           if scheme != "your_backend" {
-               return Err(SecretSpecError::ProviderOperationFailed(
-                   format!("Invalid scheme '{}' for your_backend provider", scheme)
-               ));
-           }
-           
-           // Parse any configuration from the URI
-           // e.g., authority, path, query parameters
-           
-           Ok(Self::new())
-       }
-   }
-
-   impl Provider for YourBackendProvider {
-       fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>> {
-           // Implementation
-       }
-
-       fn set(&self, project: &str, key: &str, value: &str, profile: Option<&str>) -> Result<()> {
-           // Implementation
-       }
-
-       fn name(&self) -> &'static str {
-           "your_backend"
-       }
-
-       fn description(&self) -> &'static str {
-           "Your backend description"
-       }
-
-       // Optional: Override if your backend is read-only
-       // fn allows_set(&self) -> bool {
-       //     false
-       // }
-   }
-   ```
-
-2. **Add your provider to the registry** in `src/provider/registry.rs`:
-   ```rust
-   impl ProviderRegistry {
-       pub fn providers() -> Vec<ProviderInfo> {
-           vec![
-               // ... existing providers ...
-               ProviderInfo {
-                   name: "your_backend",
-                   description: "Your backend description",
-                   examples: vec!["your_backend://example"],
-               },
-           ]
-       }
-       
-       pub fn create_from_string(s: &str) -> Result<Box<dyn Provider>> {
-           // ... existing code ...
-           match scheme {
-               // ... existing providers ...
-               "your_backend" => Ok(Box::new(YourBackendProvider::from_uri(&uri)?)),
-               // ...
-           }
-       }
-   }
-   ```
-
-3. **Export your module** in `src/provider/mod.rs`:
-   ```rust
-   pub mod your_backend;
-   pub use your_backend::YourBackendProvider;
-   ```
-
-4. **Use your new backend**:
-   ```bash
-   # Simple usage
-   $ secretspec set SECRET_NAME --provider your_backend
-   
-   # With URI configuration
-   $ secretspec set SECRET_NAME --provider "your_backend://config"
-   ```
+See our [GitHub repository](https://github.com/cachix/secretspec) to get started.
 
 ## License
 
