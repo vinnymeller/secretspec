@@ -1,6 +1,6 @@
 use colored::Colorize;
 use directories::ProjectDirs;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::{self, Write};
@@ -294,8 +294,26 @@ impl SecretSpec {
         profile: Option<&str>,
     ) -> Option<(bool, Option<String>)> {
         let profile_name = self.resolve_profile(profile);
-        let profile_config = self.config.profiles.get(profile_name)?;
-        let secret_config = profile_config.secrets.get(name)?;
+
+        // Check if the secret exists in the requested profile
+        let profile_secret = self
+            .config
+            .profiles
+            .get(profile_name)
+            .and_then(|p| p.secrets.get(name));
+
+        // Check if the secret exists in the default profile (if we're not already looking at default)
+        let default_secret = if profile_name != "default" {
+            self.config
+                .profiles
+                .get("default")
+                .and_then(|p| p.secrets.get(name))
+        } else {
+            None
+        };
+
+        // Use the profile secret if it exists, otherwise fall back to default
+        let secret_config = profile_secret.or(default_secret)?;
 
         Some((secret_config.required, secret_config.default.clone()))
     }
@@ -714,12 +732,30 @@ impl SecretSpec {
             SecretSpecError::SecretNotFound(format!("Profile '{}' not found", profile_name))
         })?;
 
-        for (name, _config) in &profile_config.secrets {
+        // Collect all secrets to check - from current profile and default profile
+        let mut all_secrets = HashSet::new();
+
+        // Add secrets from the current profile
+        for name in profile_config.secrets.keys() {
+            all_secrets.insert(name.clone());
+        }
+
+        // If not the default profile, also add secrets from default profile
+        if profile_name != "default" {
+            if let Some(default_profile) = self.config.profiles.get("default") {
+                for name in default_profile.secrets.keys() {
+                    all_secrets.insert(name.clone());
+                }
+            }
+        }
+
+        // Now check all secrets
+        for name in all_secrets {
             let (required, default) = self
-                .resolve_secret_config(name, profile.as_deref())
+                .resolve_secret_config(&name, profile.as_deref())
                 .expect("Secret should exist in config since we're iterating over it");
 
-            match backend.get(&self.config.project.name, name, profile.as_deref())? {
+            match backend.get(&self.config.project.name, &name, profile.as_deref())? {
                 Some(value) => {
                     secrets.insert(name.clone(), value);
                 }
@@ -2209,7 +2245,7 @@ NEW_SECRET = { description = "New secret", required = true }
     }
 
     #[test]
-    fn test_profiles_are_independent_no_merging() {
+    fn test_profiles_inherit_from_default() {
         let temp_dir = TempDir::new().unwrap();
         let project_path = temp_dir.path().join("secretspec.toml");
 
@@ -2258,18 +2294,19 @@ API_KEY = { description = "Dev API key", required = true }
         assert!(required);
         assert_eq!(default_val, Some("postgres://localhost/dev".to_string()));
 
-        // 3. Check that CACHE_TTL exists in default but NOT in development
-        // This proves profiles don't inherit from each other
+        // 3. Check that CACHE_TTL exists in default and IS inherited by development
+        // This proves profiles inherit from default
         assert!(
             spec.resolve_secret_config("CACHE_TTL", Some("default"))
                 .is_some()
         );
         assert!(
             spec.resolve_secret_config("CACHE_TTL", Some("development"))
-                .is_none()
+                .is_some(),
+            "CACHE_TTL should be inherited from default profile"
         );
 
-        // 4. Verify through validation that development profile doesn't see CACHE_TTL
+        // 4. Verify through validation that development profile DOES see CACHE_TTL
         let default_validation = spec
             .validate(Some("env".to_string()), Some("default".to_string()))
             .unwrap();
@@ -2285,12 +2322,13 @@ API_KEY = { description = "Dev API key", required = true }
             3
         );
 
-        // Development profile should only know about 2 secrets (no CACHE_TTL)
+        // Development profile should now know about 3 secrets (2 defined + 1 inherited)
         assert_eq!(
             dev_validation.missing_required.len()
                 + dev_validation.missing_optional.len()
                 + dev_validation.with_defaults.len(),
-            2
+            3,
+            "Development should see 3 secrets: DATABASE_URL, API_KEY, and inherited CACHE_TTL"
         );
     }
 

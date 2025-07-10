@@ -7,6 +7,8 @@ description: Managing environment-specific secret requirements with profiles
 
 Profiles are named configurations that define how secrets behave in different environments. They specify which secrets are required vs optional, provide safe defaults for development, and enforce strict requirements for production.
 
+A key feature of profiles is inheritance: all profiles automatically inherit secrets from the `default` profile. This means you only need to override the specific properties that change between environments, reducing duplication and making your configuration cleaner and easier to maintain.
+
 ## Basic Usage
 
 Define profiles in your `secretspec.toml`:
@@ -17,13 +19,14 @@ DATABASE_URL = { description = "PostgreSQL connection", required = true }
 API_KEY = { description = "External API key", required = true }
 
 [profiles.development]
-DATABASE_URL = { description = "PostgreSQL connection", required = false, default = "postgresql://localhost:5432/myapp_dev" }
-API_KEY = { description = "External API key", required = false, default = "dev-key-12345" }
+# Inherits DATABASE_URL and API_KEY from default, only overriding their requirements
+DATABASE_URL = { required = false, default = "postgresql://localhost:5432/myapp_dev" }
+API_KEY = { required = false, default = "dev-key-12345" }
 DEBUG = { description = "Enable debug mode", required = false, default = "true" }
 
 [profiles.production]
-DATABASE_URL = { description = "PostgreSQL connection", required = true }
-API_KEY = { description = "External API key", required = true }
+# Inherits all secrets from default profile
+# Only need to add production-specific secrets
 SENTRY_DSN = { description = "Error tracking", required = true }
 ```
 
@@ -47,6 +50,15 @@ export SECRETSPEC_PROFILE=production
 secretspec run -- npm start
 ```
 
+## Profile Inheritance in Detail
+
+When using profiles, inheritance works as follows:
+
+1. **Base definition in default**: Define all your secrets with their descriptions and base requirements in the `default` profile
+2. **Override only what changes**: Other profiles only need to specify the properties that differ from default
+3. **Complete override**: When a profile defines a secret, it can override any or all properties (`required`, `default`, `description`)
+4. **Profile-specific secrets**: Secrets not in the default profile can be added to any profile
+
 ## Practical Example
 
 A web application with different requirements per environment:
@@ -62,15 +74,15 @@ REDIS_URL = { description = "Redis for caching", required = true }
 JWT_SECRET = { description = "JWT signing key", required = true }
 
 [profiles.development]
-DATABASE_URL = { required = false, default = "postgresql://localhost:5432/webapp_dev" }
-REDIS_URL = { required = false, default = "redis://localhost:6379/0" }
-JWT_SECRET = { required = false, default = "dev-secret-change-in-prod" }
-HOT_RELOAD = { required = false, default = "true" }
+# Inherits all secrets from default, just adding defaults
+DATABASE_URL = { default = "postgresql://localhost:5432/webapp_dev" }
+REDIS_URL = { default = "redis://localhost:6379/0" }
+JWT_SECRET = { default = "dev-secret-change-in-prod" }
+HOT_RELOAD = { description = "Enable hot reload", required = false, default = "true" }
 
 [profiles.production]
-DATABASE_URL = { required = true }
-REDIS_URL = { required = true }
-JWT_SECRET = { required = true }
+# Inherits DATABASE_URL, REDIS_URL, JWT_SECRET from default
+# Only adds production-specific secrets
 SENTRY_DSN = { description = "Error tracking", required = true }
 SSL_CERT = { description = "SSL certificate path", required = true }
 ```
