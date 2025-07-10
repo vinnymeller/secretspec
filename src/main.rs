@@ -2,7 +2,6 @@ use clap::{Parser, Subcommand};
 use color_eyre::eyre::{Result, WrapErr};
 use directories::ProjectDirs;
 use secretspec::{DefaultConfig, GlobalConfig, SecretSpec};
-use std::collections::HashMap;
 use std::fs;
 use std::io;
 #[cfg(unix)]
