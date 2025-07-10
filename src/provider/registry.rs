@@ -65,6 +65,17 @@ impl ProviderRegistry {
     }
 
     pub fn create_from_string(s: &str) -> Result<Box<dyn Provider>> {
+        // Special handling for dotenv with paths
+        if s.starts_with("dotenv:") && !s.contains("://") {
+            let path = &s[7..]; // Remove "dotenv:" prefix
+            let config = if path.is_empty() {
+                DotEnvConfig::default()
+            } else {
+                DotEnvConfig::from_path_string(path)
+            };
+            return Ok(Box::new(DotEnvProvider::new(config)));
+        }
+
         // Normalize the input to ensure it's a valid URI
         let normalized = if s.contains("://") {
             // Already has scheme separator

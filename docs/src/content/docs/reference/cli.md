@@ -124,6 +124,39 @@ secretspec run [OPTIONS] -- <COMMAND>
 $ secretspec run --profile production -- npm run deploy
 ```
 
+### import
+Import secrets from one provider to another.
+
+```bash
+secretspec import <FROM_PROVIDER>
+```
+
+The destination provider and profile are determined from your configuration. Secrets that already exist in the destination provider will not be overwritten.
+
+**Arguments:**
+- `<FROM_PROVIDER>` - Provider to import from (e.g., `env`, `dotenv:/path/to/.env`)
+
+**Example:**
+```bash
+# Import from environment variables to your default provider
+$ secretspec import env
+Importing secrets from env to keyring (profile: development)...
+
+✓ DATABASE_URL - Database connection string
+○ API_KEY - API key for external service (already exists in target)
+✗ REDIS_URL - Redis connection URL (not found in source)
+
+Summary: 1 imported, 1 already exists, 1 not found in source
+
+# Import from a specific .env file
+$ secretspec import dotenv:/home/user/old-project/.env
+```
+
+**Use Cases:**
+- Migrate from .env files to a secure provider like keyring or 1Password
+- Copy secrets between different profiles or projects
+- Import existing environment variables into SecretSpec management
+
 ## Environment Variables
 
 | Variable | Description |
@@ -139,6 +172,9 @@ $ secretspec init --from .env
 
 # Set up user configuration
 $ secretspec config init
+
+# Import existing secrets (optional)
+$ secretspec import env  # or: secretspec import dotenv:.env.old
 
 # Check and set missing secrets
 $ secretspec check

@@ -83,7 +83,19 @@ $ secretspec config init
 ✓ Configuration saved to /home/user/.config/secretspec/config.toml
 ```
 
-## 3. Check and configure secrets
+## 3. Import existing secrets (optional)
+
+If you have existing secrets in environment variables or another `.env` file, you can import them:
+
+```bash
+# Import from current environment variables
+$ secretspec import env
+
+# Import from another .env file
+$ secretspec import dotenv:/path/to/old/.env
+```
+
+## 4. Check and configure secrets
 
 Verify that all required secrets are configured:
 
@@ -99,7 +111,7 @@ Enter value for DATABASE_URL: postgresql://localhost/myapp
 ✓ Secret DATABASE_URL saved
 ```
 
-## 4. Run your application
+## 5. Run your application
 
 Run your application with secrets injected as environment variables:
 

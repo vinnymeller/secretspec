@@ -171,6 +171,7 @@ secretspec check                  # Verify all secrets are set
 secretspec set KEY               # Set a secret interactively
 secretspec get KEY               # Retrieve a secret
 secretspec list                  # List all configured secrets
+secretspec import PROVIDER       # Import secrets from another provider
 
 # Run with secrets
 secretspec run -- command        # Run command with secrets as env vars

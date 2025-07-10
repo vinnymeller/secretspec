@@ -75,6 +75,11 @@ enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Import secrets from one provider to another
+    Import {
+        /// Provider backend to import from
+        from_provider: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -268,6 +273,12 @@ fn main() -> Result<()> {
             let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
             app.check(provider, profile)
                 .wrap_err("Failed to check secrets")?;
+            Ok(())
+        }
+        Commands::Import { from_provider } => {
+            let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
+            app.import(&from_provider)
+                .wrap_err("Failed to import secrets")?;
             Ok(())
         }
     }

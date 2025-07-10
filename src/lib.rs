@@ -493,6 +493,110 @@ impl SecretSpec {
         Ok(())
     }
 
+    pub fn import(&self, from_provider: &str) -> Result<()> {
+        // Get the "to" provider from global config (default)
+        let to_provider = self.get_provider(None)?;
+
+        // Get the profile from global config
+        let profile = self
+            .global_config
+            .as_ref()
+            .and_then(|gc| gc.defaults.profile.as_deref());
+        let profile_display = self.resolve_profile(profile);
+
+        // Create the "from" provider
+        let from_provider_backend = ProviderRegistry::create_from_string(from_provider)?;
+
+        println!(
+            "Importing secrets from {} to {} (profile: {})...\n",
+            from_provider.blue(),
+            to_provider.name().blue(),
+            profile_display.cyan()
+        );
+
+        // Get the profile configuration
+        let profile_config = self.config.profiles.get(profile_display).ok_or_else(|| {
+            SecretSpecError::SecretNotFound(format!("Profile '{}' not found", profile_display))
+        })?;
+
+        let mut imported = 0;
+        let mut already_exists = 0;
+        let mut not_found = 0;
+
+        // Process each secret in the profile
+        for (name, config) in &profile_config.secrets {
+            // First check if the secret exists in the "from" provider
+            match from_provider_backend.get(&self.config.project.name, name, profile)? {
+                Some(value) => {
+                    // Secret exists in "from" provider, check if it exists in "to" provider
+                    match to_provider.get(&self.config.project.name, name, profile)? {
+                        Some(_) => {
+                            println!(
+                                "{} {} - {} {}",
+                                "○".yellow(),
+                                name,
+                                config.description,
+                                "(already exists in target)".yellow()
+                            );
+                            already_exists += 1;
+                        }
+                        None => {
+                            // Secret doesn't exist in "to" provider, import it
+                            to_provider.set(&self.config.project.name, name, &value, profile)?;
+                            println!("{} {} - {}", "✓".green(), name, config.description);
+                            imported += 1;
+                        }
+                    }
+                }
+                None => {
+                    // Secret doesn't exist in "from" provider
+                    // Check if it exists in the "to" provider
+                    match to_provider.get(&self.config.project.name, name, profile)? {
+                        Some(_) => {
+                            println!(
+                                "{} {} - {} {}",
+                                "○".blue(),
+                                name,
+                                config.description,
+                                "(already in target, not in source)".blue()
+                            );
+                            already_exists += 1;
+                        }
+                        None => {
+                            println!(
+                                "{} {} - {} {}",
+                                "✗".red(),
+                                name,
+                                config.description,
+                                "(not found in source)".red()
+                            );
+                            not_found += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        println!(
+            "\nSummary: {} imported, {} already exists, {} not found in source",
+            imported.to_string().green(),
+            already_exists.to_string().yellow(),
+            not_found.to_string().red()
+        );
+
+        if imported > 0 {
+            println!(
+                "\n{} Successfully imported {} secrets from {} to {}",
+                "✓".green(),
+                imported,
+                from_provider,
+                to_provider.name()
+            );
+        }
+
+        Ok(())
+    }
+
     pub fn validate(
         &self,
         provider_arg: Option<String>,
@@ -1665,5 +1769,362 @@ NEW_SECRET = { description = "New secret", required = true }
             }
             _ => panic!("Expected ProviderOperationFailed error for read-only provider"),
         }
+    }
+
+    #[test]
+    fn test_import_between_dotenv_files() {
+        // Create temporary directory for testing
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path();
+
+        // Create project config
+        let project_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test_import_project".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: {
+                let mut profiles = HashMap::new();
+                let mut secrets = HashMap::new();
+
+                // Add test secrets
+                secrets.insert(
+                    "SECRET_ONE".to_string(),
+                    SecretConfig {
+                        description: "First test secret".to_string(),
+                        required: true,
+                        default: None,
+                    },
+                );
+                secrets.insert(
+                    "SECRET_TWO".to_string(),
+                    SecretConfig {
+                        description: "Second test secret".to_string(),
+                        required: true,
+                        default: None,
+                    },
+                );
+                secrets.insert(
+                    "SECRET_THREE".to_string(),
+                    SecretConfig {
+                        description: "Third test secret".to_string(),
+                        required: false,
+                        default: Some("default_value".to_string()),
+                    },
+                );
+                secrets.insert(
+                    "SECRET_FOUR".to_string(),
+                    SecretConfig {
+                        description: "Fourth test secret (not in source)".to_string(),
+                        required: false,
+                        default: None,
+                    },
+                );
+
+                profiles.insert("default".to_string(), ProfileConfig { secrets });
+                profiles
+            },
+        };
+
+        // Create source .env file
+        let source_env_path = project_path.join(".env.source");
+        fs::write(
+            &source_env_path,
+            "SECRET_ONE=value_one_from_source\nSECRET_TWO=value_two_from_source\n",
+        )
+        .unwrap();
+
+        // Create target .env file with existing value
+        let target_env_path = project_path.join(".env.target");
+        fs::write(&target_env_path, "SECRET_TWO=existing_value_in_target\n").unwrap();
+
+        // Create global config with target dotenv as default provider
+        let global_config = GlobalConfig {
+            defaults: DefaultConfig {
+                provider: format!("dotenv:{}", target_env_path.display()),
+                profile: Some("default".to_string()),
+            },
+            projects: HashMap::new(),
+        };
+
+        // Create SecretSpec instance
+        let spec = SecretSpec::new(project_config, Some(global_config));
+
+        // Import from source dotenv to target dotenv
+        let from_provider = format!("dotenv:{}", source_env_path.display());
+        let result = spec.import(&from_provider);
+        assert!(result.is_ok(), "Import should succeed: {:?}", result);
+
+        // Verify using dotenvy that the values are correct
+        let vars: HashMap<String, String> = {
+            let mut result = HashMap::new();
+            let env_vars = dotenvy::from_path_iter(&target_env_path).unwrap();
+            for item in env_vars {
+                let (k, v) = item.unwrap();
+                result.insert(k, v);
+            }
+            result
+        };
+
+        // SECRET_ONE should be imported
+        assert_eq!(
+            vars.get("SECRET_ONE"),
+            Some(&"value_one_from_source".to_string()),
+            "SECRET_ONE should be imported from source"
+        );
+
+        // SECRET_TWO should NOT be overwritten (already exists)
+        assert_eq!(
+            vars.get("SECRET_TWO"),
+            Some(&"existing_value_in_target".to_string()),
+            "SECRET_TWO should not be overwritten"
+        );
+
+        // SECRET_THREE and SECRET_FOUR should not be in the file
+        assert!(
+            vars.get("SECRET_THREE").is_none(),
+            "SECRET_THREE should not be imported (not in source)"
+        );
+        assert!(
+            vars.get("SECRET_FOUR").is_none(),
+            "SECRET_FOUR should not be imported (not in source)"
+        );
+    }
+
+    #[test]
+    fn test_import_edge_cases() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path();
+
+        // Create project config
+        let project_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test_edge_cases".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: {
+                let mut profiles = HashMap::new();
+                let mut secrets = HashMap::new();
+
+                secrets.insert(
+                    "EMPTY_VALUE".to_string(),
+                    SecretConfig {
+                        description: "Secret with empty value".to_string(),
+                        required: true,
+                        default: None,
+                    },
+                );
+                secrets.insert(
+                    "SPECIAL_CHARS".to_string(),
+                    SecretConfig {
+                        description: "Secret with special characters".to_string(),
+                        required: true,
+                        default: None,
+                    },
+                );
+                secrets.insert(
+                    "MULTILINE".to_string(),
+                    SecretConfig {
+                        description: "Secret with multiline value".to_string(),
+                        required: true,
+                        default: None,
+                    },
+                );
+
+                profiles.insert("default".to_string(), ProfileConfig { secrets });
+                profiles
+            },
+        };
+
+        // Create source .env file with edge case values
+        let source_env_path = project_path.join(".env.edge");
+        fs::write(
+            &source_env_path,
+            concat!(
+                "EMPTY_VALUE=\n",
+                "SPECIAL_CHARS=\"value with spaces and special chars!\"\n",
+                "MULTILINE=single_line_value_no_spaces\n"
+            ),
+        )
+        .unwrap();
+
+        let target_env_path = project_path.join(".env.target");
+        let global_config = GlobalConfig {
+            defaults: DefaultConfig {
+                provider: format!("dotenv:{}", target_env_path.display()),
+                profile: Some("default".to_string()),
+            },
+            projects: HashMap::new(),
+        };
+
+        let spec = SecretSpec::new(project_config, Some(global_config));
+
+        // Import from source to target
+        let from_provider = format!("dotenv:{}", source_env_path.display());
+        let result = spec.import(&from_provider);
+        assert!(
+            result.is_ok(),
+            "Import should handle edge cases: {:?}",
+            result
+        );
+
+        // Verify using dotenvy that the values are correct
+        let vars: HashMap<String, String> = {
+            let mut result = HashMap::new();
+            let env_vars = dotenvy::from_path_iter(&target_env_path).unwrap();
+            for item in env_vars {
+                let (k, v) = item.unwrap();
+                result.insert(k, v);
+            }
+            result
+        };
+
+        // Empty value should be imported
+        assert_eq!(
+            vars.get("EMPTY_VALUE"),
+            Some(&"".to_string()),
+            "Empty value should be imported"
+        );
+
+        // Special characters should be preserved
+        assert_eq!(
+            vars.get("SPECIAL_CHARS"),
+            Some(&"value with spaces and special chars!".to_string()),
+            "Special characters should be preserved"
+        );
+
+        // Multiline value should be imported
+        assert_eq!(
+            vars.get("MULTILINE"),
+            Some(&"single_line_value_no_spaces".to_string()),
+            "Value should be imported"
+        );
+    }
+
+    #[test]
+    fn test_import_with_profiles() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path();
+
+        // Create project config with multiple profiles
+        let project_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test_profiles".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: {
+                let mut profiles = HashMap::new();
+
+                // Development profile
+                let mut dev_secrets = HashMap::new();
+                dev_secrets.insert(
+                    "DEV_SECRET".to_string(),
+                    SecretConfig {
+                        description: "Development secret".to_string(),
+                        required: true,
+                        default: None,
+                    },
+                );
+                dev_secrets.insert(
+                    "SHARED_SECRET".to_string(),
+                    SecretConfig {
+                        description: "Shared secret".to_string(),
+                        required: true,
+                        default: None,
+                    },
+                );
+                profiles.insert(
+                    "development".to_string(),
+                    ProfileConfig {
+                        secrets: dev_secrets,
+                    },
+                );
+
+                // Production profile
+                let mut prod_secrets = HashMap::new();
+                prod_secrets.insert(
+                    "PROD_SECRET".to_string(),
+                    SecretConfig {
+                        description: "Production secret".to_string(),
+                        required: true,
+                        default: None,
+                    },
+                );
+                prod_secrets.insert(
+                    "SHARED_SECRET".to_string(),
+                    SecretConfig {
+                        description: "Shared secret".to_string(),
+                        required: true,
+                        default: None,
+                    },
+                );
+                profiles.insert(
+                    "production".to_string(),
+                    ProfileConfig {
+                        secrets: prod_secrets,
+                    },
+                );
+
+                profiles
+            },
+        };
+
+        // Create source .env file with all secrets
+        let source_env_path = project_path.join(".env.all");
+        fs::write(
+            &source_env_path,
+            concat!(
+                "DEV_SECRET=dev_value\n",
+                "PROD_SECRET=prod_value\n",
+                "SHARED_SECRET=shared_value\n"
+            ),
+        )
+        .unwrap();
+
+        let target_env_path = project_path.join(".env.dev");
+        let global_config = GlobalConfig {
+            defaults: DefaultConfig {
+                provider: format!("dotenv:{}", target_env_path.display()),
+                profile: Some("development".to_string()), // Use development profile
+            },
+            projects: HashMap::new(),
+        };
+
+        let spec = SecretSpec::new(project_config, Some(global_config));
+
+        // Import should only import secrets from the active profile (development)
+        let from_provider = format!("dotenv:{}", source_env_path.display());
+        let result = spec.import(&from_provider);
+        assert!(result.is_ok());
+
+        // Verify using dotenvy
+        let vars: HashMap<String, String> = {
+            let mut result = HashMap::new();
+            let env_vars = dotenvy::from_path_iter(&target_env_path).unwrap();
+            for item in env_vars {
+                let (k, v) = item.unwrap();
+                result.insert(k, v);
+            }
+            result
+        };
+
+        // Only DEV_SECRET and SHARED_SECRET should be imported (not PROD_SECRET)
+        assert_eq!(
+            vars.get("DEV_SECRET"),
+            Some(&"dev_value".to_string()),
+            "Development secret should be imported"
+        );
+        assert_eq!(
+            vars.get("SHARED_SECRET"),
+            Some(&"shared_value".to_string()),
+            "Shared secret should be imported for development profile"
+        );
+        assert!(
+            vars.get("PROD_SECRET").is_none(),
+            "Production secret should not be imported when using development profile"
+        );
     }
 }
