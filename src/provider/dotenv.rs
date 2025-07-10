@@ -164,4 +164,25 @@ mod tests {
         let config = DotEnvConfig::from_uri(&uri).unwrap();
         assert_eq!(config.path.to_str().unwrap(), ".env");
     }
+
+    #[test]
+    fn test_from_path_string() {
+        // Test empty path defaults to .env
+        let config = DotEnvConfig::from_path_string("");
+        assert_eq!(config.path.to_str().unwrap(), ".env");
+
+        // Test relative path
+        let config = DotEnvConfig::from_path_string("custom/.env");
+        assert_eq!(config.path.to_str().unwrap(), "custom/.env");
+
+        // Test absolute path
+        let config = DotEnvConfig::from_path_string("/etc/secrets/.env");
+        assert_eq!(config.path.to_str().unwrap(), "/etc/secrets/.env");
+    }
+
+    #[test]
+    fn test_default_config() {
+        let config = DotEnvConfig::default();
+        assert_eq!(config.path.to_str().unwrap(), ".env");
+    }
 }
