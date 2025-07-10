@@ -1,4 +1,4 @@
-{
+{ pkgs, ... }: {
   languages.rust.enable = true;
   languages.javascript = {
     enable = true;
@@ -7,6 +7,11 @@
       install.enable = true;
     };
   };
+
+  packages = [
+    # coverage testing
+    pkgs.cargo-tarpaulin
+  ];
 
   git-hooks.hooks = {
     cargo-check.enable = true;
