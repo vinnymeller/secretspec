@@ -19,11 +19,9 @@ Providers are pluggable storage backends that handle the storage and retrieval o
 
 SecretSpec determines which provider to use in this order:
 
-1. **CLI flag**: `--provider` flag (highest priority)
-2. **Environment**: `SECRETSPEC_PROVIDER` variable
-3. **Project config**: Project-specific setting in user config
-4. **Global default**: Default provider in user config
-5. **System default**: Falls back to `keyring`
+1. **CLI flag**: `secretspec --provider` flag
+2. **Environment**: `SECRETSPEC_PROVIDER` (highest priority)
+3. **Global default**: Default provider in user config set via `secretspec config init`
 
 ## Configuration
 
@@ -50,12 +48,17 @@ Configure providers with URIs:
 # ~/.config/secretspec/config.toml
 [defaults]
 provider = "keyring"
+profile = "development"  # optional default profile
+```
 
-[projects.myapp]
-provider = "1password://Personal/Development"
+You can use provider URIs for more specific configuration:
 
-[projects.api]
-provider = "dotenv:/home/user/work/.env"
+```bash
+# Use a specific 1Password vault
+$ secretspec run --provider "1password://Personal/Development" -- npm start
+
+# Use a specific dotenv file
+$ secretspec run --provider "dotenv:/home/user/work/.env" -- npm test
 ```
 
 ## Next Steps
