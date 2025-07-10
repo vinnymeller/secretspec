@@ -43,8 +43,6 @@ pub struct SecretConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalConfig {
     pub defaults: DefaultConfig,
-    #[serde(default)]
-    pub projects: HashMap<String, ProjectUserConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,11 +50,6 @@ pub struct DefaultConfig {
     pub provider: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProjectUserConfig {
-    pub provider: String,
 }
 
 #[derive(Debug)]

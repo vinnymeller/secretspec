@@ -1,0 +1,1 @@
+- move more library aspect into secretspec-types (such that Provider enum doesn't duplicate ProviderRegistry)

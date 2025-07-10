@@ -209,7 +209,6 @@ fn main() -> Result<()> {
                         provider: provider.to_string(),
                         profile,
                     },
-                    projects: HashMap::new(),
                 };
 
                 save_global_config(&config)?;

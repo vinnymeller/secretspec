@@ -313,11 +313,7 @@ impl SecretSpec {
         let provider_spec = if let Some(spec) = provider_arg {
             spec
         } else if let Some(global_config) = &self.global_config {
-            global_config
-                .projects
-                .get(&self.config.project.name)
-                .map(|p| p.provider.clone())
-                .unwrap_or(global_config.defaults.provider.clone())
+            global_config.defaults.provider.clone()
         } else {
             return Err(SecretSpecError::NoProviderConfigured);
         };

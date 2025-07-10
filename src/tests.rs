@@ -311,7 +311,6 @@ fn test_secretspec_new() {
             provider: "keyring".to_string(),
             profile: Some("dev".to_string()),
         },
-        projects: HashMap::new(),
     };
 
     let spec = SecretSpec::new(config.clone(), Some(global_config.clone()));
@@ -330,7 +329,6 @@ fn test_resolve_profile() {
             provider: "keyring".to_string(),
             profile: Some("development".to_string()),
         },
-        projects: HashMap::new(),
     };
 
     let spec = SecretSpec::new(
@@ -469,7 +467,6 @@ fn test_get_provider_with_global_config() {
             provider: "keyring".to_string(),
             profile: None,
         },
-        projects: HashMap::new(),
     };
 
     let spec = SecretSpec::new(
@@ -1381,7 +1378,6 @@ fn test_set_with_undefined_secret() {
             provider: "env".to_string(),
             profile: None,
         },
-        projects: HashMap::new(),
     };
 
     let spec = SecretSpec::new(project_config, Some(global_config));
@@ -1443,7 +1439,6 @@ fn test_set_with_defined_secret() {
             provider: "dotenv".to_string(),
             profile: None,
         },
-        projects: HashMap::new(),
     };
 
     let spec = SecretSpec::new(project_config, Some(global_config));
@@ -1492,7 +1487,6 @@ fn test_set_with_readonly_provider() {
             provider: "env".to_string(),
             profile: None,
         },
-        projects: HashMap::new(),
     };
 
     let spec = SecretSpec::new(project_config, Some(global_config));
@@ -1588,7 +1582,6 @@ fn test_import_between_dotenv_files() {
             provider: format!("dotenv:{}", target_env_path.display()),
             profile: Some("default".to_string()),
         },
-        projects: HashMap::new(),
     };
 
     // Create SecretSpec instance
@@ -1699,7 +1692,6 @@ fn test_import_edge_cases() {
             provider: format!("dotenv:{}", target_env_path.display()),
             profile: Some("default".to_string()),
         },
-        projects: HashMap::new(),
     };
 
     let spec = SecretSpec::new(project_config, Some(global_config));
@@ -1920,7 +1912,6 @@ fn test_import_with_profiles() {
             provider: format!("dotenv:{}", target_env_path.display()),
             profile: Some("development".to_string()), // Use development profile
         },
-        projects: HashMap::new(),
     };
 
     let spec = SecretSpec::new(project_config, Some(global_config));
@@ -1978,7 +1969,6 @@ fn test_run_with_empty_command() {
                 provider: format!("dotenv:{}", env_file.display()),
                 profile: None,
             },
-            projects: HashMap::new(),
         }),
     );
 
@@ -2028,7 +2018,6 @@ fn test_run_with_missing_required_secrets() {
                 provider: format!("dotenv:{}", env_file.display()),
                 profile: None,
             },
-            projects: HashMap::new(),
         }),
     );
 
@@ -2076,7 +2065,6 @@ fn test_get_existing_secret() {
                 provider: format!("dotenv:{}", env_file.display()),
                 profile: None,
             },
-            projects: HashMap::new(),
         }),
     );
 
@@ -2118,7 +2106,6 @@ fn test_get_secret_with_default() {
                 provider: format!("dotenv:{}", env_file.display()),
                 profile: None,
             },
-            projects: HashMap::new(),
         }),
     );
 
@@ -2159,7 +2146,6 @@ fn test_get_nonexistent_secret() {
                 provider: format!("dotenv:{}", env_file.display()),
                 profile: None,
             },
-            projects: HashMap::new(),
         }),
     );
 
