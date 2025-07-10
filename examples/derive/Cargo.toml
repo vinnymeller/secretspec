@@ -1,8 +1,8 @@
 [package]
 name = "derive-example"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-secretspec = { path = "../..", features = ["macros"] }
-http = "1.0"
+secretspec.workspace = true
+http.workspace = true
