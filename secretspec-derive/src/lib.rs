@@ -104,7 +104,7 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
     });
 
     // Generate field assignments for load()
-    let load_assignments = field_info.iter().map(|(name, field_type)| {
+    let load_assignments: Vec<_> = field_info.iter().map(|(name, field_type)| {
         let field_name = format_ident!("{}", name.to_lowercase());
         let secret_name = name.clone();
         // Check if this is an Option type by looking at the field_type
@@ -121,7 +121,7 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
                     .clone()
             }
         }
-    });
+    }).collect();
 
     // Generate env var setters
     let env_setters = field_info.iter().map(|(name, field_type)| {
@@ -174,16 +174,16 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
             .collect()
     };
 
-    // Generate string to Profile enum mapping
-    let str_to_profile = if all_profiles.is_empty() {
-        vec![quote! { "default" => Profile::Default }]
+    // Generate string to Profile enum mapping for TryFrom
+    let str_to_profile_try = if all_profiles.is_empty() {
+        vec![quote! { "default" => Ok(Profile::Default) }]
     } else {
         all_profiles
             .iter()
             .map(|name| {
                 let variant = format_ident!("{}", capitalize_first(name));
                 let str_val = name.clone();
-                quote! { #str_val => Profile::#variant }
+                quote! { #str_val => Ok(Profile::#variant) }
             })
             .collect()
     };
@@ -192,7 +192,10 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
     let first_profile_variant = if all_profiles.is_empty() {
         format_ident!("Default")
     } else {
-        let first_profile = all_profiles.iter().next().unwrap();
+        let first_profile = all_profiles
+            .iter()
+            .next()
+            .expect("all_profiles should have at least one element when not empty");
         format_ident!("{}", capitalize_first(first_profile))
     };
 
@@ -333,13 +336,164 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
             #(#profile_variants,)*
         }
 
+        impl std::convert::TryFrom<&str> for Profile {
+            type Error = secretspec::SecretSpecError;
+
+            fn try_from(value: &str) -> Result<Self, Self::Error> {
+                match value {
+                    #(#str_to_profile_try,)*
+                    _ => Err(secretspec::SecretSpecError::InvalidProfile(value.to_string())),
+                }
+            }
+        }
+
+        impl std::convert::TryFrom<String> for Profile {
+            type Error = secretspec::SecretSpecError;
+
+            fn try_from(value: String) -> Result<Self, Self::Error> {
+                Profile::try_from(value.as_str())
+            }
+        }
+
         // Use Provider from secretspec_types
         pub use secretspec::Provider;
 
         // Type alias to help with type inference
         type LoadResult<T> = Result<T, secretspec::SecretSpecError>;
 
+        pub struct SecretSpecBuilder {
+            provider: Option<Box<dyn FnOnce() -> Result<http::Uri, String>>>,
+            profile: Option<Box<dyn FnOnce() -> Result<Profile, String>>>,
+        }
+
+        impl Default for SecretSpecBuilder {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+
+        impl SecretSpecBuilder {
+            pub fn new() -> Self {
+                Self {
+                    provider: None,
+                    profile: None,
+                }
+            }
+
+            pub fn with_provider<T>(mut self, provider: T) -> Self
+            where
+                T: TryInto<http::Uri> + 'static,
+                T::Error: std::fmt::Display + 'static
+            {
+                self.provider = Some(Box::new(move || {
+                    provider.try_into()
+                        .map_err(|e| format!("Invalid provider URI: {}", e))
+                }));
+                self
+            }
+
+            pub fn with_profile<T>(mut self, profile: T) -> Self
+            where
+                T: TryInto<Profile> + 'static,
+                T::Error: std::fmt::Display + 'static
+            {
+                self.profile = Some(Box::new(move || {
+                    profile.try_into()
+                        .map_err(|e| format!("{}", e))
+                }));
+                self
+            }
+
+            pub fn load(self) -> Result<secretspec::SecretSpecSecrets<SecretSpec>, secretspec::SecretSpecError> {
+                let spec = secretspec::SecretSpec::load()?;
+
+                // Resolve provider conversion
+                let provider_str = if let Some(provider_fn) = self.provider {
+                    let uri = provider_fn()
+                        .map_err(|e| secretspec::SecretSpecError::ProviderOperationFailed(e))?;
+                    Some(uri.to_string())
+                } else {
+                    None
+                };
+
+                // Resolve profile conversion
+                let profile_str = if let Some(profile_fn) = self.profile {
+                    let profile = profile_fn()
+                        .map_err(|e| secretspec::SecretSpecError::InvalidProfile(e))?;
+                    Some(match profile {
+                        #(#profile_to_str,)*
+                    }.to_string())
+                } else {
+                    None
+                };
+
+                let validation_result = spec.validate(provider_str, profile_str)?;
+                let secrets = validation_result.secrets;
+
+                let data = SecretSpec {
+                    #(#load_assignments,)*
+                };
+
+                Ok(secretspec::SecretSpecSecrets::new(
+                    data,
+                    validation_result.provider,
+                    validation_result.profile,
+                ))
+            }
+
+            pub fn load_profile(self) -> Result<secretspec::SecretSpecSecrets<SecretSpecProfile>, secretspec::SecretSpecError> {
+                let spec = secretspec::SecretSpec::load()?;
+
+                // Resolve provider conversion
+                let provider_str = if let Some(provider_fn) = self.provider {
+                    let uri = provider_fn()
+                        .map_err(|e| secretspec::SecretSpecError::ProviderOperationFailed(e))?;
+                    Some(uri.to_string())
+                } else {
+                    None
+                };
+
+                // Resolve profile conversion
+                let (profile_str, selected_profile) = if let Some(profile_fn) = self.profile {
+                    let profile = profile_fn()
+                        .map_err(|e| secretspec::SecretSpecError::InvalidProfile(e))?;
+                    let profile_str = match profile {
+                        #(#profile_to_str,)*
+                    }.to_string();
+                    (Some(profile_str), profile)
+                } else {
+                    // Check env var for profile
+                    let profile_str = std::env::var("SECRETSPEC_PROFILE").ok();
+                    let selected_profile = if let Some(ref profile_name) = profile_str {
+                        Profile::try_from(profile_name.as_str())?
+                    } else {
+                        Profile::#first_profile_variant
+                    };
+                    (profile_str, selected_profile)
+                };
+
+                let validation_result = spec.validate(provider_str, profile_str)?;
+                let secrets = validation_result.secrets;
+
+                let data_result: LoadResult<SecretSpecProfile> = match selected_profile {
+                    #(#load_profile_arms,)*
+                };
+                let data = data_result?;
+
+                Ok(secretspec::SecretSpecSecrets::new(
+                    data,
+                    validation_result.provider,
+                    validation_result.profile,
+                ))
+            }
+        }
+
         impl SecretSpec {
+            /// Create a new builder for loading secrets
+            pub fn builder() -> SecretSpecBuilder {
+                SecretSpecBuilder::new()
+            }
+
             /// Load secrets with optional provider and/or profile
             /// If provider is None, uses SECRETSPEC_PROVIDER env var or global config
             /// If profile is None, uses SECRETSPEC_PROFILE env var if set
@@ -374,54 +528,6 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
                 ))
             }
 
-            /// Load secrets as profile-specific enum type
-            /// If provider is None, uses SECRETSPEC_PROVIDER env var or global config
-            /// If profile is None, uses SECRETSPEC_PROFILE env var if set
-            pub fn load_as_profile(provider: Option<Provider>, profile: Option<Profile>) -> Result<secretspec::SecretSpecSecrets<SecretSpecProfile>, secretspec::SecretSpecError> {
-                let spec = secretspec::SecretSpec::load()?;
-
-                // Convert provider enum to string if provided, otherwise check env var
-                let provider_str = match provider {
-                    Some(p) => Some(p.to_string()),
-                    None => std::env::var("SECRETSPEC_PROVIDER").ok(),
-                };
-
-                // Convert profile enum to string if provided, otherwise check env var
-                let profile_str = match profile {
-                    Some(p) => Some(match p {
-                        #(#profile_to_str,)*
-                    }.to_string()),
-                    None => std::env::var("SECRETSPEC_PROFILE").ok(),
-                };
-
-                let validation_result = spec.validate(provider_str, profile_str.clone())?;
-                let secrets = validation_result.secrets;
-
-                // Determine which profile to use
-                let selected_profile = if let Some(p) = profile {
-                    p
-                } else if let Some(profile_name) = profile_str.as_deref() {
-                    // Convert string to Profile enum
-                    match profile_name {
-                        #(#str_to_profile,)*
-                        _ => return Err(secretspec::SecretSpecError::InvalidProfile(profile_name.to_string())),
-                    }
-                } else {
-                    // Default to first profile
-                    Profile::#first_profile_variant
-                };
-
-                let data_result: LoadResult<SecretSpecProfile> = match selected_profile {
-                    #(#load_profile_arms,)*
-                };
-                let data = data_result?;
-
-                Ok(secretspec::SecretSpecSecrets::new(
-                    data,
-                    validation_result.provider,
-                    validation_result.profile,
-                ))
-            }
 
             pub fn set_as_env_vars(&self) {
                 #(#env_setters)*

@@ -21,11 +21,11 @@ Basic example:
 secretspec::define_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load secrets with type-safe struct
-    let secretspec = SecretSpec::load(
-        Some(secretspec::Provider::Keyring),
-        None  // Use default profile
-    )?;
+    // Load secrets using the builder pattern
+    let secretspec = SecretSpec::builder()
+        .with_provider("keyring")  // Can use provider name or URI like "dotenv:/path/to/.env"
+        .with_profile("development")  // Can use string or Profile enum
+        .load()?;  // All conversions and errors are handled here
 
     // Access secrets (field names are lowercased)
     println!("Database: {}", secretspec.secrets.database_url);  // DATABASE_URL → database_url
@@ -46,19 +46,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## Loading with Profile Information
+## Loading with Profile-Specific Types
 
-The `load_as_profile` method provides profile-specific types for your secrets:
+The `load_profile()` method on the builder provides profile-specific types for your secrets:
 
 ```rust
 secretspec::define_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load secrets with profile-specific types
-    let secretspec = SecretSpec::load_as_profile(
-        Some(secretspec::Provider::Keyring),
-        Some(Profile::Production)
-    )?;
+    let secretspec = SecretSpec::builder()
+        .with_provider("keyring")
+        .with_profile(Profile::Production)
+        .load_profile()?;
     
     // Access profile and provider information
     println!("Loaded profile: {}", secretspec.profile);

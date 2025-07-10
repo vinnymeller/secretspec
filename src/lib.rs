@@ -164,7 +164,110 @@ pub struct SecretSpec {
     global_config: Option<GlobalConfig>,
 }
 
+pub struct SecretSpecBuilder {
+    project_config_path: Option<PathBuf>,
+    global_config_path: Option<PathBuf>,
+    project_config: Option<ProjectConfig>,
+    global_config: Option<GlobalConfig>,
+    default_provider: Option<String>,
+    default_profile: Option<String>,
+    skip_global_config: bool,
+}
+
+impl Default for SecretSpecBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SecretSpecBuilder {
+    pub fn new() -> Self {
+        Self {
+            project_config_path: None,
+            global_config_path: None,
+            project_config: None,
+            global_config: None,
+            default_provider: None,
+            default_profile: None,
+            skip_global_config: false,
+        }
+    }
+
+    pub fn project_config_path<P: Into<PathBuf>>(mut self, path: P) -> Self {
+        self.project_config_path = Some(path.into());
+        self
+    }
+
+    pub fn global_config_path<P: Into<PathBuf>>(mut self, path: P) -> Self {
+        self.global_config_path = Some(path.into());
+        self
+    }
+
+    pub fn project_config(mut self, config: ProjectConfig) -> Self {
+        self.project_config = Some(config);
+        self
+    }
+
+    pub fn global_config(mut self, config: GlobalConfig) -> Self {
+        self.global_config = Some(config);
+        self
+    }
+
+    pub fn default_provider(mut self, provider: impl Into<String>) -> Self {
+        self.default_provider = Some(provider.into());
+        self
+    }
+
+    pub fn default_profile(mut self, profile: impl Into<String>) -> Self {
+        self.default_profile = Some(profile.into());
+        self
+    }
+
+    pub fn skip_global_config(mut self) -> Self {
+        self.skip_global_config = true;
+        self
+    }
+
+    pub fn load(mut self) -> Result<SecretSpec> {
+        // Load project config
+        let project_config = if let Some(config) = self.project_config {
+            config
+        } else if let Some(path) = self.project_config_path {
+            load_project_config_from_path(&path)?
+        } else {
+            load_project_config()?
+        };
+
+        // Load global config
+        let global_config = if self.skip_global_config {
+            None
+        } else if let Some(config) = self.global_config {
+            Some(config)
+        } else if let Some(path) = self.global_config_path {
+            load_global_config_from_path(&path)?
+        } else {
+            let mut gc = load_global_config()?;
+            // Apply default overrides if provided
+            if let Some(gc) = gc.as_mut() {
+                if let Some(provider) = self.default_provider.take() {
+                    gc.defaults.provider = provider;
+                }
+                if let Some(profile) = self.default_profile.take() {
+                    gc.defaults.profile = Some(profile);
+                }
+            }
+            gc
+        };
+
+        Ok(SecretSpec::new(project_config, global_config))
+    }
+}
+
 impl SecretSpec {
+    pub fn builder() -> SecretSpecBuilder {
+        SecretSpecBuilder::new()
+    }
+
     pub fn new(config: ProjectConfig, global_config: Option<GlobalConfig>) -> Self {
         Self {
             config,
@@ -173,9 +276,7 @@ impl SecretSpec {
     }
 
     pub fn load() -> Result<Self> {
-        let project_config = load_project_config()?;
-        let global_config = load_global_config()?;
-        Ok(Self::new(project_config, global_config))
+        SecretSpecBuilder::new().load()
     }
 
     fn resolve_profile<'a>(&'a self, profile: Option<&'a str>) -> &'a str {
@@ -719,6 +820,10 @@ fn load_project_config() -> Result<ProjectConfig> {
     parse_spec(Path::new("secretspec.toml"))
 }
 
+fn load_project_config_from_path(path: &Path) -> Result<ProjectConfig> {
+    parse_spec(path)
+}
+
 fn load_global_config() -> Result<Option<GlobalConfig>> {
     let config_path = get_config_path()?;
     if !config_path.exists() {
@@ -728,11 +833,111 @@ fn load_global_config() -> Result<Option<GlobalConfig>> {
     Ok(Some(toml::from_str(&content)?))
 }
 
+fn load_global_config_from_path(path: &Path) -> Result<Option<GlobalConfig>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(path)?;
+    Ok(Some(toml::from_str(&content)?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;
+
+    #[test]
+    fn test_builder_pattern() {
+        // Test default builder
+        let builder = SecretSpec::builder();
+        assert!(builder.project_config_path.is_none());
+        assert!(builder.global_config_path.is_none());
+        assert!(!builder.skip_global_config);
+    }
+
+    #[test]
+    fn test_builder_with_project_config() {
+        let config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test-project".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: HashMap::new(),
+        };
+
+        let spec = SecretSpec::builder()
+            .project_config(config)
+            .skip_global_config()
+            .load()
+            .unwrap();
+
+        assert_eq!(spec.config.project.name, "test-project");
+        assert!(spec.global_config.is_none());
+    }
+
+    #[test]
+    fn test_builder_with_custom_paths() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().join("custom-secretspec.toml");
+        let global_path = temp_dir.path().join("custom-global.toml");
+
+        // Create test project config
+        let project_config = r#"
+[project]
+name = "custom-project"
+revision = "1.0"
+
+[profiles.default]
+API_KEY = { description = "API Key", required = true }
+"#;
+        fs::write(&project_path, project_config).unwrap();
+
+        // Create test global config
+        let global_config = r#"
+[defaults]
+provider = "keyring"
+profile = "development"
+"#;
+        fs::write(&global_path, global_config).unwrap();
+
+        let spec = SecretSpec::builder()
+            .project_config_path(&project_path)
+            .global_config_path(&global_path)
+            .load()
+            .unwrap();
+
+        assert_eq!(spec.config.project.name, "custom-project");
+        assert_eq!(
+            spec.global_config.as_ref().unwrap().defaults.provider,
+            "keyring"
+        );
+    }
+
+    #[test]
+    fn test_builder_with_default_overrides() {
+        let config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test-project".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: HashMap::new(),
+        };
+
+        let spec = SecretSpec::builder()
+            .project_config(config)
+            .default_provider("dotenv")
+            .default_profile("production")
+            .skip_global_config()
+            .load()
+            .unwrap();
+
+        assert_eq!(spec.config.project.name, "test-project");
+        // Since we skipped global config, these overrides won't be applied
+        assert!(spec.global_config.is_none());
+    }
 
     #[test]
     fn test_extends_functionality() {
@@ -2000,6 +2205,92 @@ NEW_SECRET = { description = "New secret", required = true }
             vars.get("MULTILINE"),
             Some(&"single_line_value_no_spaces".to_string()),
             "Value should be imported"
+        );
+    }
+
+    #[test]
+    fn test_profiles_are_independent_no_merging() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().join("secretspec.toml");
+
+        // Create a secretspec.toml with default and development profiles
+        // where development has same secret with different description and default
+        let config_content = r#"
+[project]
+name = "test-no-merge"
+revision = "1.0"
+
+[profiles.default]
+DATABASE_URL = { description = "Default database connection", required = true, default = "postgres://localhost/default" }
+API_KEY = { description = "API key for services", required = true }
+CACHE_TTL = { description = "Cache time to live", required = false, default = "3600" }
+
+[profiles.development]
+DATABASE_URL = { description = "Dev database connection", required = true, default = "postgres://localhost/dev" }
+API_KEY = { description = "Dev API key", required = true }
+# Note: CACHE_TTL is NOT defined in development profile
+"#;
+        fs::write(&project_path, config_content).unwrap();
+
+        // Load the config
+        let spec = SecretSpec::builder()
+            .project_config_path(&project_path)
+            .skip_global_config()
+            .load()
+            .unwrap();
+
+        // Test that profiles are completely independent
+
+        // 1. Check default profile
+        let (required, default_val) = spec
+            .resolve_secret_config("DATABASE_URL", Some("default"))
+            .expect("DATABASE_URL should exist in default");
+        assert!(required);
+        assert_eq!(
+            default_val,
+            Some("postgres://localhost/default".to_string())
+        );
+
+        // 2. Check development profile - should have its own description and default
+        let (required, default_val) = spec
+            .resolve_secret_config("DATABASE_URL", Some("development"))
+            .expect("DATABASE_URL should exist in development");
+        assert!(required);
+        assert_eq!(default_val, Some("postgres://localhost/dev".to_string()));
+
+        // 3. Check that CACHE_TTL exists in default but NOT in development
+        // This proves profiles don't inherit from each other
+        assert!(
+            spec.resolve_secret_config("CACHE_TTL", Some("default"))
+                .is_some()
+        );
+        assert!(
+            spec.resolve_secret_config("CACHE_TTL", Some("development"))
+                .is_none()
+        );
+
+        // 4. Verify through validation that development profile doesn't see CACHE_TTL
+        let default_validation = spec
+            .validate(Some("env".to_string()), Some("default".to_string()))
+            .unwrap();
+        let dev_validation = spec
+            .validate(Some("env".to_string()), Some("development".to_string()))
+            .unwrap();
+
+        // Default profile should know about 3 secrets
+        assert_eq!(
+            default_validation.missing_required.len()
+                + default_validation.missing_optional.len()
+                + default_validation.with_defaults.len(),
+            3
+        );
+
+        // Development profile should only know about 2 secrets (no CACHE_TTL)
+        assert_eq!(
+            dev_validation.missing_required.len()
+                + dev_validation.missing_optional.len()
+                + dev_validation.with_defaults.len(),
+            2
         );
     }
 

@@ -38,11 +38,16 @@ impl DotEnvConfig {
         // - dotenv://localhost (default .env)
         // - dotenv:relative/path (gets normalized with authority)
 
-        let path = if uri.authority().is_some() && uri.authority().unwrap().host() == "localhost" {
+        let path = if uri.authority().is_some()
+            && uri.authority().map(|a| a.host()) == Some("localhost")
+        {
             // URI was normalized with localhost authority
             let uri_path = uri.path();
             if uri_path.is_empty() || uri_path == "/" {
                 ".env"
+            } else if uri_path.starts_with("/./") {
+                // Handle relative paths that were normalized with leading /
+                &uri_path[1..]
             } else {
                 // Path from URI with authority always starts with /
                 uri_path

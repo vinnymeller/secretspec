@@ -86,7 +86,11 @@ impl ProviderRegistry {
         } else if s.contains(':') && s.contains('/') {
             // Has colon and slashes but not "://", probably like "dotenv:/path"
             // Insert authority after the colon
-            let colon_pos = s.find(':').unwrap();
+            let colon_pos = s.find(':').ok_or_else(|| {
+                SecretSpecError::ProviderOperationFailed(
+                    "Invalid URI format: missing scheme separator".to_string(),
+                )
+            })?;
             format!("{}://localhost{}", &s[..colon_pos], &s[colon_pos + 1..])
         } else {
             // Just a provider name, make it a proper URI

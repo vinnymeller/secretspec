@@ -269,7 +269,11 @@ impl Provider for OnePasswordProvider {
                 "item",
                 "create",
                 "--template",
-                temp_file.path().to_str().unwrap(),
+                temp_file.path().to_str().ok_or_else(|| {
+                    SecretSpecError::ProviderOperationFailed(
+                        "Invalid UTF-8 in temporary file path".to_string(),
+                    )
+                })?,
             ];
 
             self.execute_op_command(&args)?;

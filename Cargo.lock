@@ -549,6 +549,7 @@ dependencies = [
 name = "derive-example"
 version = "0.1.0"
 dependencies = [
+ "http",
  "secretspec",
 ]
 
@@ -1578,6 +1579,7 @@ dependencies = [
 name = "secretspec-derive"
 version = "0.1.0"
 dependencies = [
+ "http",
  "insta",
  "proc-macro2",
  "quote",
