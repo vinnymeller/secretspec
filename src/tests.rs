@@ -8,7 +8,6 @@ fn test_builder_pattern() {
     let builder = SecretSpec::builder();
     assert!(builder.project_config_path.is_none());
     assert!(builder.global_config_path.is_none());
-    assert!(!builder.skip_global_config);
 }
 
 #[test]
@@ -22,14 +21,9 @@ fn test_builder_with_project_config() {
         profiles: HashMap::new(),
     };
 
-    let spec = SecretSpec::builder()
-        .project_config(config)
-        .skip_global_config()
-        .load()
-        .unwrap();
+    let spec = SecretSpec::builder().project_config(config).load().unwrap();
 
     assert_eq!(spec.config.project.name, "test-project");
-    assert!(spec.global_config.is_none());
 }
 
 #[test]
@@ -85,13 +79,10 @@ fn test_builder_with_default_overrides() {
         .project_config(config)
         .default_provider("dotenv")
         .default_profile("production")
-        .skip_global_config()
         .load()
         .unwrap();
 
     assert_eq!(spec.config.project.name, "test-project");
-    // Since we skipped global config, these overrides won't be applied
-    assert!(spec.global_config.is_none());
 }
 
 #[test]
@@ -188,6 +179,403 @@ API_KEY = { description = "API key for external service", required = false, defa
     let jwt_config = default_profile.secrets.get("JWT_SECRET").unwrap();
     assert_eq!(jwt_config.description, "Secret key for JWT token signing");
     assert!(jwt_config.required);
+}
+
+#[test]
+fn test_validation_result_is_valid() {
+    let valid_result = ValidationResult {
+        secrets: HashMap::new(),
+        missing_required: Vec::new(),
+        missing_optional: vec!["optional_secret".to_string()],
+        with_defaults: Vec::new(),
+        provider: secretspec_types::Provider::Keyring,
+        profile: "default".to_string(),
+    };
+    assert!(valid_result.is_valid());
+
+    let invalid_result = ValidationResult {
+        secrets: HashMap::new(),
+        missing_required: vec!["required_secret".to_string()],
+        missing_optional: Vec::new(),
+        with_defaults: Vec::new(),
+        provider: secretspec_types::Provider::Keyring,
+        profile: "default".to_string(),
+    };
+    assert!(!invalid_result.is_valid());
+}
+
+#[test]
+fn test_project_config_from_path_with_empty_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let empty_file = temp_dir.path().join(".env");
+    fs::write(&empty_file, "").unwrap();
+
+    let config = project_config_from_path(&empty_file).unwrap();
+    assert_eq!(config.project.revision, "1.0");
+    assert!(config.profiles.contains_key("default"));
+    assert!(config.profiles["default"].secrets.is_empty());
+}
+
+#[test]
+fn test_project_config_from_path_with_env_vars() {
+    let temp_dir = TempDir::new().unwrap();
+    let env_file = temp_dir.path().join(".env");
+    fs::write(&env_file, "API_KEY=test\nDATABASE_URL=postgres://localhost").unwrap();
+
+    let config = project_config_from_path(&env_file).unwrap();
+    let default_profile = &config.profiles["default"];
+
+    assert!(default_profile.secrets.contains_key("API_KEY"));
+    assert!(default_profile.secrets.contains_key("DATABASE_URL"));
+    assert_eq!(
+        default_profile.secrets["API_KEY"].description,
+        "API_KEY secret"
+    );
+    assert!(default_profile.secrets["API_KEY"].required);
+}
+
+#[test]
+fn test_project_config_from_nonexistent_path() {
+    let temp_dir = TempDir::new().unwrap();
+    let nonexistent = temp_dir.path().join("nonexistent.env");
+
+    let config = project_config_from_path(&nonexistent).unwrap();
+    assert!(config.profiles["default"].secrets.is_empty());
+}
+
+#[test]
+fn test_get_example_toml() {
+    let example = get_example_toml();
+    assert!(example.contains("[profiles.development]"));
+    assert!(example.contains("API_KEY"));
+    assert!(example.contains("DATABASE_URL"));
+    assert!(example.contains("JWT_SECRET"));
+}
+
+#[test]
+fn test_generate_toml_with_comments() {
+    let mut secrets = HashMap::new();
+    secrets.insert(
+        "API_KEY".to_string(),
+        SecretConfig {
+            description: "API key for service".to_string(),
+            required: true,
+            default: None,
+        },
+    );
+    secrets.insert(
+        "DATABASE_URL".to_string(),
+        SecretConfig {
+            description: "Database connection".to_string(),
+            required: false,
+            default: Some("sqlite:///test.db".to_string()),
+        },
+    );
+
+    let mut profiles = HashMap::new();
+    profiles.insert("default".to_string(), ProfileConfig { secrets });
+
+    let config = ProjectConfig {
+        project: ProjectInfo {
+            name: "test-project".to_string(),
+            revision: "1.0".to_string(),
+            extends: None,
+        },
+        profiles,
+    };
+
+    let toml_output = generate_toml_with_comments(&config).unwrap();
+    assert!(toml_output.contains("[project]"));
+    assert!(toml_output.contains("name = \"test-project\""));
+    assert!(toml_output.contains("revision = \"1.0\""));
+    assert!(toml_output.contains("[profiles.default]"));
+    assert!(toml_output.contains("API_KEY"));
+    assert!(toml_output.contains("required = true"));
+    assert!(toml_output.contains("default = \"sqlite:///test.db\""));
+    assert!(toml_output.contains("# extends = [ \"subdir1\", \"subdir2\" ]"));
+}
+
+#[test]
+fn test_secretspec_new() {
+    let config = ProjectConfig {
+        project: ProjectInfo {
+            name: "test".to_string(),
+            revision: "1.0".to_string(),
+            extends: None,
+        },
+        profiles: HashMap::new(),
+    };
+
+    let global_config = GlobalConfig {
+        defaults: DefaultConfig {
+            provider: "keyring".to_string(),
+            profile: Some("dev".to_string()),
+        },
+        projects: HashMap::new(),
+    };
+
+    let spec = SecretSpec::new(config.clone(), Some(global_config.clone()));
+    assert_eq!(spec.config.project.name, "test");
+    assert!(spec.global_config.is_some());
+    assert_eq!(spec.global_config.unwrap().defaults.provider, "keyring");
+
+    let spec_without_global = SecretSpec::new(config, None);
+    assert!(spec_without_global.global_config.is_none());
+}
+
+#[test]
+fn test_resolve_profile() {
+    let global_config = GlobalConfig {
+        defaults: DefaultConfig {
+            provider: "keyring".to_string(),
+            profile: Some("development".to_string()),
+        },
+        projects: HashMap::new(),
+    };
+
+    let spec = SecretSpec::new(
+        ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: HashMap::new(),
+        },
+        Some(global_config),
+    );
+
+    // Test with explicit profile
+    assert_eq!(spec.resolve_profile(Some("production")), "production");
+
+    // Test with global config default
+    assert_eq!(spec.resolve_profile(None), "development");
+
+    // Test without global config
+    let spec_no_global = SecretSpec::new(
+        ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: HashMap::new(),
+        },
+        None,
+    );
+    assert_eq!(spec_no_global.resolve_profile(None), "default");
+}
+
+#[test]
+fn test_resolve_secret_config() {
+    let mut default_secrets = HashMap::new();
+    default_secrets.insert(
+        "API_KEY".to_string(),
+        SecretConfig {
+            description: "API Key".to_string(),
+            required: true,
+            default: None,
+        },
+    );
+    default_secrets.insert(
+        "DATABASE_URL".to_string(),
+        SecretConfig {
+            description: "Database URL".to_string(),
+            required: false,
+            default: Some("sqlite:///default.db".to_string()),
+        },
+    );
+
+    let mut dev_secrets = HashMap::new();
+    dev_secrets.insert(
+        "API_KEY".to_string(),
+        SecretConfig {
+            description: "Dev API Key".to_string(),
+            required: false,
+            default: Some("dev-key".to_string()),
+        },
+    );
+
+    let mut profiles = HashMap::new();
+    profiles.insert(
+        "default".to_string(),
+        ProfileConfig {
+            secrets: default_secrets,
+        },
+    );
+    profiles.insert(
+        "development".to_string(),
+        ProfileConfig {
+            secrets: dev_secrets,
+        },
+    );
+
+    let spec = SecretSpec::new(
+        ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles,
+        },
+        None,
+    );
+
+    // Test profile-specific secret
+    let (required, default) = spec
+        .resolve_secret_config("API_KEY", Some("development"))
+        .unwrap();
+    assert!(!required);
+    assert_eq!(default, Some("dev-key".to_string()));
+
+    // Test fallback to default profile
+    let (required, default) = spec
+        .resolve_secret_config("DATABASE_URL", Some("development"))
+        .unwrap();
+    assert!(!required);
+    assert_eq!(default, Some("sqlite:///default.db".to_string()));
+
+    // Test nonexistent secret
+    assert!(
+        spec.resolve_secret_config("NONEXISTENT", Some("development"))
+            .is_none()
+    );
+}
+
+#[test]
+fn test_get_provider_error_cases() {
+    let spec = SecretSpec::new(
+        ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: HashMap::new(),
+        },
+        None,
+    );
+
+    // Test with no provider configured
+    let result = spec.get_provider(None);
+    assert!(matches!(result, Err(SecretSpecError::NoProviderConfigured)));
+}
+
+#[test]
+fn test_get_provider_with_global_config() {
+    let global_config = GlobalConfig {
+        defaults: DefaultConfig {
+            provider: "keyring".to_string(),
+            profile: None,
+        },
+        projects: HashMap::new(),
+    };
+
+    let spec = SecretSpec::new(
+        ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: HashMap::new(),
+        },
+        Some(global_config),
+    );
+
+    // Should not error with global config
+    let result = spec.get_provider(None);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_parse_spec_error_handling() {
+    let temp_dir = TempDir::new().unwrap();
+    let invalid_toml = temp_dir.path().join("invalid.toml");
+    fs::write(&invalid_toml, "[invalid toml content").unwrap();
+
+    let result = parse_spec(&invalid_toml);
+    assert!(matches!(result, Err(SecretSpecError::Toml(_))));
+
+    // Test nonexistent file
+    let nonexistent = temp_dir.path().join("nonexistent.toml");
+    let result = parse_spec(&nonexistent);
+    assert!(matches!(result, Err(SecretSpecError::NoManifest)));
+}
+
+#[test]
+fn test_parse_spec_from_str() {
+    let valid_toml = r#"
+[project]
+name = "test"
+revision = "1.0"
+
+[profiles.default]
+API_KEY = { description = "API Key", required = true }
+"#;
+
+    let result = parse_spec_from_str(valid_toml, None);
+    assert!(result.is_ok());
+    let config = result.unwrap();
+    assert_eq!(config.project.name, "test");
+
+    // Test invalid TOML
+    let invalid_toml = "[invalid";
+    let result = parse_spec_from_str(invalid_toml, None);
+    assert!(matches!(result, Err(SecretSpecError::Toml(_))));
+}
+
+#[test]
+fn test_load_global_config_from_path_nonexistent() {
+    let temp_dir = TempDir::new().unwrap();
+    let nonexistent = temp_dir.path().join("nonexistent.toml");
+
+    let result = load_global_config_from_path(&nonexistent).unwrap();
+    assert!(result.is_none());
+}
+
+#[test]
+fn test_load_global_config_from_path_valid() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_file = temp_dir.path().join("config.toml");
+    let config_content = r#"
+[defaults]
+provider = "keyring"
+profile = "development"
+"#;
+    fs::write(&config_file, config_content).unwrap();
+
+    let result = load_global_config_from_path(&config_file).unwrap();
+    assert!(result.is_some());
+    let config = result.unwrap();
+    assert_eq!(config.defaults.provider, "keyring");
+    assert_eq!(config.defaults.profile, Some("development".to_string()));
+}
+
+#[test]
+fn test_secretspec_write() {
+    let temp_dir = TempDir::new().unwrap();
+    let env_file = temp_dir.path().join(".env");
+    fs::write(&env_file, "API_KEY=test\nDATABASE_URL=postgres://localhost").unwrap();
+
+    let spec = SecretSpec::new(
+        ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: HashMap::new(),
+        },
+        None,
+    );
+
+    let result = spec.write(&env_file, Some(temp_dir.path()));
+    assert!(result.is_ok());
+
+    // Check that secretspec.toml was created
+    assert!(temp_dir.path().join("secretspec.toml").exists());
 }
 
 #[test]
@@ -1385,7 +1773,6 @@ API_KEY = { description = "Dev API key", required = true }
     // Load the config
     let spec = SecretSpec::builder()
         .project_config_path(&project_path)
-        .skip_global_config()
         .load()
         .unwrap();
 
@@ -1569,4 +1956,220 @@ fn test_import_with_profiles() {
         vars.get("PROD_SECRET").is_none(),
         "Production secret should not be imported when using development profile"
     );
+}
+
+#[test]
+fn test_run_with_empty_command() {
+    let temp_dir = TempDir::new().unwrap();
+    let env_file = temp_dir.path().join(".env");
+    fs::write(&env_file, "").unwrap();
+
+    let spec = SecretSpec::new(
+        ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: HashMap::new(),
+        },
+        Some(GlobalConfig {
+            defaults: DefaultConfig {
+                provider: format!("dotenv:{}", env_file.display()),
+                profile: None,
+            },
+            projects: HashMap::new(),
+        }),
+    );
+
+    let result = spec.run(vec![], None, None);
+    assert!(result.is_err());
+
+    match result {
+        Err(SecretSpecError::Io(e)) => {
+            assert_eq!(e.kind(), io::ErrorKind::InvalidInput);
+            assert!(e.to_string().contains("No command specified"));
+        }
+        _ => panic!("Expected IO InvalidInput error"),
+    }
+}
+
+#[test]
+fn test_run_with_missing_required_secrets() {
+    let temp_dir = TempDir::new().unwrap();
+    let env_file = temp_dir.path().join(".env");
+    // Create empty .env file so required secret is missing
+    fs::write(&env_file, "").unwrap();
+
+    let mut secrets = HashMap::new();
+    secrets.insert(
+        "REQUIRED_SECRET".to_string(),
+        SecretConfig {
+            description: "A required secret".to_string(),
+            required: true,
+            default: None,
+        },
+    );
+
+    let mut profiles = HashMap::new();
+    profiles.insert("default".to_string(), ProfileConfig { secrets });
+
+    let spec = SecretSpec::new(
+        ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles,
+        },
+        Some(GlobalConfig {
+            defaults: DefaultConfig {
+                provider: format!("dotenv:{}", env_file.display()),
+                profile: None,
+            },
+            projects: HashMap::new(),
+        }),
+    );
+
+    let result = spec.run(vec!["echo".to_string(), "hello".to_string()], None, None);
+    assert!(result.is_err());
+
+    match result {
+        Err(SecretSpecError::RequiredSecretMissing(msg)) => {
+            assert!(msg.contains("REQUIRED_SECRET"));
+        }
+        _ => panic!("Expected RequiredSecretMissing error"),
+    }
+}
+
+#[test]
+fn test_get_existing_secret() {
+    let temp_dir = TempDir::new().unwrap();
+    let env_file = temp_dir.path().join(".env");
+    fs::write(&env_file, "TEST_SECRET=test_value\n").unwrap();
+
+    let mut secrets = HashMap::new();
+    secrets.insert(
+        "TEST_SECRET".to_string(),
+        SecretConfig {
+            description: "Test secret".to_string(),
+            required: true,
+            default: None,
+        },
+    );
+
+    let mut profiles = HashMap::new();
+    profiles.insert("default".to_string(), ProfileConfig { secrets });
+
+    let spec = SecretSpec::new(
+        ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles,
+        },
+        Some(GlobalConfig {
+            defaults: DefaultConfig {
+                provider: format!("dotenv:{}", env_file.display()),
+                profile: None,
+            },
+            projects: HashMap::new(),
+        }),
+    );
+
+    let result = spec.get("TEST_SECRET", None, None);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_get_secret_with_default() {
+    let temp_dir = TempDir::new().unwrap();
+    let env_file = temp_dir.path().join(".env");
+    // Create empty .env file so dotenv provider works but returns no value
+    fs::write(&env_file, "").unwrap();
+
+    let mut secrets = HashMap::new();
+    secrets.insert(
+        "SECRET_WITH_DEFAULT".to_string(),
+        SecretConfig {
+            description: "Secret with default value".to_string(),
+            required: false,
+            default: Some("default_value".to_string()),
+        },
+    );
+
+    let mut profiles = HashMap::new();
+    profiles.insert("default".to_string(), ProfileConfig { secrets });
+
+    let spec = SecretSpec::new(
+        ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles,
+        },
+        Some(GlobalConfig {
+            defaults: DefaultConfig {
+                provider: format!("dotenv:{}", env_file.display()),
+                profile: None,
+            },
+            projects: HashMap::new(),
+        }),
+    );
+
+    let result = spec.get("SECRET_WITH_DEFAULT", None, None);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_get_nonexistent_secret() {
+    let temp_dir = TempDir::new().unwrap();
+    let env_file = temp_dir.path().join(".env");
+    fs::write(&env_file, "EXISTING_SECRET=exists\n").unwrap();
+
+    let mut secrets = HashMap::new();
+    secrets.insert(
+        "EXISTING_SECRET".to_string(),
+        SecretConfig {
+            description: "Existing secret".to_string(),
+            required: true,
+            default: None,
+        },
+    );
+
+    let mut profiles = HashMap::new();
+    profiles.insert("default".to_string(), ProfileConfig { secrets });
+
+    let spec = SecretSpec::new(
+        ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles,
+        },
+        Some(GlobalConfig {
+            defaults: DefaultConfig {
+                provider: format!("dotenv:{}", env_file.display()),
+                profile: None,
+            },
+            projects: HashMap::new(),
+        }),
+    );
+
+    let result = spec.get("NONEXISTENT_SECRET", None, None);
+    assert!(result.is_err());
+
+    match result {
+        Err(SecretSpecError::SecretNotFound(msg)) => {
+            assert!(msg.contains("NONEXISTENT_SECRET"));
+        }
+        _ => panic!("Expected SecretNotFound error"),
+    }
 }

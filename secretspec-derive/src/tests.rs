@@ -159,4 +159,821 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
             "Field with default should be treated as optional"
         );
     }
+
+    // ===== STAGE 1: HELPER FUNCTION TESTS =====
+
+    #[test]
+    fn test_is_valid_rust_identifier() {
+        use crate::is_valid_rust_identifier;
+
+        // Valid identifiers
+        assert!(is_valid_rust_identifier("valid_name"));
+        assert!(is_valid_rust_identifier("_valid"));
+        assert!(is_valid_rust_identifier("Valid123"));
+        assert!(is_valid_rust_identifier("a"));
+        assert!(is_valid_rust_identifier("API_KEY"));
+        assert!(is_valid_rust_identifier("database_url"));
+
+        // Invalid identifiers
+        assert!(!is_valid_rust_identifier(""));
+        assert!(!is_valid_rust_identifier("123invalid"));
+        assert!(!is_valid_rust_identifier("invalid-name"));
+        assert!(!is_valid_rust_identifier("invalid.name"));
+        assert!(!is_valid_rust_identifier("invalid name"));
+        assert!(!is_valid_rust_identifier("invalid@name"));
+        assert!(!is_valid_rust_identifier("invalid#name"));
+    }
+
+    #[test]
+    fn test_validate_rust_identifiers() {
+        use crate::validate_rust_identifiers;
+        use secretspec_types::{ProfileConfig, ProjectInfo, SecretConfig};
+        use std::collections::HashMap;
+
+        let mut errors = Vec::new();
+
+        // Test with valid identifiers
+        let mut valid_secrets = HashMap::new();
+        valid_secrets.insert(
+            "API_KEY".to_string(),
+            SecretConfig {
+                description: "API Key".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        valid_secrets.insert(
+            "database_url".to_string(),
+            SecretConfig {
+                description: "Database URL".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+
+        let mut valid_profiles = HashMap::new();
+        valid_profiles.insert(
+            "default".to_string(),
+            ProfileConfig {
+                secrets: valid_secrets,
+            },
+        );
+
+        let valid_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: valid_profiles,
+        };
+
+        validate_rust_identifiers(&valid_config, &mut errors);
+        assert!(
+            errors.is_empty(),
+            "Valid identifiers should not produce errors"
+        );
+
+        // Test with invalid identifiers
+        let mut invalid_secrets = HashMap::new();
+        invalid_secrets.insert(
+            "123invalid".to_string(),
+            SecretConfig {
+                description: "Invalid name".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        invalid_secrets.insert(
+            "invalid-name".to_string(),
+            SecretConfig {
+                description: "Invalid name".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+
+        let mut invalid_profiles = HashMap::new();
+        invalid_profiles.insert(
+            "default".to_string(),
+            ProfileConfig {
+                secrets: invalid_secrets,
+            },
+        );
+
+        let invalid_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: invalid_profiles,
+        };
+
+        errors.clear();
+        validate_rust_identifiers(&invalid_config, &mut errors);
+        assert_eq!(
+            errors.len(),
+            2,
+            "Should have errors for invalid identifiers"
+        );
+        // Check that errors contain the invalid secret names
+        let error_text = errors.join(" ");
+        assert!(
+            error_text.contains("123invalid"),
+            "Errors should mention 123invalid: {:?}",
+            errors
+        );
+        assert!(
+            error_text.contains("invalid-name"),
+            "Errors should mention invalid-name: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_validate_rust_keywords() {
+        use crate::validate_rust_identifiers;
+        use secretspec_types::{ProfileConfig, ProjectInfo, SecretConfig};
+        use std::collections::HashMap;
+
+        let mut errors = Vec::new();
+
+        // Test with Rust keywords
+        let mut keyword_secrets = HashMap::new();
+        keyword_secrets.insert(
+            "fn".to_string(),
+            SecretConfig {
+                description: "Function keyword".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        keyword_secrets.insert(
+            "struct".to_string(),
+            SecretConfig {
+                description: "Struct keyword".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        keyword_secrets.insert(
+            "async".to_string(),
+            SecretConfig {
+                description: "Async keyword".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+
+        let mut keyword_profiles = HashMap::new();
+        keyword_profiles.insert(
+            "default".to_string(),
+            ProfileConfig {
+                secrets: keyword_secrets,
+            },
+        );
+
+        let keyword_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: keyword_profiles,
+        };
+
+        validate_rust_identifiers(&keyword_config, &mut errors);
+        assert_eq!(errors.len(), 3, "Should have errors for all Rust keywords");
+        let error_text = errors.join(" ");
+        assert!(
+            error_text.contains("fn"),
+            "Should contain 'fn' keyword error: {:?}",
+            errors
+        );
+        assert!(
+            error_text.contains("struct"),
+            "Should contain 'struct' keyword error: {:?}",
+            errors
+        );
+        assert!(
+            error_text.contains("async"),
+            "Should contain 'async' keyword error: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_validate_duplicate_field_names() {
+        use crate::validate_rust_identifiers;
+        use secretspec_types::{ProfileConfig, ProjectInfo, SecretConfig};
+        use std::collections::HashMap;
+
+        let mut errors = Vec::new();
+
+        // Test with case-insensitive duplicates
+        let mut duplicate_secrets = HashMap::new();
+        duplicate_secrets.insert(
+            "API_KEY".to_string(),
+            SecretConfig {
+                description: "API Key upper".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        duplicate_secrets.insert(
+            "api_key".to_string(),
+            SecretConfig {
+                description: "API Key lower".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        duplicate_secrets.insert(
+            "Api_Key".to_string(),
+            SecretConfig {
+                description: "API Key mixed".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+
+        let mut duplicate_profiles = HashMap::new();
+        duplicate_profiles.insert(
+            "default".to_string(),
+            ProfileConfig {
+                secrets: duplicate_secrets,
+            },
+        );
+
+        let duplicate_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: duplicate_profiles,
+        };
+
+        validate_rust_identifiers(&duplicate_config, &mut errors);
+        // Should have 2 duplicate errors (3 secrets, 2 duplicates)
+        let duplicate_errors: Vec<_> = errors
+            .iter()
+            .filter(|e| e.contains("multiple secrets"))
+            .collect();
+        assert_eq!(
+            duplicate_errors.len(),
+            2,
+            "Should detect duplicate field names"
+        );
+    }
+
+    #[test]
+    fn test_validate_profile_identifiers() {
+        use crate::validate_profile_identifiers;
+        use secretspec_types::{ProfileConfig, ProjectInfo};
+        use std::collections::HashMap;
+
+        let mut errors = Vec::new();
+
+        // Test with valid profile names
+        let mut valid_profiles = HashMap::new();
+        valid_profiles.insert(
+            "default".to_string(),
+            ProfileConfig {
+                secrets: HashMap::new(),
+            },
+        );
+        valid_profiles.insert(
+            "development".to_string(),
+            ProfileConfig {
+                secrets: HashMap::new(),
+            },
+        );
+        valid_profiles.insert(
+            "production".to_string(),
+            ProfileConfig {
+                secrets: HashMap::new(),
+            },
+        );
+
+        let valid_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: valid_profiles,
+        };
+
+        validate_profile_identifiers(&valid_config, &mut errors);
+        assert!(
+            errors.is_empty(),
+            "Valid profile names should not produce errors"
+        );
+
+        // Test with invalid profile names
+        let mut invalid_profiles = HashMap::new();
+        invalid_profiles.insert(
+            "123invalid".to_string(),
+            ProfileConfig {
+                secrets: HashMap::new(),
+            },
+        );
+        invalid_profiles.insert(
+            "invalid-name".to_string(),
+            ProfileConfig {
+                secrets: HashMap::new(),
+            },
+        );
+
+        let invalid_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: invalid_profiles,
+        };
+
+        errors.clear();
+        validate_profile_identifiers(&invalid_config, &mut errors);
+        assert_eq!(
+            errors.len(),
+            2,
+            "Should have errors for invalid profile names"
+        );
+        assert!(errors.iter().any(|e| e.contains("123invalid")));
+        assert!(errors.iter().any(|e| e.contains("invalid-name")));
+    }
+
+    #[test]
+    fn test_field_name_ident() {
+        use crate::field_name_ident;
+
+        // Test case conversion
+        assert_eq!(field_name_ident("API_KEY").to_string(), "api_key");
+        assert_eq!(field_name_ident("DATABASE_URL").to_string(), "database_url");
+        assert_eq!(field_name_ident("simple").to_string(), "simple");
+        assert_eq!(field_name_ident("Mixed_Case").to_string(), "mixed_case");
+    }
+
+    #[test]
+    fn test_is_secret_optional() {
+        use crate::is_secret_optional;
+        use secretspec_types::SecretConfig;
+
+        // Required without default
+        let required_no_default = SecretConfig {
+            description: "Required".to_string(),
+            required: true,
+            default: None,
+        };
+        assert!(!is_secret_optional(&required_no_default));
+
+        // Required with default (should be optional)
+        let required_with_default = SecretConfig {
+            description: "Required with default".to_string(),
+            required: true,
+            default: Some("default_value".to_string()),
+        };
+        assert!(is_secret_optional(&required_with_default));
+
+        // Not required
+        let not_required = SecretConfig {
+            description: "Not required".to_string(),
+            required: false,
+            default: None,
+        };
+        assert!(is_secret_optional(&not_required));
+
+        // Not required with default
+        let not_required_with_default = SecretConfig {
+            description: "Not required with default".to_string(),
+            required: false,
+            default: Some("default_value".to_string()),
+        };
+        assert!(is_secret_optional(&not_required_with_default));
+    }
+
+    #[test]
+    fn test_is_field_optional_across_profiles() {
+        use crate::is_field_optional_across_profiles;
+        use secretspec_types::{ProfileConfig, ProjectInfo, SecretConfig};
+        use std::collections::HashMap;
+
+        // Setup config with multiple profiles
+        let mut profiles = HashMap::new();
+
+        // Default profile: API_KEY required, DATABASE_URL optional
+        let mut default_secrets = HashMap::new();
+        default_secrets.insert(
+            "API_KEY".to_string(),
+            SecretConfig {
+                description: "API Key".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        default_secrets.insert(
+            "DATABASE_URL".to_string(),
+            SecretConfig {
+                description: "Database URL".to_string(),
+                required: false,
+                default: None,
+            },
+        );
+        profiles.insert(
+            "default".to_string(),
+            ProfileConfig {
+                secrets: default_secrets,
+            },
+        );
+
+        // Development profile: API_KEY with default (optional), DATABASE_URL required
+        let mut dev_secrets = HashMap::new();
+        dev_secrets.insert(
+            "API_KEY".to_string(),
+            SecretConfig {
+                description: "API Key".to_string(),
+                required: true,
+                default: Some("dev-key".to_string()),
+            },
+        );
+        dev_secrets.insert(
+            "DATABASE_URL".to_string(),
+            SecretConfig {
+                description: "Database URL".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        // Note: CACHE_URL only exists in development
+        dev_secrets.insert(
+            "CACHE_URL".to_string(),
+            SecretConfig {
+                description: "Cache URL".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        profiles.insert(
+            "development".to_string(),
+            ProfileConfig {
+                secrets: dev_secrets,
+            },
+        );
+
+        let config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles,
+        };
+
+        // API_KEY is optional because it has default in development
+        assert!(is_field_optional_across_profiles("API_KEY", &config));
+
+        // DATABASE_URL is optional because it's not required in default
+        assert!(is_field_optional_across_profiles("DATABASE_URL", &config));
+
+        // CACHE_URL is optional because it doesn't exist in default profile
+        assert!(is_field_optional_across_profiles("CACHE_URL", &config));
+
+        // Test a secret that's always required
+        let mut strict_profiles = HashMap::new();
+        let mut strict_default = HashMap::new();
+        strict_default.insert(
+            "ALWAYS_REQUIRED".to_string(),
+            SecretConfig {
+                description: "Always required".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        let mut strict_dev = HashMap::new();
+        strict_dev.insert(
+            "ALWAYS_REQUIRED".to_string(),
+            SecretConfig {
+                description: "Always required".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        strict_profiles.insert(
+            "default".to_string(),
+            ProfileConfig {
+                secrets: strict_default,
+            },
+        );
+        strict_profiles.insert(
+            "development".to_string(),
+            ProfileConfig {
+                secrets: strict_dev,
+            },
+        );
+
+        let strict_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: strict_profiles,
+        };
+
+        // ALWAYS_REQUIRED should not be optional
+        assert!(!is_field_optional_across_profiles(
+            "ALWAYS_REQUIRED",
+            &strict_config
+        ));
+    }
+
+    #[test]
+    fn test_analyze_field_types() {
+        use crate::analyze_field_types;
+        use secretspec_types::{ProfileConfig, ProjectInfo, SecretConfig};
+        use std::collections::HashMap;
+
+        let mut profiles = HashMap::new();
+
+        // Default profile
+        let mut default_secrets = HashMap::new();
+        default_secrets.insert(
+            "REQUIRED_SECRET".to_string(),
+            SecretConfig {
+                description: "Always required".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        default_secrets.insert(
+            "OPTIONAL_SECRET".to_string(),
+            SecretConfig {
+                description: "Optional".to_string(),
+                required: false,
+                default: None,
+            },
+        );
+        default_secrets.insert(
+            "DEFAULT_SECRET".to_string(),
+            SecretConfig {
+                description: "Has default".to_string(),
+                required: true,
+                default: Some("default_value".to_string()),
+            },
+        );
+        profiles.insert(
+            "default".to_string(),
+            ProfileConfig {
+                secrets: default_secrets,
+            },
+        );
+
+        // Development profile with additional secret
+        let mut dev_secrets = HashMap::new();
+        dev_secrets.insert(
+            "REQUIRED_SECRET".to_string(),
+            SecretConfig {
+                description: "Always required".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        dev_secrets.insert(
+            "DEV_ONLY_SECRET".to_string(),
+            SecretConfig {
+                description: "Development only".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        profiles.insert(
+            "development".to_string(),
+            ProfileConfig {
+                secrets: dev_secrets,
+            },
+        );
+
+        let config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles,
+        };
+
+        let field_info = analyze_field_types(&config);
+
+        // Should have 4 unique secrets across all profiles
+        assert_eq!(field_info.len(), 4);
+
+        // REQUIRED_SECRET exists in both profiles and is always required -> String
+        let required_field = field_info.get("REQUIRED_SECRET").unwrap();
+        assert!(!required_field.is_optional);
+
+        // OPTIONAL_SECRET only exists in default and is optional -> Option<String>
+        let optional_field = field_info.get("OPTIONAL_SECRET").unwrap();
+        assert!(optional_field.is_optional);
+
+        // DEFAULT_SECRET has default value -> Option<String>
+        let default_field = field_info.get("DEFAULT_SECRET").unwrap();
+        assert!(default_field.is_optional);
+
+        // DEV_ONLY_SECRET only exists in development -> Option<String>
+        let dev_only_field = field_info.get("DEV_ONLY_SECRET").unwrap();
+        assert!(dev_only_field.is_optional);
+    }
+
+    #[test]
+    fn test_field_info_methods() {
+        use crate::FieldInfo;
+        use quote::quote;
+
+        // Test required field
+        let required_field = FieldInfo::new("API_KEY".to_string(), quote! { String }, false);
+
+        assert_eq!(required_field.name, "API_KEY");
+        assert!(!required_field.is_optional);
+        assert_eq!(required_field.field_name().to_string(), "api_key");
+
+        // Test the struct field generation
+        let struct_field = required_field.generate_struct_field();
+        let expected_struct = quote! { pub api_key: String };
+        assert_eq!(struct_field.to_string(), expected_struct.to_string());
+
+        // Test optional field
+        let optional_field =
+            FieldInfo::new("DATABASE_URL".to_string(), quote! { Option<String> }, true);
+
+        assert!(optional_field.is_optional);
+        assert_eq!(optional_field.field_name().to_string(), "database_url");
+
+        let optional_struct_field = optional_field.generate_struct_field();
+        let expected_optional_struct = quote! { pub database_url: Option<String> };
+        assert_eq!(
+            optional_struct_field.to_string(),
+            expected_optional_struct.to_string()
+        );
+    }
+
+    #[test]
+    fn test_profile_variant_methods() {
+        use crate::ProfileVariant;
+
+        let variant = ProfileVariant::new("development".to_string());
+        assert_eq!(variant.name, "development");
+        assert_eq!(variant.capitalized, "Development");
+        assert_eq!(variant.as_ident().to_string(), "Development");
+
+        let default_variant = ProfileVariant::new("default".to_string());
+        assert_eq!(default_variant.capitalized, "Default");
+        assert_eq!(default_variant.as_ident().to_string(), "Default");
+
+        let prod_variant = ProfileVariant::new("production".to_string());
+        assert_eq!(prod_variant.capitalized, "Production");
+        assert_eq!(prod_variant.as_ident().to_string(), "Production");
+    }
+
+    #[test]
+    fn test_get_profile_variants() {
+        use crate::get_profile_variants;
+        use std::collections::HashSet;
+
+        // Test empty profiles
+        let empty_profiles = HashSet::new();
+        let variants = get_profile_variants(&empty_profiles);
+        assert_eq!(variants.len(), 1);
+        assert_eq!(variants[0].name, "default");
+
+        // Test with multiple profiles
+        let mut profiles = HashSet::new();
+        profiles.insert("production".to_string());
+        profiles.insert("development".to_string());
+        profiles.insert("staging".to_string());
+        profiles.insert("default".to_string());
+
+        let variants = get_profile_variants(&profiles);
+        assert_eq!(variants.len(), 4);
+
+        // Should be sorted alphabetically
+        let names: Vec<&String> = variants.iter().map(|v| &v.name).collect();
+        assert_eq!(
+            names,
+            vec!["default", "development", "production", "staging"]
+        );
+
+        // Check capitalization
+        assert_eq!(variants[0].capitalized, "Default");
+        assert_eq!(variants[1].capitalized, "Development");
+        assert_eq!(variants[2].capitalized, "Production");
+        assert_eq!(variants[3].capitalized, "Staging");
+    }
+
+    #[test]
+    fn test_validate_config_for_codegen() {
+        use crate::validate_config_for_codegen;
+        use secretspec_types::{ProfileConfig, ProjectInfo, SecretConfig};
+        use std::collections::HashMap;
+
+        // Test valid config
+        let mut valid_secrets = HashMap::new();
+        valid_secrets.insert(
+            "API_KEY".to_string(),
+            SecretConfig {
+                description: "API Key".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        valid_secrets.insert(
+            "database_url".to_string(),
+            SecretConfig {
+                description: "Database URL".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+
+        let mut valid_profiles = HashMap::new();
+        valid_profiles.insert(
+            "default".to_string(),
+            ProfileConfig {
+                secrets: valid_secrets,
+            },
+        );
+        valid_profiles.insert(
+            "development".to_string(),
+            ProfileConfig {
+                secrets: HashMap::new(),
+            },
+        );
+
+        let valid_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: valid_profiles,
+        };
+
+        let result = validate_config_for_codegen(&valid_config);
+        assert!(result.is_ok(), "Valid config should pass validation");
+
+        // Test invalid config
+        let mut invalid_secrets = HashMap::new();
+        invalid_secrets.insert(
+            "123invalid".to_string(),
+            SecretConfig {
+                description: "Invalid name".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+        invalid_secrets.insert(
+            "fn".to_string(),
+            SecretConfig {
+                description: "Rust keyword".to_string(),
+                required: true,
+                default: None,
+            },
+        );
+
+        let mut invalid_profiles = HashMap::new();
+        invalid_profiles.insert(
+            "123invalid-profile".to_string(),
+            ProfileConfig {
+                secrets: invalid_secrets,
+            },
+        );
+
+        let invalid_config = ProjectConfig {
+            project: ProjectInfo {
+                name: "test".to_string(),
+                revision: "1.0".to_string(),
+                extends: None,
+            },
+            profiles: invalid_profiles,
+        };
+
+        let result = validate_config_for_codegen(&invalid_config);
+        assert!(result.is_err(), "Invalid config should fail validation");
+        let errors = result.unwrap_err();
+        assert!(!errors.is_empty(), "Should have validation errors");
+        let error_text = errors.join(" ");
+        assert!(
+            error_text.contains("123invalid"),
+            "Should contain secret validation errors: {:?}",
+            errors
+        );
+        assert!(
+            error_text.contains("fn"),
+            "Should contain keyword errors: {:?}",
+            errors
+        );
+    }
 }

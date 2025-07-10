@@ -171,7 +171,6 @@ pub struct SecretSpecBuilder {
     global_config: Option<GlobalConfig>,
     default_provider: Option<String>,
     default_profile: Option<String>,
-    skip_global_config: bool,
 }
 
 impl Default for SecretSpecBuilder {
@@ -189,7 +188,6 @@ impl SecretSpecBuilder {
             global_config: None,
             default_provider: None,
             default_profile: None,
-            skip_global_config: false,
         }
     }
 
@@ -223,11 +221,6 @@ impl SecretSpecBuilder {
         self
     }
 
-    pub fn skip_global_config(mut self) -> Self {
-        self.skip_global_config = true;
-        self
-    }
-
     pub fn load(mut self) -> Result<SecretSpec> {
         // Load project config
         let project_config = if let Some(config) = self.project_config {
@@ -239,9 +232,7 @@ impl SecretSpecBuilder {
         };
 
         // Load global config
-        let global_config = if self.skip_global_config {
-            None
-        } else if let Some(config) = self.global_config {
+        let global_config = if let Some(config) = self.global_config {
             Some(config)
         } else if let Some(path) = self.global_config_path {
             load_global_config_from_path(&path)?
@@ -336,7 +327,7 @@ impl SecretSpec {
         Ok(backend)
     }
 
-    pub fn write(&self, from: &Path) -> Result<()> {
+    pub fn write(&self, from: &Path, output_dir: Option<&Path>) -> Result<()> {
         println!("Initializing secretspec.toml from {}...", from.display());
 
         let mut secrets = HashMap::new();
@@ -359,7 +350,11 @@ impl SecretSpec {
         let manifest = project_config_from_path(from)?;
 
         let content = toml::to_string_pretty(&manifest)?;
-        fs::write("secretspec.toml", content)?;
+        let output_path = match output_dir {
+            Some(dir) => dir.join("secretspec.toml"),
+            None => PathBuf::from("secretspec.toml"),
+        };
+        fs::write(&output_path, content)?;
 
         let secret_count = manifest
             .profiles
@@ -798,8 +793,8 @@ impl SecretSpec {
             )));
         }
 
-        // Ensure all secrets are available (will prompt for missing ones if needed)
-        let validation_result = self.ensure_secrets(provider_arg, profile, true)?;
+        // Ensure all secrets are available (will error out if missing)
+        let validation_result = self.ensure_secrets(provider_arg, profile, false)?;
 
         let mut env_vars = env::vars().collect::<HashMap<_, _>>();
         env_vars.extend(validation_result.secrets);

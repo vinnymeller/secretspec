@@ -4,13 +4,13 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectConfig {
     pub project: ProjectInfo,
     pub profiles: HashMap<String, ProfileConfig>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectInfo {
     pub name: String,
     pub revision: String,
@@ -18,7 +18,7 @@ pub struct ProjectInfo {
     pub extends: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileConfig {
     #[serde(flatten)]
     pub secrets: HashMap<String, SecretConfig>,
@@ -32,7 +32,7 @@ pub struct ProfileOverride {
     pub default: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretConfig {
     pub description: String,
     pub required: bool,
@@ -40,21 +40,21 @@ pub struct SecretConfig {
     pub default: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalConfig {
     pub defaults: DefaultConfig,
     #[serde(default)]
     pub projects: HashMap<String, ProjectUserConfig>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DefaultConfig {
     pub provider: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectUserConfig {
     pub provider: String,
 }
