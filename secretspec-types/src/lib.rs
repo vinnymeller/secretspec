@@ -13,14 +13,9 @@ pub struct ProjectConfig {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectInfo {
     pub name: String,
-    #[serde(default = "default_revision")]
     pub revision: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extends: Option<Vec<String>>,
-}
-
-fn default_revision() -> String {
-    "1.0".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
