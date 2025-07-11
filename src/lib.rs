@@ -137,17 +137,15 @@ pub fn project_config_from_path(from: &Path) -> Result<ProjectConfig> {
 }
 
 pub fn get_example_toml() -> &'static str {
-    r#"# API_KEY = { description = "API key for external service", required = true }
-# DATABASE_URL = { description = "Database connection string", required = true }
+    r#"# DATABASE_URL = { description = "Database connection string", required = true }
 
 [profiles.development]
-# API_KEY = { description = "API key for external service", required = false, default = "dev-api-key" }
-# DATABASE_URL = { description = "Database connection string", required = true, default = "sqlite:///dev.db" }
-# JWT_SECRET = { description = "Secret key for JWT token signing", required = true }
+# Development profile inherits all secrets from default profile
+# Only define secrets here that need different values or settings than default
+# DATABASE_URL = { default = "sqlite:///dev.db" }
+#
+# New secrets
 # REDIS_URL = { description = "Redis connection URL for caching", required = false, default = "redis://localhost:6379" }
-# EMAIL_PROVIDER = { description = "Email service provider", required = false, default = "console" }
-# OAUTH_CLIENT_ID = { description = "OAuth client ID", required = false }
-# OAUTH_CLIENT_SECRET = { description = "OAuth client secret", required = false }
 "#
 }
 
