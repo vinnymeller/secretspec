@@ -27,11 +27,15 @@ Current secret management forces applications to answer three questions at once:
 
 This coupling creates vendor lock-in, runtime failures, poor developer experience, and inconsistent practices.
 
+SecretSpec solves this by separating secret **declaration** from secret **provisioning**. Your application declares what secrets it needs in `secretspec.toml`, but the actual secret values are retrieved at runtime from your chosen provider - never stored in configuration files.
+
 ## WHAT - Declaring Your Secrets
 
 Applications declare their secret requirements in a `secretspec.toml` file.
 
 Each secret is defined with its name and description, creating a single source of truth that's version controlled alongside your code. This standardized format enables ecosystem-wide tooling and ensures every developer knows exactly what secrets the application needs.
+
+**Important:** The `secretspec.toml` file only declares which secrets your application needs and their requirements - it never contains actual secret values. Secret values are always retrieved at runtime from your configured provider.
 
 ```toml
 [project]
