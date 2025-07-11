@@ -6,7 +6,7 @@
 
 # SecretSpec
 
-Declarative secrets for development workflows, supporting a variety of storage backends.
+Declarative secrets, every environment, any provider.
 
 SecretSpec separates the declaration of what secrets an application needs from where they are stored, enabling portable applications that work across different secret storage backends without code changes.
 
@@ -142,15 +142,15 @@ secretspec::define_secrets!("secretspec.toml");
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load secrets with type safety
     let secrets = SecretSpec::load(Provider::Keyring)?;
-    
+
     // Access secrets as struct fields
     println!("Database: {}", secrets.database_url);
-    
+
     // Optional secrets are Option<String>
     if let Some(redis) = &secrets.redis_url {
         println!("Redis: {}", redis);
     }
-    
+
     Ok(())
 }
 ```
