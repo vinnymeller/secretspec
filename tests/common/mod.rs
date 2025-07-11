@@ -4,7 +4,7 @@ use tempfile::TempDir;
 
 /// Test helper for creating temporary directories with test configs
 pub struct TestFixture {
-    pub temp_dir: TempDir,
+    _temp_dir: TempDir,
     pub base_path: PathBuf,
 }
 
@@ -13,46 +13,9 @@ impl TestFixture {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path().to_path_buf();
         Self {
-            temp_dir,
+            _temp_dir: temp_dir,
             base_path,
         }
-    }
-
-    /// Create a basic project config file
-    pub fn create_basic_project_config(&self, name: &str) -> PathBuf {
-        let config_path = self.base_path.join("secretspec.toml");
-        let config = format!(
-            r#"
-[project]
-name = "{}"
-revision = "1.0"
-
-[profiles.default]
-API_KEY = {{ description = "API Key", required = true }}
-DATABASE_URL = {{ description = "Database URL", required = false, default = "sqlite:///dev.db" }}
-"#,
-            name
-        );
-        fs::write(&config_path, config).unwrap();
-        config_path
-    }
-
-    /// Create a global config file
-    pub fn create_global_config(&self) -> PathBuf {
-        let config_path = self.base_path.join("global.toml");
-        let config = r#"
-[defaults]
-provider = "keyring"
-
-[providers]
-keyring = "keyring:"
-env = "env:"
-
-[profiles.default]
-provider = "keyring"
-"#;
-        fs::write(&config_path, config).unwrap();
-        config_path
     }
 
     /// Create a directory structure for extends testing
@@ -116,67 +79,5 @@ API_KEY = { description = "API key for external service", required = false, defa
 impl Default for TestFixture {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Common assertions for testing configs
-pub mod assertions {
-    use secretspec_types::ProjectConfig;
-
-    pub fn assert_has_secret(config: &ProjectConfig, profile: &str, secret: &str) {
-        assert!(
-            config
-                .profiles
-                .get(profile)
-                .unwrap()
-                .secrets
-                .contains_key(secret),
-            "Profile '{}' should contain secret '{}'",
-            profile,
-            secret
-        );
-    }
-
-    pub fn assert_secret_required(
-        config: &ProjectConfig,
-        profile: &str,
-        secret: &str,
-        required: bool,
-    ) {
-        let secret_config = config
-            .profiles
-            .get(profile)
-            .unwrap()
-            .secrets
-            .get(secret)
-            .unwrap();
-        assert_eq!(
-            secret_config.required, required,
-            "Secret '{}' in profile '{}' should have required={}",
-            secret, profile, required
-        );
-    }
-
-    pub fn assert_secret_default(
-        config: &ProjectConfig,
-        profile: &str,
-        secret: &str,
-        default: Option<&str>,
-    ) {
-        let secret_config = config
-            .profiles
-            .get(profile)
-            .unwrap()
-            .secrets
-            .get(secret)
-            .unwrap();
-        assert_eq!(
-            secret_config.default.as_deref(),
-            default,
-            "Secret '{}' in profile '{}' should have default={:?}",
-            secret,
-            profile,
-            default
-        );
     }
 }
