@@ -163,7 +163,7 @@ impl OnePasswordProvider {
     }
 
     fn format_item_name(&self, project: &str, key: &str) -> String {
-        format!("{}/{}", project, key)
+        format!("secretspec/{}/{}", project, key)
     }
 
     fn create_item_template(

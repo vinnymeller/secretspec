@@ -51,12 +51,12 @@ impl LastPassConfig {
 }
 
 pub struct LastPassProvider {
-    config: LastPassConfig,
+    _config: LastPassConfig,
 }
 
 impl LastPassProvider {
     pub fn new(config: LastPassConfig) -> Self {
-        Self { config }
+        Self { _config: config }
     }
 
     pub fn from_uri(uri: &Uri) -> Result<Self> {
@@ -96,17 +96,8 @@ impl LastPassProvider {
             .map_err(|e| SecretSpecError::ProviderOperationFailed(e.to_string()))
     }
 
-    fn get_folder_name(&self, profile: Option<&str>) -> String {
-        let base = profile.unwrap_or("default");
-        match &self.config.folder_prefix {
-            Some(prefix) => format!("{}/{}", prefix, base),
-            None => base.to_string(),
-        }
-    }
-
-    fn format_item_name(&self, project: &str, key: &str, profile: Option<&str>) -> String {
-        let folder = self.get_folder_name(profile);
-        format!("{}/{}/{}", folder, project, key)
+    fn format_item_name(&self, project: &str, key: &str, _profile: Option<&str>) -> String {
+        format!("secretspec/{}/{}", project, key)
     }
 
     fn check_if_logged_in(&self) -> Result<()> {
