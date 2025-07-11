@@ -9,6 +9,8 @@
   };
 
   packages = [
+    # keyring
+    pkgs.dbus
     # coverage testing
     pkgs.cargo-tarpaulin
   ];
