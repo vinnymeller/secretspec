@@ -118,3 +118,42 @@ mod empty_generation {
         }
     }
 }
+
+mod json_serialization {
+    use super::*;
+    use serde_json;
+
+    define_secrets!("tests/fixtures/basic.toml");
+
+    #[test]
+    fn test_secret_spec_secrets_json_serialization() {
+        use secretspec::{Provider, SecretSpecSecrets};
+
+        // Create a mock SecretSpec instance
+        let spec = SecretSpec {
+            api_key: "test_key".to_string(),
+            database_url: "postgres://localhost/db".to_string(),
+            optional_secret: Some("optional".to_string()),
+        };
+
+        let secrets_wrapper =
+            SecretSpecSecrets::new(spec, Provider::Dotenv, "production".to_string());
+
+        // Test serialization to JSON
+        let json =
+            serde_json::to_string(&secrets_wrapper).expect("Failed to serialize SecretSpecSecrets");
+
+        // Verify JSON contains expected fields
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("Failed to parse JSON");
+        assert_eq!(parsed["provider"], "dotenv");
+        assert_eq!(parsed["profile"], "production");
+        assert_eq!(parsed["secrets"]["api_key"], "test_key");
+
+        // Test round-trip deserialization
+        let deserialized: SecretSpecSecrets<SecretSpec> =
+            serde_json::from_str(&json).expect("Failed to deserialize SecretSpecSecrets");
+        assert_eq!(deserialized.provider, Provider::Dotenv);
+        assert_eq!(deserialized.profile, "production");
+        assert_eq!(deserialized.secrets.api_key, "test_key");
+    }
+}

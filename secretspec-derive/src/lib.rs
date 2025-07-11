@@ -414,7 +414,7 @@ mod secret_spec_generation {
         let fields = field_info.values().map(|info| info.generate_struct_field());
 
         quote! {
-            #[derive(Debug)]
+            #[derive(Debug, serde::Serialize, serde::Deserialize)]
             pub struct SecretSpec {
                 #(#fields,)*
             }
@@ -426,7 +426,7 @@ mod secret_spec_generation {
         profile_variants: &[proc_macro2::TokenStream],
     ) -> proc_macro2::TokenStream {
         quote! {
-            #[derive(Debug)]
+            #[derive(Debug, serde::Serialize, serde::Deserialize)]
             pub enum SecretSpecProfile {
                 #(#profile_variants,)*
             }

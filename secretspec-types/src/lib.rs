@@ -115,7 +115,7 @@ impl std::fmt::Display for Provider {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretSpecSecrets<T> {
     pub secrets: T,
     pub provider: Provider,
