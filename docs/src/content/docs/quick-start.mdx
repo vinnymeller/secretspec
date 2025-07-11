@@ -137,12 +137,10 @@ REDIS_URL = { description = "Redis connection string", required = false, default
 
 # Profile-specific configurations
 [profiles.development]
-DATABASE_URL = { description = "PostgreSQL connection string", required = false, default = "sqlite://./dev.db" }
-REDIS_URL = { description = "Redis connection string", required = false, default = "redis://localhost:6379" }
+DATABASE_URL = { default = "sqlite://./dev.db" }
 
 [profiles.production]
-DATABASE_URL = { description = "PostgreSQL connection string", required = true }
-REDIS_URL = { description = "Redis connection string", required = true }
+REDIS_URL = { required = true }
 ```
 
 ## Next Steps
