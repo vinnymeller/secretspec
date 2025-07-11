@@ -247,9 +247,9 @@ fn test_project_config_from_nonexistent_path() {
 fn test_get_example_toml() {
     let example = get_example_toml();
     assert!(example.contains("[profiles.development]"));
-    assert!(example.contains("API_KEY"));
     assert!(example.contains("DATABASE_URL"));
-    assert!(example.contains("JWT_SECRET"));
+    assert!(example.contains("Development profile inherits all secrets from default profile"));
+    assert!(example.contains("REDIS_URL"));
 }
 
 #[test]
