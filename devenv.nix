@@ -14,7 +14,6 @@
   ];
 
   git-hooks.hooks = {
-    cargo-check.enable = true;
     rustfmt.enable = true;
     clippy.enable = true;
   };
