@@ -155,15 +155,31 @@ impl OnePasswordProvider {
             .map_err(|e| SecretSpecError::ProviderOperationFailed(e.to_string()))
     }
 
-    fn get_vault_name(&self, profile: Option<&str>) -> String {
-        profile
-            .map(|p| p.to_string())
-            .or_else(|| self.config.default_vault.clone())
-            .unwrap_or_else(|| "Private".to_string())
+    fn whoami(&self) -> Result<bool> {
+        match self.execute_op_command(&["whoami"]) {
+            Ok(_) => Ok(true),
+            Err(SecretSpecError::ProviderOperationFailed(msg))
+                if msg.contains("not currently signed in") || msg.contains("no account found") =>
+            {
+                Ok(false)
+            }
+            Err(e) => Err(e),
+        }
     }
 
-    fn format_item_name(&self, project: &str, key: &str) -> String {
-        format!("secretspec/{}/{}", project, key)
+    fn get_vault_name(&self, profile: &str) -> String {
+        if profile == "default" {
+            self.config
+                .default_vault
+                .clone()
+                .unwrap_or_else(|| "Private".to_string())
+        } else {
+            profile.to_string()
+        }
+    }
+
+    fn format_item_name(&self, project: &str, key: &str, profile: &str) -> String {
+        format!("secretspec/{}/{}/{}", project, profile, key)
     }
 
     fn create_item_template(
@@ -172,9 +188,10 @@ impl OnePasswordProvider {
         key: &str,
         value: &str,
         vault: &str,
+        profile: &str,
     ) -> OnePasswordItemTemplate {
         OnePasswordItemTemplate {
-            title: self.format_item_name(project, key),
+            title: self.format_item_name(project, key, profile),
             category: "SECURE_NOTE".to_string(),
             vault: Some(vault.to_string()),
             fields: vec![
@@ -200,9 +217,16 @@ impl OnePasswordProvider {
 }
 
 impl Provider for OnePasswordProvider {
-    fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>> {
+    fn get(&self, project: &str, key: &str, profile: &str) -> Result<Option<String>> {
+        // Check authentication status first
+        if !self.whoami()? {
+            return Err(SecretSpecError::ProviderOperationFailed(
+                "1Password authentication required. Please run 'op signin' first.".to_string(),
+            ));
+        }
+
         let vault = self.get_vault_name(profile);
-        let item_name = self.format_item_name(project, key);
+        let item_name = self.format_item_name(project, key, profile);
 
         // Try to get the item by title
         let args = vec![
@@ -236,9 +260,16 @@ impl Provider for OnePasswordProvider {
         }
     }
 
-    fn set(&self, project: &str, key: &str, value: &str, profile: Option<&str>) -> Result<()> {
+    fn set(&self, project: &str, key: &str, value: &str, profile: &str) -> Result<()> {
+        // Check authentication status first
+        if !self.whoami()? {
+            return Err(SecretSpecError::ProviderOperationFailed(
+                "1Password authentication required. Please run 'op signin' first.".to_string(),
+            ));
+        }
+
         let vault = self.get_vault_name(profile);
-        let item_name = self.format_item_name(project, key);
+        let item_name = self.format_item_name(project, key, profile);
 
         // First, try to update existing item
         if let Ok(Some(_)) = self.get(project, key, profile) {
@@ -256,7 +287,7 @@ impl Provider for OnePasswordProvider {
             self.execute_op_command(&args)?;
         } else {
             // Item doesn't exist, create it
-            let template = self.create_item_template(project, key, value, &vault);
+            let template = self.create_item_template(project, key, value, &vault, profile);
             let template_json = serde_json::to_string(&template)?;
 
             // Write template to temp file

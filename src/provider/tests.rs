@@ -1,4 +1,43 @@
-use crate::provider::ProviderRegistry;
+use crate::Result;
+use crate::provider::{Provider, ProviderRegistry};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+/// Mock provider for testing
+pub struct MockProvider {
+    storage: Arc<Mutex<HashMap<String, String>>>,
+}
+
+impl MockProvider {
+    pub fn new() -> Self {
+        Self {
+            storage: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+}
+
+impl Provider for MockProvider {
+    fn get(&self, project: &str, key: &str, profile: &str) -> Result<Option<String>> {
+        let storage = self.storage.lock().unwrap();
+        let full_key = format!("{}/{}/{}", project, profile, key);
+        Ok(storage.get(&full_key).cloned())
+    }
+
+    fn set(&self, project: &str, key: &str, value: &str, profile: &str) -> Result<()> {
+        let mut storage = self.storage.lock().unwrap();
+        let full_key = format!("{}/{}/{}", project, profile, key);
+        storage.insert(full_key, value.to_string());
+        Ok(())
+    }
+
+    fn name(&self) -> &'static str {
+        "mock"
+    }
+
+    fn description(&self) -> &'static str {
+        "Mock provider for testing"
+    }
+}
 
 #[test]
 fn test_create_from_string_with_full_uris() {

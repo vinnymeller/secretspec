@@ -40,15 +40,10 @@ impl KeyringProvider {
 }
 
 impl Provider for KeyringProvider {
-    fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>> {
-        let service = format!("secretspec/{}", project);
-        let username = if let Some(prof) = profile {
-            format!("{}:{}", prof, key)
-        } else {
-            key.to_string()
-        };
+    fn get(&self, project: &str, key: &str, profile: &str) -> Result<Option<String>> {
+        let service = format!("secretspec/{}/{}/{}", project, profile, key);
 
-        let entry = Entry::new(&service, &username)?;
+        let entry = Entry::new(&service, &whoami::username())?;
         match entry.get_password() {
             Ok(password) => Ok(Some(password)),
             Err(keyring::Error::NoEntry) => Ok(None),
@@ -56,15 +51,10 @@ impl Provider for KeyringProvider {
         }
     }
 
-    fn set(&self, project: &str, key: &str, value: &str, profile: Option<&str>) -> Result<()> {
-        let service = format!("secretspec/{}", project);
-        let username = if let Some(prof) = profile {
-            format!("{}:{}", prof, key)
-        } else {
-            key.to_string()
-        };
+    fn set(&self, project: &str, key: &str, value: &str, profile: &str) -> Result<()> {
+        let service = format!("secretspec/{}/{}/{}", project, profile, key);
 
-        let entry = Entry::new(&service, &username)?;
+        let entry = Entry::new(&service, &whoami::username())?;
         entry.set_password(value)?;
         Ok(())
     }

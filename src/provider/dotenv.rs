@@ -92,7 +92,7 @@ impl DotEnvProvider {
 }
 
 impl Provider for DotEnvProvider {
-    fn get(&self, _project: &str, key: &str, _profile: Option<&str>) -> Result<Option<String>> {
+    fn get(&self, _project: &str, key: &str, _profile: &str) -> Result<Option<String>> {
         if !self.config.path.exists() {
             return Ok(None);
         }
@@ -108,7 +108,7 @@ impl Provider for DotEnvProvider {
         Ok(vars.get(key).cloned())
     }
 
-    fn set(&self, _project: &str, key: &str, value: &str, _profile: Option<&str>) -> Result<()> {
+    fn set(&self, _project: &str, key: &str, value: &str, _profile: &str) -> Result<()> {
         // Load existing vars using dotenvy
         let mut vars = HashMap::new();
         if self.config.path.exists() {

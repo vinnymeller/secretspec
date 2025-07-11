@@ -543,6 +543,7 @@ mod secret_spec_generation {
     pub fn generate_impl(
         load_assignments: &[proc_macro2::TokenStream],
         env_setters: Vec<proc_macro2::TokenStream>,
+        _field_info: &BTreeMap<String, FieldInfo>,
     ) -> proc_macro2::TokenStream {
         quote! {
             impl SecretSpec {
@@ -799,7 +800,8 @@ fn generate_secret_spec_code(config: ProjectConfig) -> proc_macro2::TokenStream 
     let load_profile_arms =
         secret_spec_generation::generate_load_profile_arms(&config, &field_info, &profile_variants);
     let load_internal = secret_spec_generation::generate_load_internal();
-    let secret_spec_impl = secret_spec_generation::generate_impl(&load_assignments, env_setters);
+    let secret_spec_impl =
+        secret_spec_generation::generate_impl(&load_assignments, env_setters, &field_info);
 
     // Get first profile variant for defaults
     // Get first profile variant for defaults
@@ -823,6 +825,8 @@ fn generate_secret_spec_code(config: ProjectConfig) -> proc_macro2::TokenStream 
 
         // Use Provider from secretspec_types
         pub use secretspec::Provider;
+        // Import the extension trait for .get() method
+        use secretspec::SecretSpecSecretsExt;
 
         // Type alias to help with type inference
         type LoadResult<T> = Result<T, secretspec::SecretSpecError>;

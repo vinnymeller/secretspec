@@ -42,6 +42,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set all secrets as environment variables
     secretspec.secrets.set_as_env_vars();
 
+    // Get a single secret
+    let db_secret = secretspec.secrets.get("DATABASE_URL", secretspec::GetOptions::default())?;
+    println!("Database secret value: {}", db_secret.secret);
+
     Ok(())
 }
 ```

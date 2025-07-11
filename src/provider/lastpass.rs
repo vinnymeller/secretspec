@@ -96,8 +96,8 @@ impl LastPassProvider {
             .map_err(|e| SecretSpecError::ProviderOperationFailed(e.to_string()))
     }
 
-    fn format_item_name(&self, project: &str, key: &str, _profile: Option<&str>) -> String {
-        format!("secretspec/{}/{}", project, key)
+    fn format_item_name(&self, project: &str, key: &str, profile: &str) -> String {
+        format!("secretspec/{}/{}/{}", project, profile, key)
     }
 
     fn check_if_logged_in(&self) -> Result<()> {
@@ -126,7 +126,7 @@ impl LastPassProvider {
 }
 
 impl Provider for LastPassProvider {
-    fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>> {
+    fn get(&self, project: &str, key: &str, profile: &str) -> Result<Option<String>> {
         self.check_if_logged_in()?;
 
         let item_name = self.format_item_name(project, key, profile);
@@ -149,7 +149,7 @@ impl Provider for LastPassProvider {
         }
     }
 
-    fn set(&self, project: &str, key: &str, value: &str, profile: Option<&str>) -> Result<()> {
+    fn set(&self, project: &str, key: &str, value: &str, profile: &str) -> Result<()> {
         self.check_if_logged_in()?;
 
         let item_name = self.format_item_name(project, key, profile);

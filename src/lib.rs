@@ -17,6 +17,23 @@ pub use secretspec_derive::define_secrets;
 // Re-export types for convenience
 pub use secretspec_types::*;
 
+// Extension trait for SecretSpecSecrets
+pub trait SecretSpecSecretsExt<T> {
+    fn get(&self, name: &str, options: GetOptions) -> Result<SecretSpecSecret>;
+}
+
+impl<T> SecretSpecSecretsExt<T> for SecretSpecSecrets<T> {
+    fn get(&self, name: &str, _options: GetOptions) -> Result<SecretSpecSecret> {
+        // Load the spec and validate the single secret
+        let spec = SecretSpec::load()?;
+        spec.validate_single(
+            name,
+            Some(self.provider.to_string()),
+            Some(self.profile.clone()),
+        )
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum SecretSpecError {
     #[error("IO error: {0}")]
@@ -58,6 +75,14 @@ pub enum SecretSpecError {
 }
 
 pub type Result<T> = std::result::Result<T, SecretSpecError>;
+
+#[derive(Debug, Default)]
+pub struct GetOptions {}
+
+#[derive(Debug)]
+pub struct SecretSpecSecret {
+    pub secret: String,
+}
 
 #[derive(Debug)]
 pub struct ValidationResult {
@@ -430,7 +455,7 @@ impl SecretSpec {
             rpassword::read_password()?
         };
 
-        backend.set(&self.config.project.name, name, &value, profile.as_deref())?;
+        backend.set(&self.config.project.name, name, &value, profile_name)?;
         println!(
             "{} Secret '{}' saved to {} (profile: {})",
             "✓".green(),
@@ -449,11 +474,12 @@ impl SecretSpec {
         profile: Option<String>,
     ) -> Result<()> {
         let backend = self.get_provider(provider_arg)?;
+        let profile_name = self.resolve_profile(profile.as_deref());
         let (_, default) = self
             .resolve_secret_config(name, profile.as_deref())
             .ok_or_else(|| SecretSpecError::SecretNotFound(name.to_string()))?;
 
-        match backend.get(&self.config.project.name, name, profile.as_deref())? {
+        match backend.get(&self.config.project.name, name, profile_name)? {
             Some(value) => {
                 println!("{}", value);
                 Ok(())
@@ -502,7 +528,7 @@ impl SecretSpec {
                                 &self.config.project.name,
                                 secret_name,
                                 &value,
-                                profile.as_deref(),
+                                &profile_display,
                             )?;
                             println!(
                                 "{} Secret '{}' saved to {} (profile: {})",
@@ -636,10 +662,10 @@ impl SecretSpec {
         // Process each secret in the profile
         for (name, config) in &profile_config.secrets {
             // First check if the secret exists in the "from" provider
-            match from_provider_backend.get(&self.config.project.name, name, profile)? {
+            match from_provider_backend.get(&self.config.project.name, name, profile_display)? {
                 Some(value) => {
                     // Secret exists in "from" provider, check if it exists in "to" provider
-                    match to_provider.get(&self.config.project.name, name, profile)? {
+                    match to_provider.get(&self.config.project.name, name, profile_display)? {
                         Some(_) => {
                             println!(
                                 "{} {} - {} {}",
@@ -652,7 +678,12 @@ impl SecretSpec {
                         }
                         None => {
                             // Secret doesn't exist in "to" provider, import it
-                            to_provider.set(&self.config.project.name, name, &value, profile)?;
+                            to_provider.set(
+                                &self.config.project.name,
+                                name,
+                                &value,
+                                profile_display,
+                            )?;
                             println!("{} {} - {}", "✓".green(), name, config.description);
                             imported += 1;
                         }
@@ -661,7 +692,7 @@ impl SecretSpec {
                 None => {
                     // Secret doesn't exist in "from" provider
                     // Check if it exists in the "to" provider
-                    match to_provider.get(&self.config.project.name, name, profile)? {
+                    match to_provider.get(&self.config.project.name, name, profile_display)? {
                         Some(_) => {
                             println!(
                                 "{} {} - {} {}",
@@ -707,6 +738,40 @@ impl SecretSpec {
         Ok(())
     }
 
+    pub fn validate_single(
+        &self,
+        secret_name: &str,
+        provider_arg: Option<String>,
+        profile: Option<String>,
+    ) -> Result<SecretSpecSecret> {
+        let backend = self.get_provider(provider_arg)?;
+        let profile_name = self.resolve_profile(profile.as_deref());
+
+        // Check if the secret exists in the configuration
+        let (required, default) = self
+            .resolve_secret_config(secret_name, profile.as_deref())
+            .ok_or_else(|| SecretSpecError::SecretNotFound(secret_name.to_string()))?;
+
+        // Try to get the secret value from the provider
+        match backend.get(&self.config.project.name, secret_name, profile_name)? {
+            Some(value) => Ok(SecretSpecSecret { secret: value }),
+            None => {
+                // If not found, check for default
+                if let Some(default_value) = default {
+                    Ok(SecretSpecSecret {
+                        secret: default_value,
+                    })
+                } else if required {
+                    Err(SecretSpecError::RequiredSecretMissing(
+                        secret_name.to_string(),
+                    ))
+                } else {
+                    Err(SecretSpecError::SecretNotFound(secret_name.to_string()))
+                }
+            }
+        }
+    }
+
     pub fn validate(
         &self,
         provider_arg: Option<String>,
@@ -746,7 +811,7 @@ impl SecretSpec {
                 .resolve_secret_config(&name, profile.as_deref())
                 .expect("Secret should exist in config since we're iterating over it");
 
-            match backend.get(&self.config.project.name, &name, profile.as_deref())? {
+            match backend.get(&self.config.project.name, &name, profile_name)? {
                 Some(value) => {
                     secrets.insert(name.clone(), value);
                 }

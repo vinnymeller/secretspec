@@ -8,7 +8,7 @@ pub mod onepassword;
 pub mod registry;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 pub use dotenv::{DotEnvConfig, DotEnvProvider};
 pub use env::{EnvConfig, EnvProvider};
@@ -18,8 +18,8 @@ pub use onepassword::{OnePasswordConfig, OnePasswordProvider};
 pub use registry::{ProviderInfo, ProviderRegistry};
 
 pub trait Provider: Send + Sync {
-    fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>>;
-    fn set(&self, project: &str, key: &str, value: &str, profile: Option<&str>) -> Result<()>;
+    fn get(&self, project: &str, key: &str, profile: &str) -> Result<Option<String>>;
+    fn set(&self, project: &str, key: &str, value: &str, profile: &str) -> Result<()>;
 
     /// Returns whether this provider supports setting values.
     /// Defaults to true, but can be overridden by read-only providers.
