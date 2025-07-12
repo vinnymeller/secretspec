@@ -4,48 +4,141 @@ use http::Uri;
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 
+/// Represents a 1Password item retrieved from the CLI.
+///
+/// This struct deserializes the JSON output from the `op item get` command
+/// and contains an array of fields that hold the actual secret data.
 #[derive(Debug, Deserialize)]
 struct OnePasswordItem {
+    /// Collection of fields within the 1Password item.
+    /// Each field represents a piece of data stored in the item.
     fields: Vec<OnePasswordField>,
 }
 
+/// Represents a single field within a 1Password item.
+///
+/// Fields can contain various types of data such as passwords, strings,
+/// or concealed values. The field's label is used to identify specific
+/// data within an item.
 #[derive(Debug, Deserialize)]
 struct OnePasswordField {
+    /// Unique identifier for the field within the item.
     id: String,
+    /// The type of field (e.g., "STRING", "CONCEALED", "PASSWORD").
     #[serde(rename = "type")]
     field_type: String,
+    /// Optional human-readable label for the field.
+    /// Used to identify fields like "value", "password", etc.
     label: Option<String>,
+    /// The actual value stored in the field.
+    /// May be None for certain field types.
     value: Option<String>,
 }
 
+/// Template for creating new 1Password items via the CLI.
+///
+/// This struct is serialized to JSON and passed to the `op item create` command
+/// using the `--template` flag. It defines the structure and metadata for
+/// new secure note items that store secrets.
 #[derive(Debug, Serialize)]
 struct OnePasswordItemTemplate {
+    /// The title of the item, formatted as "secretspec/{project}/{profile}/{key}".
     title: String,
+    /// The category of the item. Always "SECURE_NOTE" for secretspec items.
     category: String,
+    /// The vault where the item should be created.
+    /// If None, 1Password will use the default vault.
     vault: Option<String>,
+    /// Collection of fields to include in the item.
+    /// Contains project, key, and value fields.
     fields: Vec<OnePasswordFieldTemplate>,
+    /// Tags to help organize and identify secretspec items.
+    /// Includes "automated" and the project name.
     tags: Vec<String>,
 }
 
+/// Template for individual fields when creating 1Password items.
+///
+/// Each field represents a piece of data to store in the item.
+/// Used within OnePasswordItemTemplate to define the item's content.
 #[derive(Debug, Serialize)]
 struct OnePasswordFieldTemplate {
+    /// Human-readable label for the field (e.g., "project", "key", "value").
     label: String,
+    /// The type of field. Always "STRING" for secretspec fields.
     #[serde(rename = "type")]
     field_type: String,
+    /// The actual value to store in the field.
     value: String,
 }
 
+/// Configuration for the 1Password provider.
+///
+/// This struct contains all the necessary configuration options for
+/// interacting with 1Password CLI. It supports both interactive authentication
+/// and service account tokens for automated workflows.
+///
+/// # Examples
+///
+/// ```
+/// // Using default configuration (interactive auth)
+/// let config = OnePasswordConfig::default();
+///
+/// // With a specific vault
+/// let config = OnePasswordConfig {
+///     default_vault: Some("Development".to_string()),
+///     ..Default::default()
+/// };
+///
+/// // With service account token for CI/CD
+/// let config = OnePasswordConfig {
+///     service_account_token: Some("ops_eyJzaWduSW...".to_string()),
+///     ..Default::default()
+/// };
+/// ```
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OnePasswordConfig {
-    /// Optional account shorthand (for multiple accounts)
+    /// Optional account shorthand (for multiple accounts).
+    ///
+    /// Used with the `--account` flag when you have multiple 1Password
+    /// accounts configured. This should match the shorthand shown in
+    /// `op account list`.
     pub account: Option<String>,
-    /// Default vault to use when profile is not specified
+    /// Default vault to use when profile is not specified.
+    ///
+    /// If not set, defaults to "Private" for the default profile.
+    /// For non-default profiles, the profile name is used as the vault name.
     pub default_vault: Option<String>,
-    /// Service account token (alternative to interactive auth)
+    /// Service account token (alternative to interactive auth).
+    ///
+    /// When set, this token is passed via the OP_SERVICE_ACCOUNT_TOKEN
+    /// environment variable to authenticate without user interaction.
+    /// Ideal for CI/CD environments.
     pub service_account_token: Option<String>,
 }
 
 impl OnePasswordConfig {
+    /// Creates a OnePasswordConfig from a URI.
+    ///
+    /// Supports the following URI formats:
+    /// - `1password://` - Basic 1Password with interactive auth
+    /// - `1password://vault` - Specify default vault
+    /// - `1password://account@vault` - Specify account and vault
+    /// - `1password+token://token@vault` - Use service account token
+    ///
+    /// # Arguments
+    ///
+    /// * `uri` - The URI to parse
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self>` - The parsed configuration or an error
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The URI scheme is not "1password" or "1password+token"
+    /// - The URI uses the incorrect "onepassword" scheme
     pub fn from_uri(uri: &Uri) -> Result<Self> {
         let scheme = uri.scheme_str().ok_or_else(|| {
             SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string())
@@ -100,20 +193,92 @@ impl OnePasswordConfig {
     }
 }
 
+/// Provider implementation for 1Password password manager.
+///
+/// This provider integrates with 1Password CLI (`op`) to store and retrieve
+/// secrets. It organizes secrets in a hierarchical structure within 1Password
+/// items using the format: `secretspec/{project}/{profile}/{key}`.
+///
+/// # Authentication
+///
+/// The provider supports two authentication methods:
+///
+/// 1. **Interactive Authentication**: Users run `op signin` before using secretspec
+/// 2. **Service Account Tokens**: For CI/CD, configure a token in the config
+///
+/// # Storage Structure
+///
+/// Secrets are stored as Secure Note items in 1Password with:
+/// - Title: `secretspec/{project}/{profile}/{key}`
+/// - Category: SECURE_NOTE
+/// - Fields: project, key, value
+/// - Tags: "automated", {project}
+///
+/// # Example Usage
+///
+/// ```bash
+/// # Interactive auth
+/// op signin
+/// secretspec set MY_SECRET --provider 1password://Development
+///
+/// # Service account token
+/// export OP_SERVICE_ACCOUNT_TOKEN="ops_eyJzaWduSW..."
+/// secretspec get MY_SECRET --provider 1password+token://Development
+/// ```
 pub struct OnePasswordProvider {
+    /// Configuration for the provider including auth settings and default vault.
     config: OnePasswordConfig,
 }
 
 impl OnePasswordProvider {
+    /// Creates a new OnePasswordProvider with the given configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The configuration for the provider
     pub fn new(config: OnePasswordConfig) -> Self {
         Self { config }
     }
 
+    /// Creates a new OnePasswordProvider from a URI.
+    ///
+    /// This is a convenience method that parses the URI and creates
+    /// the appropriate configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `uri` - The URI to parse (e.g., "1password://vault")
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self>` - The configured provider or an error
     pub fn from_uri(uri: &Uri) -> Result<Self> {
         let config = OnePasswordConfig::from_uri(uri)?;
         Ok(Self::new(config))
     }
 
+    /// Executes a 1Password CLI command with proper error handling.
+    ///
+    /// This method handles:
+    /// - Setting up authentication (account, service token)
+    /// - Executing the command
+    /// - Parsing error messages for common issues
+    /// - Providing helpful error messages for missing CLI
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - The command arguments to pass to `op`
+    ///
+    /// # Returns
+    ///
+    /// * `Result<String>` - The command output or an error
+    ///
+    /// # Errors
+    ///
+    /// Returns specific errors for:
+    /// - Missing 1Password CLI installation
+    /// - Authentication required
+    /// - Command execution failures
     fn execute_op_command(&self, args: &[&str]) -> Result<String> {
         let mut cmd = Command::new("op");
 
@@ -155,6 +320,16 @@ impl OnePasswordProvider {
             .map_err(|e| SecretSpecError::ProviderOperationFailed(e.to_string()))
     }
 
+    /// Checks if the user is authenticated with 1Password.
+    ///
+    /// Uses the `op whoami` command to verify authentication status.
+    /// This is non-intrusive and doesn't require any permissions.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(true)` - User is authenticated
+    /// * `Ok(false)` - User is not authenticated
+    /// * `Err(_)` - Command execution failed
     fn whoami(&self) -> Result<bool> {
         match self.execute_op_command(&["whoami"]) {
             Ok(_) => Ok(true),
@@ -167,6 +342,17 @@ impl OnePasswordProvider {
         }
     }
 
+    /// Determines the vault name based on the profile.
+    ///
+    /// # Arguments
+    ///
+    /// * `profile` - The profile name
+    ///
+    /// # Returns
+    ///
+    /// The vault name to use:
+    /// - For "default" profile: uses configured default_vault or "Private"
+    /// - For other profiles: uses the profile name as the vault name
     fn get_vault_name(&self, profile: &str) -> String {
         if profile == "default" {
             self.config
@@ -178,10 +364,40 @@ impl OnePasswordProvider {
         }
     }
 
+    /// Formats the item name for storage in 1Password.
+    ///
+    /// Creates a hierarchical name that includes project, profile, and key
+    /// to ensure uniqueness and organization.
+    ///
+    /// # Arguments
+    ///
+    /// * `project` - The project name
+    /// * `key` - The secret key
+    /// * `profile` - The profile name
+    ///
+    /// # Returns
+    ///
+    /// A formatted string like "secretspec/myproject/production/DATABASE_URL"
     fn format_item_name(&self, project: &str, key: &str, profile: &str) -> String {
         format!("secretspec/{}/{}/{}", project, profile, key)
     }
 
+    /// Creates a template for a new 1Password item.
+    ///
+    /// This template is serialized to JSON and used with `op item create`.
+    /// The item is created as a Secure Note with structured fields.
+    ///
+    /// # Arguments
+    ///
+    /// * `project` - The project name
+    /// * `key` - The secret key
+    /// * `value` - The secret value
+    /// * `vault` - The vault to create the item in
+    /// * `profile` - The profile name
+    ///
+    /// # Returns
+    ///
+    /// A OnePasswordItemTemplate ready for serialization
     fn create_item_template(
         &self,
         project: &str,
@@ -217,6 +433,29 @@ impl OnePasswordProvider {
 }
 
 impl Provider for OnePasswordProvider {
+    /// Retrieves a secret from 1Password.
+    ///
+    /// Searches for an item with the title "secretspec/{project}/{profile}/{key}"
+    /// in the appropriate vault. The method looks for a field labeled "value"
+    /// first, then falls back to password or concealed fields.
+    ///
+    /// # Arguments
+    ///
+    /// * `project` - The project name
+    /// * `key` - The secret key to retrieve
+    /// * `profile` - The profile to use for vault selection
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Some(value))` - The secret value if found
+    /// * `Ok(None)` - No secret found with the given key
+    /// * `Err(_)` - Authentication or retrieval error
+    ///
+    /// # Errors
+    ///
+    /// - Authentication required if not signed in
+    /// - Item retrieval failures
+    /// - JSON parsing errors
     fn get(&self, project: &str, key: &str, profile: &str) -> Result<Option<String>> {
         // Check authentication status first
         if !self.whoami()? {
@@ -260,6 +499,28 @@ impl Provider for OnePasswordProvider {
         }
     }
 
+    /// Stores or updates a secret in 1Password.
+    ///
+    /// If an item with the same title exists, it updates the "value" field.
+    /// Otherwise, it creates a new Secure Note item with the secret data.
+    ///
+    /// # Arguments
+    ///
+    /// * `project` - The project name
+    /// * `key` - The secret key
+    /// * `value` - The secret value to store
+    /// * `profile` - The profile to use for vault selection
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Secret stored successfully
+    /// * `Err(_)` - Storage or authentication error
+    ///
+    /// # Errors
+    ///
+    /// - Authentication required if not signed in
+    /// - Item creation/update failures
+    /// - Temporary file creation errors
     fn set(&self, project: &str, key: &str, value: &str, profile: &str) -> Result<()> {
         // Check authentication status first
         if !self.whoami()? {
@@ -313,16 +574,25 @@ impl Provider for OnePasswordProvider {
         Ok(())
     }
 
+    /// Returns the name of this provider.
+    ///
+    /// Used for provider identification and selection.
     fn name(&self) -> &'static str {
         "1password"
     }
 
+    /// Returns a human-readable description of this provider.
+    ///
+    /// Used in help text and provider listings.
     fn description(&self) -> &'static str {
         "1Password password manager"
     }
 }
 
 impl Default for OnePasswordProvider {
+    /// Creates a OnePasswordProvider with default configuration.
+    ///
+    /// Uses interactive authentication and the "Private" vault by default.
     fn default() -> Self {
         Self::new(OnePasswordConfig::default())
     }

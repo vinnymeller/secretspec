@@ -1,10 +1,42 @@
+//! # SecretSpec Derive Macros
+//!
+//! This crate provides procedural macros for the SecretSpec library, enabling compile-time
+//! generation of strongly-typed secret structs from `secretspec.toml` configuration files.
+//!
+//! ## Overview
+//!
+//! The macro system reads your `secretspec.toml` at compile time and generates:
+//! - A `SecretSpec` struct with all secrets as fields (union of all profiles)
+//! - A `SecretSpecProfile` enum with profile-specific structs
+//! - A `Profile` enum representing available profiles
+//! - Type-safe loading methods with automatic validation
+//!
+//! ## Key Features
+//!
+//! - **Compile-time validation**: Invalid configurations are caught during compilation
+//! - **Type safety**: Secrets are accessed as struct fields, not strings
+//! - **Profile awareness**: Different types for different profiles (e.g., production vs development)
+//! - **Builder pattern**: Flexible configuration with method chaining
+//! - **Environment integration**: Automatic environment variable handling
+
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use secretspec_types::{ProjectConfig, SecretConfig};
 use std::collections::{BTreeMap, HashSet};
 use syn::{LitStr, parse_macro_input};
 
-/// Holds metadata about a field in the generated struct
+/// Holds metadata about a field in the generated struct.
+///
+/// This struct contains all the information needed to generate:
+/// - Struct field declarations
+/// - Field assignments from secret maps
+/// - Environment variable setters
+///
+/// # Fields
+///
+/// * `name` - The original secret name (e.g., "DATABASE_URL")
+/// * `field_type` - The Rust type for this field (String or Option<String>)
+/// * `is_optional` - Whether this field is optional across all profiles
 #[derive(Clone)]
 struct FieldInfo {
     name: String,
@@ -13,6 +45,13 @@ struct FieldInfo {
 }
 
 impl FieldInfo {
+    /// Creates a new FieldInfo instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The secret name as defined in the config
+    /// * `field_type` - The generated Rust type (String or Option<String>)
+    /// * `is_optional` - Whether the field should be optional
     fn new(name: String, field_type: proc_macro2::TokenStream, is_optional: bool) -> Self {
         Self {
             name,
@@ -21,24 +60,70 @@ impl FieldInfo {
         }
     }
 
-    /// Get the field name as an identifier
+    /// Get the field name as a Rust identifier.
+    ///
+    /// Converts the secret name to a valid Rust field name by:
+    /// - Converting to lowercase
+    /// - Preserving underscores
+    ///
+    /// # Example
+    ///
+    /// - "DATABASE_URL" becomes `database_url`
+    /// - "API_KEY" becomes `api_key`
     fn field_name(&self) -> proc_macro2::Ident {
         field_name_ident(&self.name)
     }
 
-    /// Generate the struct field declaration
+    /// Generate the struct field declaration.
+    ///
+    /// Creates a public field declaration for use in the generated struct.
+    ///
+    /// # Returns
+    ///
+    /// A token stream representing `pub field_name: FieldType`
+    ///
+    /// # Example Output
+    ///
+    /// ```ignore
+    /// pub database_url: String
+    /// pub api_key: Option<String>
+    /// ```
     fn generate_struct_field(&self) -> proc_macro2::TokenStream {
         let field_name = self.field_name();
         let field_type = &self.field_type;
         quote! { pub #field_name: #field_type }
     }
 
-    /// Generate a field assignment from a secrets map
+    /// Generate a field assignment from a secrets map.
+    ///
+    /// Creates code to assign a value from a HashMap<String, String> to this field.
+    /// Handles both required and optional fields appropriately.
+    ///
+    /// # Arguments
+    ///
+    /// * `source` - The token stream representing the source map (e.g., `secrets`)
+    ///
+    /// # Returns
+    ///
+    /// Token stream for the field assignment, with proper error handling for required fields
     fn generate_assignment(&self, source: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
         generate_secret_assignment(&self.field_name(), &self.name, source, self.is_optional)
     }
 
-    /// Generate environment variable setter
+    /// Generate environment variable setter.
+    ///
+    /// Creates code to set an environment variable from this field's value.
+    /// For optional fields, only sets the variable if a value is present.
+    ///
+    /// # Safety
+    ///
+    /// The generated code uses `unsafe` because `std::env::set_var` is unsafe
+    /// in multi-threaded contexts. Users should ensure thread safety when calling
+    /// the generated `set_as_env_vars` method.
+    ///
+    /// # Returns
+    ///
+    /// Token stream that sets the environment variable when executed
     fn generate_env_setter(&self) -> proc_macro2::TokenStream {
         let field_name = self.field_name();
         let env_name = &self.name;
@@ -61,18 +146,44 @@ impl FieldInfo {
     }
 }
 
-/// Profile variant information
+/// Profile variant information for enum generation.
+///
+/// Represents a profile that will become an enum variant in the generated code.
+/// Handles the conversion from profile names to valid Rust enum variants.
+///
+/// # Fields
+///
+/// * `name` - The original profile name (e.g., "production", "development")
+/// * `capitalized` - The capitalized variant name (e.g., "Production", "Development")
 struct ProfileVariant {
     name: String,
     capitalized: String,
 }
 
 impl ProfileVariant {
+    /// Creates a new ProfileVariant with automatic capitalization.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The profile name from the configuration
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let variant = ProfileVariant::new("production".to_string());
+    /// // variant.name == "production"
+    /// // variant.capitalized == "Production"
+    /// ```
     fn new(name: String) -> Self {
         let capitalized = capitalize_first(&name);
         Self { name, capitalized }
     }
 
+    /// Convert the variant to a Rust identifier.
+    ///
+    /// # Returns
+    ///
+    /// A proc_macro2::Ident suitable for use as an enum variant
     fn as_ident(&self) -> proc_macro2::Ident {
         format_ident!("{}", self.capitalized)
     }
@@ -145,9 +256,27 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
 
 // ===== Core Helper Functions =====
 
-/// Validate configuration for code generation concerns only
-/// This is different from runtime validation - we only check things that would
-/// prevent generating valid Rust code
+/// Validate configuration for code generation concerns only.
+///
+/// This performs compile-time validation to ensure the configuration can be
+/// converted into valid Rust code. This is different from runtime validation -
+/// we only check things that would prevent generating valid Rust code.
+///
+/// # Validation Checks
+///
+/// - Secret names must produce valid Rust identifiers
+/// - Secret names must not be Rust keywords
+/// - Profile names must produce valid enum variants
+/// - No duplicate field names within a profile (case-insensitive)
+///
+/// # Arguments
+///
+/// * `config` - The parsed project configuration
+///
+/// # Returns
+///
+/// - `Ok(())` if validation passes
+/// - `Err(Vec<String>)` containing all validation errors if any are found
 fn validate_config_for_codegen(config: &ProjectConfig) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
 
@@ -164,7 +293,23 @@ fn validate_config_for_codegen(config: &ProjectConfig) -> Result<(), Vec<String>
     }
 }
 
-/// Validate all secret names produce valid Rust identifiers
+/// Validate all secret names produce valid Rust identifiers.
+///
+/// Checks that each secret name, when converted to a field name:
+/// - Forms a valid Rust identifier (alphanumeric + underscores)
+/// - Doesn't conflict with Rust keywords
+/// - Doesn't create duplicate field names within a profile
+///
+/// # Arguments
+///
+/// * `config` - The project configuration to validate
+/// * `errors` - Mutable vector to collect error messages
+///
+/// # Error Cases
+///
+/// - Secret names with invalid characters (e.g., "my-secret" with hyphen)
+/// - Secret names that are Rust keywords (e.g., "TYPE", "IMPL")
+/// - Multiple secrets producing the same field name (e.g., "API_KEY" and "api_key")
 fn validate_rust_identifiers(config: &ProjectConfig, errors: &mut Vec<String>) {
     let rust_keywords = [
         "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum",
@@ -207,7 +352,29 @@ fn validate_rust_identifiers(config: &ProjectConfig, errors: &mut Vec<String>) {
     }
 }
 
-/// Check if a string is a valid Rust identifier
+/// Check if a string is a valid Rust identifier.
+///
+/// A valid Rust identifier must:
+/// - Start with a letter or underscore
+/// - Contain only letters, numbers, and underscores
+/// - Not be empty
+///
+/// # Arguments
+///
+/// * `s` - The string to validate
+///
+/// # Returns
+///
+/// `true` if the string is a valid Rust identifier, `false` otherwise
+///
+/// # Examples
+///
+/// ```ignore
+/// assert!(is_valid_rust_identifier("my_var"));
+/// assert!(is_valid_rust_identifier("_private"));
+/// assert!(!is_valid_rust_identifier("123start"));
+/// assert!(!is_valid_rust_identifier("my-var"));
+/// ```
 fn is_valid_rust_identifier(s: &str) -> bool {
     if s.is_empty() {
         return false;
@@ -226,7 +393,19 @@ fn is_valid_rust_identifier(s: &str) -> bool {
     }
 }
 
-/// Validate profile names produce valid Rust enum variants
+/// Validate profile names produce valid Rust enum variants.
+///
+/// Ensures that each profile name, when capitalized, forms a valid Rust enum variant.
+///
+/// # Arguments
+///
+/// * `config` - The project configuration to validate
+/// * `errors` - Mutable vector to collect error messages
+///
+/// # Error Cases
+///
+/// - Profile names that start with numbers (e.g., "1production")
+/// - Profile names with invalid characters (e.g., "prod-env")
 fn validate_profile_identifiers(config: &ProjectConfig, errors: &mut Vec<String>) {
     for profile_name in config.profiles.keys() {
         let variant_name = capitalize_first(profile_name);
@@ -239,17 +418,67 @@ fn validate_profile_identifiers(config: &ProjectConfig, errors: &mut Vec<String>
     }
 }
 
-/// Convert a secret name to a field identifier
+/// Convert a secret name to a field identifier.
+///
+/// Converts environment variable style names to Rust field names by:
+/// - Converting to lowercase
+/// - Preserving underscores
+///
+/// # Arguments
+///
+/// * `name` - The secret name (typically uppercase with underscores)
+///
+/// # Returns
+///
+/// A proc_macro2::Ident suitable for use as a struct field
+///
+/// # Example
+///
+/// ```ignore
+/// let ident = field_name_ident("DATABASE_URL");
+/// // Generates: database_url
+/// ```
 fn field_name_ident(name: &str) -> proc_macro2::Ident {
     format_ident!("{}", name.to_lowercase())
 }
 
-/// Helper function to check if a secret is optional
+/// Helper function to check if a secret is optional.
+///
+/// A secret is considered optional if:
+/// - It has `required = false` in the config, OR
+/// - It has a default value specified
+///
+/// # Arguments
+///
+/// * `secret_config` - The secret's configuration
+///
+/// # Returns
+///
+/// `true` if the secret is optional, `false` if required
 fn is_secret_optional(secret_config: &SecretConfig) -> bool {
     !secret_config.required || secret_config.default.is_some()
 }
 
-/// Determines if a field should be optional across all profiles
+/// Determines if a field should be optional across all profiles.
+///
+/// For the union struct (SecretSpec), a field is optional if it's optional
+/// in ANY profile or missing from ANY profile. This ensures the union type
+/// can safely represent secrets from any profile.
+///
+/// # Arguments
+///
+/// * `secret_name` - The name of the secret to check
+/// * `config` - The project configuration
+///
+/// # Returns
+///
+/// `true` if the field should be Option<String> in the union struct
+///
+/// # Logic
+///
+/// - If the secret is missing from any profile → optional
+/// - If the secret is optional in any profile → optional
+/// - Only if required in ALL profiles → not optional
 fn is_field_optional_across_profiles(secret_name: &str, config: &ProjectConfig) -> bool {
     // Check each profile
     for (_, profile_config) in &config.profiles {
@@ -265,7 +494,31 @@ fn is_field_optional_across_profiles(secret_name: &str, config: &ProjectConfig) 
     false
 }
 
-/// Generate a unified secret assignment
+/// Generate a unified secret assignment from a HashMap.
+///
+/// Creates the code to assign a value from a secrets map to a struct field,
+/// with appropriate error handling based on whether the field is optional.
+///
+/// # Arguments
+///
+/// * `field_name` - The struct field identifier
+/// * `secret_name` - The key to look up in the map
+/// * `source` - Token stream representing the source map
+/// * `is_optional` - Whether to generate Option<String> or String assignment
+///
+/// # Generated Code
+///
+/// For required fields:
+/// ```ignore
+/// field_name: source.get("SECRET_NAME")
+///     .ok_or_else(|| SecretSpecError::RequiredSecretMissing("SECRET_NAME".to_string()))?
+///     .clone()
+/// ```
+///
+/// For optional fields:
+/// ```ignore
+/// field_name: source.get("SECRET_NAME").cloned()
+/// ```
 fn generate_secret_assignment(
     field_name: &proc_macro2::Ident,
     secret_name: &str,
@@ -285,7 +538,27 @@ fn generate_secret_assignment(
     }
 }
 
-/// Analyzes all profiles to determine field types for the union struct
+/// Analyzes all profiles to determine field types for the union struct.
+///
+/// This function examines all secrets across all profiles to determine:
+/// - Which secrets exist across profiles
+/// - Whether each secret should be optional in the union type
+/// - The appropriate Rust type for each field
+///
+/// # Arguments
+///
+/// * `config` - The project configuration
+///
+/// # Returns
+///
+/// A BTreeMap (for consistent ordering) mapping secret names to their FieldInfo
+///
+/// # Algorithm
+///
+/// 1. Collect all unique secret names from all profiles
+/// 2. For each secret, determine if it's optional across profiles
+/// 3. Generate appropriate type (String or Option<String>)
+/// 4. Create FieldInfo with all metadata needed for code generation
 fn analyze_field_types(config: &ProjectConfig) -> BTreeMap<String, FieldInfo> {
     let mut field_info = BTreeMap::new();
 
@@ -307,7 +580,23 @@ fn analyze_field_types(config: &ProjectConfig) -> BTreeMap<String, FieldInfo> {
     field_info
 }
 
-/// Get normalized profile variants
+/// Get normalized profile variants for enum generation.
+///
+/// Converts profile names into ProfileVariant structs, handling the special
+/// case of empty profiles (generates a "Default" variant).
+///
+/// # Arguments
+///
+/// * `profiles` - Set of profile names from the configuration
+///
+/// # Returns
+///
+/// A sorted vector of ProfileVariant structs
+///
+/// # Special Cases
+///
+/// - Empty profiles → returns vec![ProfileVariant("default", "Default")]
+/// - Otherwise → sorted list of profile variants
 fn get_profile_variants(profiles: &HashSet<String>) -> Vec<ProfileVariant> {
     if profiles.is_empty() {
         vec![ProfileVariant::new("default".to_string())]
@@ -323,10 +612,33 @@ fn get_profile_variants(profiles: &HashSet<String>) -> Vec<ProfileVariant> {
 
 // ===== Profile Generation Module =====
 
+/// Module for generating Profile enum and related implementations.
+///
+/// This module handles:
+/// - Profile enum definition
+/// - TryFrom implementations for string conversion
+/// - as_str() method for profile serialization
 mod profile_generation {
     use super::*;
 
-    /// Generate just the Profile enum
+    /// Generate just the Profile enum.
+    ///
+    /// Creates an enum with variants for each profile in the configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `variants` - List of profile variants to generate
+    ///
+    /// # Generated Code Example
+    ///
+    /// ```ignore
+    /// #[derive(Debug, Clone, Copy)]
+    /// pub enum Profile {
+    ///     Development,
+    ///     Production,
+    ///     Staging,
+    /// }
+    /// ```
     pub fn generate_enum(variants: &[ProfileVariant]) -> proc_macro2::TokenStream {
         let enum_variants = variants.iter().map(|v| {
             let ident = v.as_ident();
@@ -341,7 +653,20 @@ mod profile_generation {
         }
     }
 
-    /// Generate TryFrom implementations for Profile
+    /// Generate TryFrom implementations for Profile.
+    ///
+    /// Creates implementations to convert strings to Profile enum variants,
+    /// supporting both &str and String inputs.
+    ///
+    /// # Arguments
+    ///
+    /// * `variants` - List of profile variants
+    ///
+    /// # Generated Code
+    ///
+    /// - `TryFrom<&str>` implementation with match arms for each profile
+    /// - `TryFrom<String>` implementation that delegates to &str
+    /// - Returns `SecretSpecError::InvalidProfile` for unknown profiles
     pub fn generate_try_from_impls(variants: &[ProfileVariant]) -> proc_macro2::TokenStream {
         let from_str_arms = variants.iter().map(|v| {
             let ident = v.as_ident();
@@ -371,7 +696,26 @@ mod profile_generation {
         }
     }
 
-    /// Generate as_str implementation for Profile
+    /// Generate as_str implementation for Profile.
+    ///
+    /// Creates a method to convert Profile enum variants back to their string representation.
+    ///
+    /// # Arguments
+    ///
+    /// * `variants` - List of profile variants
+    ///
+    /// # Generated Code Example
+    ///
+    /// ```ignore
+    /// impl Profile {
+    ///     fn as_str(&self) -> &'static str {
+    ///         match self {
+    ///             Profile::Development => "development",
+    ///             Profile::Production => "production",
+    ///         }
+    ///     }
+    /// }
+    /// ```
     pub fn generate_as_str_impl(variants: &[ProfileVariant]) -> proc_macro2::TokenStream {
         let to_str_arms = variants.iter().map(|v| {
             let ident = v.as_ident();
@@ -390,7 +734,20 @@ mod profile_generation {
         }
     }
 
-    /// Generate all profile-related code
+    /// Generate all profile-related code.
+    ///
+    /// Combines all profile generation functions into a single token stream.
+    ///
+    /// # Arguments
+    ///
+    /// * `variants` - List of profile variants
+    ///
+    /// # Returns
+    ///
+    /// Complete token stream containing:
+    /// - Profile enum definition
+    /// - TryFrom implementations
+    /// - as_str() method
     pub fn generate_all(variants: &[ProfileVariant]) -> proc_macro2::TokenStream {
         let enum_def = generate_enum(variants);
         let try_from_impls = generate_try_from_impls(variants);
@@ -406,10 +763,35 @@ mod profile_generation {
 
 // ===== SecretSpec Generation Module =====
 
+/// Module for generating SecretSpec struct and related implementations.
+///
+/// This module handles:
+/// - SecretSpec struct (union of all secrets)
+/// - SecretSpecProfile enum (profile-specific types)
+/// - Loading implementations
+/// - Environment variable integration
 mod secret_spec_generation {
     use super::*;
 
-    /// Generate the SecretSpec struct
+    /// Generate the SecretSpec struct.
+    ///
+    /// Creates a struct containing all secrets from all profiles as fields.
+    /// This is the "union" type that can safely hold secrets from any profile.
+    ///
+    /// # Arguments
+    ///
+    /// * `field_info` - Map of all fields with their type information
+    ///
+    /// # Generated Code Example
+    ///
+    /// ```ignore
+    /// #[derive(Debug, serde::Serialize, serde::Deserialize)]
+    /// pub struct SecretSpec {
+    ///     pub database_url: String,
+    ///     pub api_key: Option<String>,
+    ///     pub redis_url: Option<String>,
+    /// }
+    /// ```
     pub fn generate_struct(field_info: &BTreeMap<String, FieldInfo>) -> proc_macro2::TokenStream {
         let fields = field_info.values().map(|info| info.generate_struct_field());
 
@@ -421,7 +803,32 @@ mod secret_spec_generation {
         }
     }
 
-    /// Generate the SecretSpecProfile enum
+    /// Generate the SecretSpecProfile enum.
+    ///
+    /// Creates an enum where each variant contains only the secrets defined
+    /// for that specific profile. This provides stronger type safety when
+    /// working with profile-specific secrets.
+    ///
+    /// # Arguments
+    ///
+    /// * `profile_variants` - Generated enum variant definitions
+    ///
+    /// # Generated Code Example
+    ///
+    /// ```ignore
+    /// #[derive(Debug, serde::Serialize, serde::Deserialize)]
+    /// pub enum SecretSpecProfile {
+    ///     Development {
+    ///         database_url: String,
+    ///         redis_url: Option<String>,
+    ///     },
+    ///     Production {
+    ///         database_url: String,
+    ///         api_key: String,
+    ///         redis_url: String,
+    ///     },
+    /// }
+    /// ```
     pub fn generate_profile_enum(
         profile_variants: &[proc_macro2::TokenStream],
     ) -> proc_macro2::TokenStream {
@@ -433,7 +840,25 @@ mod secret_spec_generation {
         }
     }
 
-    /// Generate SecretSpecProfile enum variants
+    /// Generate SecretSpecProfile enum variants.
+    ///
+    /// Creates the individual variants for the SecretSpecProfile enum,
+    /// each containing only the fields defined for that profile.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The project configuration
+    /// * `field_info` - Field information (used for empty profile case)
+    /// * `variants` - Profile variants to generate
+    ///
+    /// # Returns
+    ///
+    /// Vector of token streams, each representing one enum variant
+    ///
+    /// # Special Cases
+    ///
+    /// - Empty profiles → generates a Default variant with all fields
+    /// - Each profile → generates variant with profile-specific fields
     pub fn generate_profile_enum_variants(
         config: &ProjectConfig,
         field_info: &BTreeMap<String, FieldInfo>,
@@ -478,7 +903,31 @@ mod secret_spec_generation {
         }
     }
 
-    /// Generate load_profile match arms
+    /// Generate load_profile match arms.
+    ///
+    /// Creates the match arms for loading profile-specific secrets into
+    /// the appropriate SecretSpecProfile variant.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The project configuration
+    /// * `field_info` - Field information (for empty profile case)
+    /// * `variants` - Profile variants to generate arms for
+    ///
+    /// # Returns
+    ///
+    /// Vector of match arms for the profile loading logic
+    ///
+    /// # Generated Code Example
+    ///
+    /// ```ignore
+    /// Profile::Production => Ok(SecretSpecProfile::Production {
+    ///     database_url: secrets.get("DATABASE_URL")
+    ///         .ok_or_else(|| SecretSpecError::RequiredSecretMissing("DATABASE_URL".to_string()))?
+    ///         .clone(),
+    ///     api_key: secrets.get("API_KEY").cloned(),
+    /// })
+    /// ```
     pub fn generate_load_profile_arms(
         config: &ProjectConfig,
         field_info: &BTreeMap<String, FieldInfo>,
@@ -526,7 +975,17 @@ mod secret_spec_generation {
         }
     }
 
-    /// Generate the shared load_internal implementation
+    /// Generate the shared load_internal implementation.
+    ///
+    /// Creates a helper function that handles the common loading logic
+    /// for both SecretSpec and SecretSpecProfile loading methods.
+    ///
+    /// # Generated Function
+    ///
+    /// The function:
+    /// 1. Loads the SecretSpec configuration
+    /// 2. Validates it with the given provider and profile
+    /// 3. Returns the validation result containing loaded secrets
     pub fn generate_load_internal() -> proc_macro2::TokenStream {
         quote! {
             fn load_internal(
@@ -539,7 +998,24 @@ mod secret_spec_generation {
         }
     }
 
-    /// Generate SecretSpec implementation
+    /// Generate SecretSpec implementation.
+    ///
+    /// Creates the impl block for SecretSpec with:
+    /// - builder() method for creating a builder
+    /// - load() method for loading with union types
+    /// - set_as_env_vars() method for environment variable integration
+    ///
+    /// # Arguments
+    ///
+    /// * `load_assignments` - Field assignments for the load method
+    /// * `env_setters` - Environment variable setter statements
+    /// * `_field_info` - Field information (currently unused)
+    ///
+    /// # Generated Methods
+    ///
+    /// - `builder()` - Creates a new SecretSpecBuilder
+    /// - `load()` - Loads secrets with optional provider/profile
+    /// - `set_as_env_vars()` - Sets all secrets as environment variables
     pub fn generate_impl(
         load_assignments: &[proc_macro2::TokenStream],
         env_setters: Vec<proc_macro2::TokenStream>,
@@ -591,10 +1067,29 @@ mod secret_spec_generation {
 
 // ===== Builder Generation Module =====
 
+/// Module for generating the builder pattern implementation.
+///
+/// The builder provides a fluent API for configuring how secrets are loaded,
+/// with support for:
+/// - Custom providers (via URIs)
+/// - Profile selection
+/// - Type-safe loading (union or profile-specific)
 mod builder_generation {
     use super::*;
 
-    /// Generate the builder struct definition
+    /// Generate the builder struct definition.
+    ///
+    /// The builder uses boxed closures to defer provider/profile resolution
+    /// until load time, allowing for flexible configuration.
+    ///
+    /// # Generated Struct
+    ///
+    /// ```ignore
+    /// pub struct SecretSpecBuilder {
+    ///     provider: Option<Box<dyn FnOnce() -> Result<http::Uri, String>>>,
+    ///     profile: Option<Box<dyn FnOnce() -> Result<Profile, String>>>,
+    /// }
+    /// ```
     pub fn generate_struct() -> proc_macro2::TokenStream {
         quote! {
             pub struct SecretSpecBuilder {
@@ -604,7 +1099,25 @@ mod builder_generation {
         }
     }
 
-    /// Generate builder basic methods
+    /// Generate builder basic methods.
+    ///
+    /// Creates the foundational builder methods:
+    /// - Default implementation
+    /// - new() constructor
+    /// - with_provider() for setting provider
+    /// - with_profile() for setting profile
+    ///
+    /// # Type Flexibility
+    ///
+    /// Both with_provider and with_profile accept anything that can be
+    /// converted to the target type (Uri or Profile), providing flexibility:
+    ///
+    /// ```ignore
+    /// builder.with_provider("keyring://")           // &str
+    ///        .with_provider(Provider::Keyring)      // Provider enum
+    ///        .with_profile("production")            // &str
+    ///        .with_profile(Profile::Production)      // Profile enum
+    /// ```
     pub fn generate_basic_methods() -> proc_macro2::TokenStream {
         quote! {
             impl Default for SecretSpecBuilder {
@@ -648,7 +1161,19 @@ mod builder_generation {
         }
     }
 
-    /// Generate provider resolution logic
+    /// Generate provider resolution logic.
+    ///
+    /// Creates code to resolve a provider from the builder's boxed closure.
+    ///
+    /// # Arguments
+    ///
+    /// * `provider_expr` - Expression to access the provider option
+    ///
+    /// # Generated Logic
+    ///
+    /// 1. If provider is set, call the closure to get the URI
+    /// 2. Convert any errors to SecretSpecError
+    /// 3. Convert URI to string for the loading system
     fn generate_provider_resolution(
         provider_expr: proc_macro2::TokenStream,
     ) -> proc_macro2::TokenStream {
@@ -663,7 +1188,19 @@ mod builder_generation {
         }
     }
 
-    /// Generate profile resolution logic
+    /// Generate profile resolution logic.
+    ///
+    /// Creates code to resolve a profile from the builder's boxed closure.
+    ///
+    /// # Arguments
+    ///
+    /// * `profile_expr` - Expression to access the profile option
+    ///
+    /// # Generated Logic
+    ///
+    /// 1. If profile is set, call the closure to get the Profile
+    /// 2. Convert any errors to SecretSpecError
+    /// 3. Convert Profile to string for the loading system
     fn generate_profile_resolution(
         profile_expr: proc_macro2::TokenStream,
     ) -> proc_macro2::TokenStream {
@@ -678,7 +1215,22 @@ mod builder_generation {
         }
     }
 
-    /// Generate load methods
+    /// Generate load methods for the builder.
+    ///
+    /// Creates two loading methods:
+    /// - `load()` - Returns SecretSpec (union type)
+    /// - `load_profile()` - Returns SecretSpecProfile (profile-specific type)
+    ///
+    /// # Arguments
+    ///
+    /// * `load_assignments` - Field assignments for union type
+    /// * `load_profile_arms` - Match arms for profile-specific loading
+    /// * `first_profile_variant` - Default profile if none specified
+    ///
+    /// # Key Differences
+    ///
+    /// - `load()` returns all secrets with optional fields for safety
+    /// - `load_profile()` returns only profile-specific secrets with exact types
     pub fn generate_load_methods(
         load_assignments: &[proc_macro2::TokenStream],
         load_profile_arms: &[proc_macro2::TokenStream],
@@ -745,7 +1297,22 @@ mod builder_generation {
         }
     }
 
-    /// Generate all builder-related code
+    /// Generate all builder-related code.
+    ///
+    /// Combines all builder components into a complete implementation.
+    ///
+    /// # Arguments
+    ///
+    /// * `load_assignments` - Field assignments for union loading
+    /// * `load_profile_arms` - Match arms for profile loading
+    /// * `first_profile_variant` - Default profile variant
+    ///
+    /// # Returns
+    ///
+    /// Complete token stream containing:
+    /// - Builder struct definition
+    /// - Basic builder methods
+    /// - Loading methods (load and load_profile)
     pub fn generate_all(
         load_assignments: &[proc_macro2::TokenStream],
         load_profile_arms: &[proc_macro2::TokenStream],
@@ -764,7 +1331,27 @@ mod builder_generation {
     }
 }
 
-/// Main code generation function
+/// Main code generation function.
+///
+/// Orchestrates the entire code generation process, coordinating all modules
+/// to produce the complete macro output.
+///
+/// # Arguments
+///
+/// * `config` - The validated project configuration
+///
+/// # Returns
+///
+/// Complete token stream containing all generated code
+///
+/// # Generation Process
+///
+/// 1. Analyze profiles and field types
+/// 2. Generate Profile enum and implementations
+/// 3. Generate SecretSpec struct (union type)
+/// 4. Generate SecretSpecProfile enum (profile-specific types)
+/// 5. Generate builder pattern implementation
+/// 6. Combine all components with necessary imports
 fn generate_secret_spec_code(config: ProjectConfig) -> proc_macro2::TokenStream {
     // Collect all profiles
     let all_profiles: HashSet<String> = config.profiles.keys().cloned().collect();
@@ -837,6 +1424,25 @@ fn generate_secret_spec_code(config: ProjectConfig) -> proc_macro2::TokenStream 
     }
 }
 
+/// Capitalize the first character of a string.
+///
+/// Used to convert profile names to enum variant names.
+///
+/// # Arguments
+///
+/// * `s` - The string to capitalize
+///
+/// # Returns
+///
+/// A new string with the first character capitalized
+///
+/// # Examples
+///
+/// ```ignore
+/// assert_eq!(capitalize_first("production"), "Production");
+/// assert_eq!(capitalize_first("test_env"), "Test_env");
+/// assert_eq!(capitalize_first(""), "");
+/// ```
 fn capitalize_first(s: &str) -> String {
     let mut chars = s.chars();
     match chars.next() {

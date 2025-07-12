@@ -5,13 +5,36 @@ use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::process::{Command, Stdio};
 
+/// Configuration for the LastPass provider.
+///
+/// This struct contains the configuration options for interacting with LastPass
+/// through the `lpass` CLI tool. The primary configuration option is the folder
+/// prefix, which allows organizing secrets within LastPass folders.
+///
+/// # Examples
+///
+/// ```no_run
+/// use secretspec::provider::lastpass::LastPassConfig;
+///
+/// // Create a default configuration
+/// let config = LastPassConfig::default();
+///
+/// // Create a configuration with a folder prefix
+/// let config = LastPassConfig {
+///     folder_prefix: Some("my-company".to_string()),
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LastPassConfig {
-    /// Default folder prefix
+    /// Optional folder prefix for organizing secrets in LastPass.
+    ///
+    /// When set, all secrets will be stored under this folder in LastPass.
+    /// This is useful for organizing secrets by company, project, or team.
     pub folder_prefix: Option<String>,
 }
 
 impl Default for LastPassConfig {
+    /// Creates a default LastPassConfig with no folder prefix.
     fn default() -> Self {
         Self {
             folder_prefix: None,
@@ -20,6 +43,39 @@ impl Default for LastPassConfig {
 }
 
 impl LastPassConfig {
+    /// Creates a LastPassConfig from a URI.
+    ///
+    /// Parses a URI in the format `lastpass://[folder]` where the folder
+    /// component is optional. The folder can be specified either as the
+    /// authority or the path component of the URI.
+    ///
+    /// # Arguments
+    ///
+    /// * `uri` - A URI with the `lastpass` scheme
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing the parsed configuration or an error
+    /// if the URI scheme is not `lastpass`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use http::Uri;
+    /// use secretspec::provider::lastpass::LastPassConfig;
+    ///
+    /// // URI without folder
+    /// let uri = "lastpass://".parse::<Uri>().unwrap();
+    /// let config = LastPassConfig::from_uri(&uri).unwrap();
+    ///
+    /// // URI with folder as authority
+    /// let uri = "lastpass://my-folder".parse::<Uri>().unwrap();
+    /// let config = LastPassConfig::from_uri(&uri).unwrap();
+    ///
+    /// // URI with folder as path
+    /// let uri = "lastpass:///my-folder".parse::<Uri>().unwrap();
+    /// let config = LastPassConfig::from_uri(&uri).unwrap();
+    /// ```
     pub fn from_uri(uri: &Uri) -> Result<Self> {
         let scheme = uri.scheme_str().ok_or_else(|| {
             SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string())
@@ -50,20 +106,87 @@ impl LastPassConfig {
     }
 }
 
+/// LastPass provider implementation for SecretSpec.
+///
+/// This provider integrates with LastPass password manager through the `lpass` CLI tool.
+/// It stores secrets in a hierarchical structure within LastPass using the format:
+/// `secretspec/{project}/{profile}/{key}`.
+///
+/// # Requirements
+///
+/// The LastPass CLI (`lpass`) must be installed and the user must be logged in:
+/// - macOS: `brew install lastpass-cli`
+/// - Linux: Use your package manager (e.g., `apt install lastpass-cli`)
+/// - NixOS: `nix-env -iA nixpkgs.lastpass-cli`
+///
+/// After installation, authenticate with: `lpass login <your-email>`
+///
+/// # Examples
+///
+/// ```no_run
+/// use secretspec::provider::lastpass::{LastPassProvider, LastPassConfig};
+///
+/// // Create provider with default config
+/// let provider = LastPassProvider::default();
+///
+/// // Create provider with custom config
+/// let config = LastPassConfig {
+///     folder_prefix: Some("work".to_string()),
+/// };
+/// let provider = LastPassProvider::new(config);
+/// ```
 pub struct LastPassProvider {
     _config: LastPassConfig,
 }
 
 impl LastPassProvider {
+    /// Creates a new LastPassProvider with the given configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The LastPass configuration to use
     pub fn new(config: LastPassConfig) -> Self {
         Self { _config: config }
     }
 
+    /// Creates a LastPassProvider from a URI.
+    ///
+    /// This is a convenience method that parses the URI into a configuration
+    /// and creates a provider instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `uri` - A URI with the `lastpass` scheme
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing the provider instance or an error
+    /// if the URI is invalid.
     pub fn from_uri(uri: &Uri) -> Result<Self> {
         let config = LastPassConfig::from_uri(uri)?;
         Ok(Self::new(config))
     }
 
+    /// Executes a LastPass CLI command and returns its output.
+    ///
+    /// This is the core method for interacting with the LastPass CLI. It handles
+    /// command execution, error detection, and provides helpful error messages
+    /// for common issues like missing CLI installation or authentication.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - Command line arguments to pass to `lpass`
+    ///
+    /// # Returns
+    ///
+    /// Returns the command's stdout as a String on success, or an error with
+    /// detailed information about what went wrong.
+    ///
+    /// # Errors
+    ///
+    /// - Returns an error if the `lpass` CLI is not installed
+    /// - Returns an error if the user is not logged in to LastPass
+    /// - Returns an error if the command fails for any other reason
     fn execute_lpass_command(&self, args: &[&str]) -> Result<String> {
         let mut cmd = Command::new("lpass");
         cmd.args(args);
@@ -96,10 +219,36 @@ impl LastPassProvider {
             .map_err(|e| SecretSpecError::ProviderOperationFailed(e.to_string()))
     }
 
+    /// Formats the item name for storage in LastPass.
+    ///
+    /// Creates a hierarchical path for organizing secrets within LastPass.
+    /// The format is: `secretspec/{project}/{profile}/{key}`
+    ///
+    /// # Arguments
+    ///
+    /// * `project` - The project name
+    /// * `key` - The secret key name
+    /// * `profile` - The profile name (e.g., "default", "production", "staging")
+    ///
+    /// # Returns
+    ///
+    /// A formatted string representing the full path to the secret in LastPass.
     fn format_item_name(&self, project: &str, key: &str, profile: &str) -> String {
         format!("secretspec/{}/{}/{}", project, profile, key)
     }
 
+    /// Verifies that the user is logged in to LastPass.
+    ///
+    /// This method checks the login status and returns a helpful error message
+    /// if the user needs to authenticate.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if logged in, or an error with instructions on how to log in.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the user is not logged in to LastPass.
     fn check_if_logged_in(&self) -> Result<()> {
         // Check if we're logged in first
         if !self.check_login_status()? {
@@ -111,6 +260,14 @@ impl LastPassProvider {
         Ok(())
     }
 
+    /// Checks the current LastPass login status.
+    ///
+    /// Executes `lpass status` to determine if the user is currently logged in.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(true)` if logged in, `Ok(false)` if not logged in, or an error
+    /// if the status check itself fails.
     fn check_login_status(&self) -> Result<bool> {
         match self.execute_lpass_command(&["status"]) {
             Ok(output) => Ok(!output.contains("Not logged in")),
@@ -126,6 +283,28 @@ impl LastPassProvider {
 }
 
 impl Provider for LastPassProvider {
+    /// Retrieves a secret from LastPass.
+    ///
+    /// Fetches the value of a secret stored in LastPass at the path
+    /// `secretspec/{project}/{profile}/{key}`. Uses `lpass show` with
+    /// the `--sync=now` flag to ensure fresh data from the server.
+    ///
+    /// # Arguments
+    ///
+    /// * `project` - The project name
+    /// * `key` - The secret key to retrieve
+    /// * `profile` - The profile name
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some(value))` if the secret exists and has a value
+    /// - `Ok(None)` if the secret doesn't exist or has an empty value
+    /// - `Err` if there's an error accessing LastPass
+    ///
+    /// # Errors
+    ///
+    /// - Returns an error if not logged in to LastPass
+    /// - Returns an error if the LastPass CLI fails
     fn get(&self, project: &str, key: &str, profile: &str) -> Result<Option<String>> {
         self.check_if_logged_in()?;
 
@@ -149,6 +328,34 @@ impl Provider for LastPassProvider {
         }
     }
 
+    /// Stores a secret in LastPass.
+    ///
+    /// Creates or updates a secret in LastPass at the path
+    /// `secretspec/{project}/{profile}/{key}`. The method first checks if
+    /// the item exists to determine whether to use `lpass edit` (for updates)
+    /// or `lpass set` (for new items).
+    ///
+    /// # Arguments
+    ///
+    /// * `project` - The project name
+    /// * `key` - The secret key to store
+    /// * `value` - The secret value to store
+    /// * `profile` - The profile name
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on success, or an error if the operation fails.
+    ///
+    /// # Errors
+    ///
+    /// - Returns an error if not logged in to LastPass
+    /// - Returns an error if the LastPass CLI command fails
+    ///
+    /// # Implementation Details
+    ///
+    /// The method uses non-interactive mode and disables pinentry to avoid
+    /// GUI prompts. The secret value is passed via stdin to avoid exposing
+    /// it in the process list.
     fn set(&self, project: &str, key: &str, value: &str, profile: &str) -> Result<()> {
         self.check_if_logged_in()?;
 
@@ -222,16 +429,25 @@ impl Provider for LastPassProvider {
         Ok(())
     }
 
+    /// Returns the name of this provider.
+    ///
+    /// Always returns "lastpass".
     fn name(&self) -> &'static str {
         "lastpass"
     }
 
+    /// Returns a human-readable description of this provider.
+    ///
+    /// Always returns "LastPass password manager".
     fn description(&self) -> &'static str {
         "LastPass password manager"
     }
 }
 
 impl Default for LastPassProvider {
+    /// Creates a LastPassProvider with default configuration.
+    ///
+    /// This is equivalent to calling `LastPassProvider::new(LastPassConfig::default())`.
     fn default() -> Self {
         Self::new(LastPassConfig::default())
     }
