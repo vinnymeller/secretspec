@@ -196,15 +196,22 @@ impl ProfileVariant {
 /// // In your main.rs or lib.rs:
 /// secretspec::define_secrets!("secretspec.toml");
 ///
-/// use secretspec::macros::Provider;
+/// use secretspec::Provider;
 ///
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     // Load with union types (safe for any profile)
-///     let secrets = SecretSpec::load(Some(Provider::Keyring), None)?;
-///     println!("Database URL: {}", secrets.database_url);
+///     // Load with union types (safe for any profile) using the builder pattern
+///     let secrets = SecretSpec::builder()
+///         .with_provider(Provider::Keyring)
+///         .load()?;
+///     println!("Database URL: {}", secrets.secrets.database_url);
 ///
 ///     // Load with profile-specific types
-///     match SecretSpec::load_as_profile(Some(Provider::Keyring), Some(Profile::Production))? {
+///     let profile_secrets = SecretSpec::builder()
+///         .with_provider(Provider::Keyring)
+///         .with_profile(Profile::Production)
+///         .load_profile()?;
+///     
+///     match profile_secrets.secrets {
 ///         SecretSpecProfile::Production { api_key, database_url, .. } => {
 ///             println!("Production API key: {}", api_key);
 ///         }

@@ -8,8 +8,8 @@ use std::process::{Command, Stdio};
 /// Configuration for the LastPass provider.
 ///
 /// This struct contains the configuration options for interacting with LastPass
-/// through the `lpass` CLI tool. The primary configuration option is the folder
-/// prefix, which allows organizing secrets within LastPass folders.
+/// through the `lpass` CLI tool. Note: The folder_prefix field is not currently
+/// used in the implementation - all secrets are stored under the "secretspec" folder.
 ///
 /// # Examples
 ///
@@ -28,8 +28,8 @@ use std::process::{Command, Stdio};
 pub struct LastPassConfig {
     /// Optional folder prefix for organizing secrets in LastPass.
     ///
-    /// When set, all secrets will be stored under this folder in LastPass.
-    /// This is useful for organizing secrets by company, project, or team.
+    /// Note: This field is not currently used in the implementation.
+    /// All secrets are stored under the "secretspec" folder regardless of this setting.
     pub folder_prefix: Option<String>,
 }
 

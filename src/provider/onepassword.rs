@@ -104,7 +104,7 @@ pub struct OnePasswordConfig {
     /// accounts configured. This should match the shorthand shown in
     /// `op account list`.
     pub account: Option<String>,
-    /// Default vault to use when profile is not specified.
+    /// Default vault to use when profile is "default".
     ///
     /// If not set, defaults to "Private" for the default profile.
     /// For non-default profiles, the profile name is used as the vault name.

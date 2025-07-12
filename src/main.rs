@@ -83,9 +83,9 @@ enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    /// Import secrets from one provider to another
+    /// Import secrets from one provider to the default provider
     Import {
-        /// Provider backend to import from
+        /// Provider backend to import from (secrets will be imported to the default provider)
         from_provider: String,
     },
 }

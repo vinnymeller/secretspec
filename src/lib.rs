@@ -1399,7 +1399,8 @@ impl SecretSpec {
     ///
     /// # Returns
     ///
-    /// This method never returns normally - it exits with the command's exit code
+    /// This method executes the command and exits with the command's exit code.
+    /// It only returns an error if validation fails or the command cannot be started.
     ///
     /// # Errors
     ///

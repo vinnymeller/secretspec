@@ -37,8 +37,8 @@
 //! ```rust,ignore
 //! use secretspec::provider::{Provider, ProviderRegistry};
 //!
-//! let registry = ProviderRegistry::new();
-//! let provider = registry.create_from_uri("keyring://")?;
+//! // Create a provider from a URI string
+//! let provider = ProviderRegistry::create_from_string("keyring://")?;
 //!
 //! // Store a secret
 //! provider.set("myproject", "API_KEY", "secret123", "production")?;
