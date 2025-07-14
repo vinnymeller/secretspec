@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::{Result, WrapErr};
 use directories::ProjectDirs;
-use secretspec::{DefaultConfig, GlobalConfig, SecretSpec};
+use secretspec::{GlobalConfig, GlobalDefaults, SecretSpec};
 use std::fs;
 use std::io;
 #[cfg(unix)]
@@ -268,8 +268,8 @@ fn main() -> Result<()> {
                 };
 
                 let config = GlobalConfig {
-                    defaults: DefaultConfig {
-                        provider: provider.to_string(),
+                    defaults: GlobalDefaults {
+                        provider: Some(provider.to_string()),
                         profile,
                     },
                 };
@@ -286,7 +286,10 @@ fn main() -> Result<()> {
                 match load_global_config()? {
                     Some(config) => {
                         println!("Configuration file: {}\n", get_config_path()?.display());
-                        println!("Provider: {}", config.defaults.provider);
+                        match config.defaults.provider {
+                            Some(provider) => println!("Provider: {}", provider),
+                            None => println!("Provider: (none)"),
+                        }
                         match config.defaults.profile {
                             Some(profile) => println!("Profile:  {}", profile),
                             None => println!("Profile:  (none)"),

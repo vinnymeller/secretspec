@@ -1,5 +1,5 @@
 [package]
-name = "secretspec-types"
+name = "secretspec-core"
 version.workspace = true
 edition.workspace = true
 

@@ -129,3 +129,72 @@ fn test_unknown_provider() {
         _ => panic!("Expected ProviderNotFound error"),
     }
 }
+
+#[test]
+fn test_dotenv_shorthand_from_docs() {
+    // Test the example from line 187 of registry.rs
+    let provider = ProviderRegistry::create_from_string("dotenv:.env.production").unwrap();
+    assert_eq!(provider.name(), "dotenv");
+}
+
+#[test]
+fn test_documentation_examples() {
+    // Test examples from the documentation
+
+    // From line 102: 1password://work@Production
+    let provider = ProviderRegistry::create_from_string("1password://work@Production").unwrap();
+    assert_eq!(provider.name(), "1password");
+
+    // From line 107: dotenv:/path/to/.env
+    let provider = ProviderRegistry::create_from_string("dotenv:/path/to/.env").unwrap();
+    assert_eq!(provider.name(), "dotenv");
+
+    // From line 115: lastpass://folder
+    let provider = ProviderRegistry::create_from_string("lastpass://folder").unwrap();
+    assert_eq!(provider.name(), "lastpass");
+
+    // Test dotenv examples from provider list
+    let provider = ProviderRegistry::create_from_string("dotenv://path").unwrap();
+    assert_eq!(provider.name(), "dotenv");
+}
+
+#[test]
+fn test_edge_cases_and_normalization() {
+    // Test scheme-only format (mentioned in docs line 151)
+    let provider = ProviderRegistry::create_from_string("keyring:").unwrap();
+    assert_eq!(provider.name(), "keyring");
+
+    // Test dotenv special case without authority (line 152-153)
+    let provider = ProviderRegistry::create_from_string("dotenv:/absolute/path").unwrap();
+    assert_eq!(provider.name(), "dotenv");
+    
+    // Test normalized URIs with localhost (line 154)
+    let provider = ProviderRegistry::create_from_string("env://localhost").unwrap();
+    assert_eq!(provider.name(), "env");
+}
+
+#[test]
+fn test_documentation_example_line_184() {
+    // Test the exact example from line 184 of registry.rs
+    let provider = ProviderRegistry::create_from_string("1password://vault/Production").unwrap();
+    assert_eq!(provider.name(), "1password");
+}
+
+#[test]
+fn test_uri_parsing_behavior() {
+    use http::Uri;
+    
+    // Test how URIs are actually parsed
+    let uri = "1password://vault/Production".parse::<Uri>().unwrap();
+    assert_eq!(uri.scheme_str(), Some("1password"));
+    assert_eq!(uri.authority().map(|a| a.as_str()), Some("vault"));
+    assert_eq!(uri.path(), "/Production");
+    assert_eq!(uri.host(), Some("vault"));
+    
+    // Test dotenv URI - our normalize function handles this format
+    // by converting "dotenv:/path" to "dotenv://localhost/path"
+    let normalized = "dotenv://localhost/path/to/.env".parse::<Uri>().unwrap();
+    assert_eq!(normalized.scheme_str(), Some("dotenv"));
+    assert_eq!(normalized.authority().map(|a| a.as_str()), Some("localhost"));
+    assert_eq!(normalized.path(), "/path/to/.env");
+}

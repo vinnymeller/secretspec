@@ -1057,8 +1057,8 @@ dependencies = [
  "inquire",
  "keyring",
  "rpassword",
+ "secretspec-core",
  "secretspec-derive",
- "secretspec-types",
  "serde",
  "serde-envfile",
  "serde_json",
@@ -1066,6 +1066,14 @@ dependencies = [
  "thiserror 1.0.69",
  "toml",
  "whoami",
+]
+
+[[package]]
+name = "secretspec-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "toml",
 ]
 
 [[package]]
@@ -1077,20 +1085,12 @@ dependencies = [
  "proc-macro2",
  "quote",
  "secretspec",
- "secretspec-types",
+ "secretspec-core",
  "serde",
  "serde_json",
  "syn",
  "toml",
  "trybuild",
-]
-
-[[package]]
-name = "secretspec-types"
-version = "0.1.0"
-dependencies = [
- "serde",
- "toml",
 ]
 
 [[package]]

@@ -21,7 +21,7 @@
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use secretspec_types::{ProjectConfig, SecretConfig};
+use secretspec_core::{ProjectConfig, SecretConfig};
 use std::collections::{BTreeMap, HashSet};
 use syn::{LitStr, parse_macro_input};
 
@@ -229,17 +229,8 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
     let full_path = std::path::Path::new(&manifest_dir).join(&path);
 
-    // Read and parse TOML at compile time
-    let toml_content = match std::fs::read_to_string(&full_path) {
-        Ok(content) => content,
-        Err(e) => {
-            let error = format!("Failed to read {}: {}", path, e);
-            return quote! { compile_error!(#error); }.into();
-        }
-    };
-
     let config: ProjectConfig =
-        match secretspec_types::parse_spec_from_str(&toml_content, Some(&full_path)) {
+        match ProjectConfig::try_from(full_path.as_path()) {
             Ok(config) => config,
             Err(e) => {
                 let error = format!("Failed to parse TOML: {}", e);

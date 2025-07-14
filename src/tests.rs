@@ -2,6 +2,24 @@ use super::*;
 use std::{fs, io};
 use tempfile::TempDir;
 
+// Helper function for tests that need to parse from string
+fn parse_spec_from_str(content: &str, _base_path: Option<&Path>) -> Result<ProjectConfig> {
+    // Note: base_path is ignored as inheritance is handled automatically when using TryFrom<&Path>
+    ProjectConfig::from_str(content).map_err(|e| match e {
+        ParseError::Io(io_err) => SecretSpecError::Io(io_err),
+        ParseError::Toml(toml_err) => SecretSpecError::Toml(toml_err),
+        ParseError::UnsupportedRevision(rev) => {
+            SecretSpecError::UnsupportedRevision(rev)
+        }
+        ParseError::CircularDependency(msg) => {
+            SecretSpecError::Io(io::Error::new(io::ErrorKind::InvalidData, msg))
+        }
+        ParseError::Validation(msg) => {
+            SecretSpecError::Io(io::Error::new(io::ErrorKind::InvalidData, msg))
+        }
+    })
+}
+
 #[test]
 fn test_builder_pattern() {
     // Test default builder
@@ -60,7 +78,7 @@ profile = "development"
     assert_eq!(spec.config.project.name, "custom-project");
     assert_eq!(
         spec.global_config.as_ref().unwrap().defaults.provider,
-        "keyring"
+        Some("keyring".to_string())
     );
 }
 
@@ -142,7 +160,7 @@ API_KEY = { description = "API key for external service", required = false, defa
     fs::write(base_path.join("base/secretspec.toml"), base_config).unwrap();
 
     // Parse the config
-    let config = secretspec_types::parse_spec(&base_path.join("base/secretspec.toml")).unwrap();
+    let config = ProjectConfig::try_from(base_path.join("base/secretspec.toml").as_path()).unwrap();
 
     // Verify the config has merged correctly
     assert_eq!(config.project.name, "test_project");
@@ -188,7 +206,7 @@ fn test_validation_result_is_valid() {
         missing_required: Vec::new(),
         missing_optional: vec!["optional_secret".to_string()],
         with_defaults: Vec::new(),
-        provider: secretspec_types::Provider::Keyring,
+        provider: Provider::Keyring,
         profile: "default".to_string(),
     };
     assert!(valid_result.is_valid());
@@ -198,7 +216,7 @@ fn test_validation_result_is_valid() {
         missing_required: vec!["required_secret".to_string()],
         missing_optional: Vec::new(),
         with_defaults: Vec::new(),
-        provider: secretspec_types::Provider::Keyring,
+        provider: Provider::Keyring,
         profile: "default".to_string(),
     };
     assert!(!invalid_result.is_valid());
@@ -307,8 +325,8 @@ fn test_secretspec_new() {
     };
 
     let global_config = GlobalConfig {
-        defaults: DefaultConfig {
-            provider: "keyring".to_string(),
+        defaults: GlobalDefaults {
+            provider: Some("keyring".to_string()),
             profile: Some("dev".to_string()),
         },
     };
@@ -316,7 +334,7 @@ fn test_secretspec_new() {
     let spec = SecretSpec::new(config.clone(), Some(global_config.clone()));
     assert_eq!(spec.config.project.name, "test");
     assert!(spec.global_config.is_some());
-    assert_eq!(spec.global_config.unwrap().defaults.provider, "keyring");
+    assert_eq!(spec.global_config.unwrap().defaults.provider, Some("keyring".to_string()));
 
     let spec_without_global = SecretSpec::new(config, None);
     assert!(spec_without_global.global_config.is_none());
@@ -325,8 +343,8 @@ fn test_secretspec_new() {
 #[test]
 fn test_resolve_profile() {
     let global_config = GlobalConfig {
-        defaults: DefaultConfig {
-            provider: "keyring".to_string(),
+        defaults: GlobalDefaults {
+            provider: Some("keyring".to_string()),
             profile: Some("development".to_string()),
         },
     };
@@ -463,8 +481,8 @@ fn test_get_provider_error_cases() {
 #[test]
 fn test_get_provider_with_global_config() {
     let global_config = GlobalConfig {
-        defaults: DefaultConfig {
-            provider: "keyring".to_string(),
+        defaults: GlobalDefaults {
+            provider: Some("keyring".to_string()),
             profile: None,
         },
     };
@@ -546,7 +564,7 @@ profile = "development"
     let result = load_global_config_from_path(&config_file).unwrap();
     assert!(result.is_some());
     let config = result.unwrap();
-    assert_eq!(config.defaults.provider, "keyring");
+    assert_eq!(config.defaults.provider, Some("keyring".to_string()));
     assert_eq!(config.defaults.profile, Some("development".to_string()));
 }
 
@@ -646,7 +664,7 @@ MONITORING_TOKEN = { description = "Token for monitoring service", required = tr
     fs::write(base_path.join("base/secretspec.toml"), base_config).unwrap();
 
     // Parse the config
-    let config = secretspec_types::parse_spec(&base_path.join("base/secretspec.toml")).unwrap();
+    let config = ProjectConfig::try_from(base_path.join("base/secretspec.toml").as_path()).unwrap();
 
     // Verify project info
     assert_eq!(config.project.name, "my_app");
@@ -756,10 +774,10 @@ SECRET_B = { description = "Secret B", required = true }
     fs::write(base_path.join("b/secretspec.toml"), config_b).unwrap();
 
     // Parse should fail with circular dependency error
-    let result = secretspec_types::parse_spec(&base_path.join("a/secretspec.toml"));
+    let result = ProjectConfig::try_from(base_path.join("a/secretspec.toml").as_path());
     assert!(result.is_err());
     match result {
-        Err(secretspec_types::ParseError::CircularDependency(msg)) => {
+        Err(ParseError::CircularDependency(msg)) => {
             assert!(msg.contains("circular dependency"));
         }
         _ => panic!("Expected CircularDependency error"),
@@ -813,10 +831,10 @@ SECRET_C = { description = "Secret C", required = true }
     fs::write(base_path.join("c/secretspec.toml"), config_c).unwrap();
 
     // Parse should fail with circular dependency error
-    let result = secretspec_types::parse_spec(&base_path.join("a/secretspec.toml"));
+    let result = ProjectConfig::try_from(base_path.join("a/secretspec.toml").as_path());
     assert!(result.is_err());
     match result {
-        Err(secretspec_types::ParseError::CircularDependency(msg)) => {
+        Err(ParseError::CircularDependency(msg)) => {
             assert!(msg.contains("circular dependency"));
         }
         _ => panic!("Expected CircularDependency error"),
@@ -881,7 +899,7 @@ SECRET_A = { description = "Secret A for staging", required = false, default = "
     fs::write(base_path.join("a/secretspec.toml"), config_a).unwrap();
 
     // Parse config A
-    let config = secretspec_types::parse_spec(&base_path.join("a/secretspec.toml")).unwrap();
+    let config = ProjectConfig::try_from(base_path.join("a/secretspec.toml").as_path()).unwrap();
 
     // Verify project info
     assert_eq!(config.project.name, "config_a");
@@ -967,7 +985,7 @@ PROJECT_SECRET = { description = "Project secret", required = true }
     .unwrap();
 
     let config =
-        secretspec_types::parse_spec(&base_path.join("project/src/secretspec.toml")).unwrap();
+        ProjectConfig::try_from(base_path.join("project/src/secretspec.toml").as_path()).unwrap();
     let default_profile = config.profiles.get("default").unwrap();
     assert_eq!(default_profile.secrets.len(), 3);
     assert!(default_profile.secrets.contains_key("COMMON_SECRET"));
@@ -991,7 +1009,7 @@ PROJECT2_SECRET = { description = "Project2 secret", required = true }
     .unwrap();
 
     let config2 =
-        secretspec_types::parse_spec(&base_path.join("project/src/secretspec2.toml")).unwrap();
+        ProjectConfig::try_from(base_path.join("project/src/secretspec2.toml").as_path()).unwrap();
     let default_profile2 = config2.profiles.get("default").unwrap();
     assert_eq!(default_profile2.secrets.len(), 2);
     assert!(default_profile2.secrets.contains_key("COMMON_SECRET"));
@@ -1026,7 +1044,7 @@ PROJECT3_SECRET = { description = "Project3 secret", required = true }
         .unwrap();
 
         let config3 =
-            secretspec_types::parse_spec(&base_path.join("project/secretspec3.toml")).unwrap();
+            ProjectConfig::try_from(base_path.join("project/secretspec3.toml").as_path()).unwrap();
         let default_profile3 = config3.profiles.get("default").unwrap();
         assert_eq!(default_profile3.secrets.len(), 2);
         assert!(default_profile3.secrets.contains_key("SPACE_SECRET"));
@@ -1055,7 +1073,7 @@ SECRET_B = { description = "Secret B", required = false, default = "prod-b" }
     fs::write(base_path.join("secretspec.toml"), config_empty_extends).unwrap();
 
     // Parse should succeed with empty extends
-    let config = secretspec_types::parse_spec(&base_path.join("secretspec.toml")).unwrap();
+    let config = ProjectConfig::try_from(base_path.join("secretspec.toml").as_path()).unwrap();
 
     // Verify config is parsed correctly
     assert_eq!(config.project.name, "project");
@@ -1089,10 +1107,10 @@ SECRET_A = { description = "Secret A", required = true }
     fs::write(base_path.join("secretspec.toml"), config_self_dot).unwrap();
 
     // This should fail with circular dependency
-    let result = secretspec_types::parse_spec(&base_path.join("secretspec.toml"));
+    let result = ProjectConfig::try_from(base_path.join("secretspec.toml").as_path());
     assert!(result.is_err());
     match result {
-        Err(secretspec_types::ParseError::CircularDependency(msg)) => {
+        Err(ParseError::CircularDependency(msg)) => {
             assert!(msg.contains("circular dependency"));
         }
         _ => panic!("Expected CircularDependency error for self-extension"),
@@ -1124,10 +1142,10 @@ CHILD_SECRET = { description = "Child secret", required = true }
     fs::write(base_path.join("subdir/secretspec.toml"), child_config).unwrap();
 
     // This should also fail with circular dependency
-    let result2 = secretspec_types::parse_spec(&base_path.join("secretspec.toml"));
+    let result2 = ProjectConfig::try_from(base_path.join("secretspec.toml").as_path());
     assert!(result2.is_err());
     match result2 {
-        Err(secretspec_types::ParseError::CircularDependency(msg)) => {
+        Err(ParseError::CircularDependency(msg)) => {
             assert!(msg.contains("circular dependency"));
         }
         _ => panic!("Expected CircularDependency error for parent-child circular reference"),
@@ -1179,7 +1197,7 @@ SECRET_E = { description = "New secret E", required = true }
     fs::write(base_path.join("override/secretspec.toml"), override_config).unwrap();
 
     // Parse the override config
-    let config = secretspec_types::parse_spec(&base_path.join("override/secretspec.toml")).unwrap();
+    let config = ProjectConfig::try_from(base_path.join("override/secretspec.toml").as_path()).unwrap();
     let default_profile = config.profiles.get("default").unwrap();
 
     // Verify SECRET_A: only description changed
@@ -1231,10 +1249,10 @@ API_KEY = { description = "API key for external service", required = true }
     fs::write(base_path.join("secretspec.toml"), base_config).unwrap();
 
     // Parse should fail with missing file error
-    let result = secretspec_types::parse_spec(&base_path.join("secretspec.toml"));
+    let result = ProjectConfig::try_from(base_path.join("secretspec.toml").as_path());
     assert!(result.is_err());
     match result {
-        Err(secretspec_types::ParseError::Io(e)) => {
+        Err(ParseError::Io(e)) => {
             assert_eq!(e.kind(), io::ErrorKind::NotFound);
         }
         _ => panic!("Expected IO error for missing file"),
@@ -1261,10 +1279,10 @@ SECRET_A = { description = "Secret A", required = true }
 "#;
     fs::write(base_path.join("secretspec.toml"), config_extend_file).unwrap();
 
-    let result = secretspec_types::parse_spec(&base_path.join("secretspec.toml"));
+    let result = ProjectConfig::try_from(base_path.join("secretspec.toml").as_path());
     assert!(result.is_err());
     match result {
-        Err(secretspec_types::ParseError::Io(e)) => {
+        Err(ParseError::Io(e)) => {
             assert_eq!(e.kind(), io::ErrorKind::NotFound);
         }
         _ => panic!("Expected IO NotFound error for extending to file"),
@@ -1282,7 +1300,7 @@ SECRET_B = { description = "Secret B", required = true }
 "#;
     fs::write(base_path.join("secretspec2.toml"), config_empty_string).unwrap();
 
-    let result2 = secretspec_types::parse_spec(&base_path.join("secretspec2.toml"));
+    let result2 = ProjectConfig::try_from(base_path.join("secretspec2.toml").as_path());
     assert!(result2.is_err());
 
     // Test 3: Extend to non-existent directory
@@ -1297,10 +1315,10 @@ SECRET_C = { description = "Secret C", required = true }
 "#;
     fs::write(base_path.join("secretspec3.toml"), config_no_dir).unwrap();
 
-    let result3 = secretspec_types::parse_spec(&base_path.join("secretspec3.toml"));
+    let result3 = ProjectConfig::try_from(base_path.join("secretspec3.toml").as_path());
     assert!(result3.is_err());
     match result3 {
-        Err(secretspec_types::ParseError::Io(_e)) => {
+        Err(ParseError::Io(_e)) => {
             // Should get NotFound error for non-existent directory
         }
         _ => panic!("Expected IO NotFound error for non-existent directory"),
@@ -1339,10 +1357,10 @@ NEW_SECRET = { description = "New secret", required = true }
     fs::write(base_path.join("secretspec.toml"), new_config).unwrap();
 
     // This should fail with unsupported revision error
-    let result = secretspec_types::parse_spec(&base_path.join("secretspec.toml"));
+    let result = ProjectConfig::try_from(base_path.join("secretspec.toml").as_path());
     assert!(result.is_err());
     match result {
-        Err(secretspec_types::ParseError::UnsupportedRevision(rev)) => {
+        Err(ParseError::UnsupportedRevision(rev)) => {
             assert_eq!(rev, "0.9");
         }
         _ => panic!("Expected UnsupportedRevision error"),
@@ -1374,8 +1392,8 @@ fn test_set_with_undefined_secret() {
     };
 
     let global_config = GlobalConfig {
-        defaults: DefaultConfig {
-            provider: "env".to_string(),
+        defaults: GlobalDefaults {
+            provider: Some("env".to_string()),
             profile: None,
         },
     };
@@ -1435,8 +1453,8 @@ fn test_set_with_defined_secret() {
     };
 
     let global_config = GlobalConfig {
-        defaults: DefaultConfig {
-            provider: "dotenv".to_string(),
+        defaults: GlobalDefaults {
+            provider: Some("dotenv".to_string()),
             profile: None,
         },
     };
@@ -1483,8 +1501,8 @@ fn test_set_with_readonly_provider() {
     };
 
     let global_config = GlobalConfig {
-        defaults: DefaultConfig {
-            provider: "env".to_string(),
+        defaults: GlobalDefaults {
+            provider: Some("env".to_string()),
             profile: None,
         },
     };
@@ -1578,8 +1596,8 @@ fn test_import_between_dotenv_files() {
 
     // Create global config with target dotenv as default provider
     let global_config = GlobalConfig {
-        defaults: DefaultConfig {
-            provider: format!("dotenv:{}", target_env_path.display()),
+        defaults: GlobalDefaults {
+            provider: Some(format!("dotenv:{}", target_env_path.display())),
             profile: Some("default".to_string()),
         },
     };
@@ -1688,8 +1706,8 @@ fn test_import_edge_cases() {
 
     let target_env_path = project_path.join(".env.target");
     let global_config = GlobalConfig {
-        defaults: DefaultConfig {
-            provider: format!("dotenv:{}", target_env_path.display()),
+        defaults: GlobalDefaults {
+            provider: Some(format!("dotenv:{}", target_env_path.display())),
             profile: Some("default".to_string()),
         },
     };
@@ -1908,8 +1926,8 @@ fn test_import_with_profiles() {
 
     let target_env_path = project_path.join(".env.dev");
     let global_config = GlobalConfig {
-        defaults: DefaultConfig {
-            provider: format!("dotenv:{}", target_env_path.display()),
+        defaults: GlobalDefaults {
+            provider: Some(format!("dotenv:{}", target_env_path.display())),
             profile: Some("development".to_string()), // Use development profile
         },
     };
@@ -1965,8 +1983,8 @@ fn test_run_with_empty_command() {
             profiles: HashMap::new(),
         },
         Some(GlobalConfig {
-            defaults: DefaultConfig {
-                provider: format!("dotenv:{}", env_file.display()),
+            defaults: GlobalDefaults {
+                provider: Some(format!("dotenv:{}", env_file.display())),
                 profile: None,
             },
         }),
@@ -2014,8 +2032,8 @@ fn test_run_with_missing_required_secrets() {
             profiles,
         },
         Some(GlobalConfig {
-            defaults: DefaultConfig {
-                provider: format!("dotenv:{}", env_file.display()),
+            defaults: GlobalDefaults {
+                provider: Some(format!("dotenv:{}", env_file.display())),
                 profile: None,
             },
         }),
@@ -2061,8 +2079,8 @@ fn test_get_existing_secret() {
             profiles,
         },
         Some(GlobalConfig {
-            defaults: DefaultConfig {
-                provider: format!("dotenv:{}", env_file.display()),
+            defaults: GlobalDefaults {
+                provider: Some(format!("dotenv:{}", env_file.display())),
                 profile: None,
             },
         }),
@@ -2102,8 +2120,8 @@ fn test_get_secret_with_default() {
             profiles,
         },
         Some(GlobalConfig {
-            defaults: DefaultConfig {
-                provider: format!("dotenv:{}", env_file.display()),
+            defaults: GlobalDefaults {
+                provider: Some(format!("dotenv:{}", env_file.display())),
                 profile: None,
             },
         }),
@@ -2142,8 +2160,8 @@ fn test_get_nonexistent_secret() {
             profiles,
         },
         Some(GlobalConfig {
-            defaults: DefaultConfig {
-                provider: format!("dotenv:{}", env_file.display()),
+            defaults: GlobalDefaults {
+                provider: Some(format!("dotenv:{}", env_file.display())),
                 profile: None,
             },
         }),

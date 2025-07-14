@@ -46,8 +46,8 @@ use provider::{Provider as ProviderTrait, ProviderRegistry};
 #[cfg(feature = "macros")]
 pub use secretspec_derive::define_secrets;
 
-// Re-export types for convenience
-pub use secretspec_types::*;
+// Re-export core types for convenience
+pub use secretspec_core::*;
 
 /// Extension trait for SecretSpecSecrets to provide convenient access to secrets
 ///
@@ -167,7 +167,7 @@ pub struct ValidationResult {
     /// List of secrets using their default values (name, default_value)
     pub with_defaults: Vec<(String, String)>,
     /// The provider used for validation
-    pub provider: secretspec_types::Provider,
+    pub provider: Provider,
     /// The profile used for validation
     pub profile: String,
 }
@@ -522,7 +522,7 @@ impl SecretSpecBuilder {
             // Apply default overrides if provided
             if let Some(gc) = gc.as_mut() {
                 if let Some(provider) = self.default_provider.take() {
-                    gc.defaults.provider = provider;
+                    gc.defaults.provider = Some(provider);
                 }
                 if let Some(profile) = self.default_profile.take() {
                     gc.defaults.profile = Some(profile);
@@ -683,7 +683,11 @@ impl SecretSpec {
         let provider_spec = if let Some(spec) = provider_arg {
             spec
         } else if let Some(global_config) = &self.global_config {
-            global_config.defaults.provider.clone()
+            if let Some(provider) = &global_config.defaults.provider {
+                provider.clone()
+            } else {
+                return Err(SecretSpecError::NoProviderConfigured);
+            }
         } else {
             return Err(SecretSpecError::NoProviderConfigured);
         };
@@ -1373,8 +1377,8 @@ impl SecretSpec {
             }
         }
 
-        let provider = secretspec_types::Provider::from_str(backend.name())
-            .ok_or_else(|| SecretSpecError::ProviderNotFound(backend.name().to_string()))?;
+        let provider = Provider::try_from(backend.name())
+            .map_err(|_| SecretSpecError::ProviderNotFound(backend.name().to_string()))?;
 
         Ok(ValidationResult {
             secrets,
@@ -1485,56 +1489,27 @@ fn get_config_path() -> Result<PathBuf> {
 /// - The revision is unsupported
 /// - There are circular dependencies in extends
 pub fn parse_spec(path: &Path) -> Result<ProjectConfig> {
-    secretspec_types::parse_spec(path).map_err(|e| match e {
-        secretspec_types::ParseError::Io(io_err) => {
+    ProjectConfig::try_from(path).map_err(|e| match e {
+        ParseError::Io(io_err) => {
             if io_err.kind() == io::ErrorKind::NotFound {
                 SecretSpecError::NoManifest
             } else {
                 SecretSpecError::Io(io_err)
             }
         }
-        secretspec_types::ParseError::Toml(toml_err) => SecretSpecError::Toml(toml_err),
-        secretspec_types::ParseError::UnsupportedRevision(rev) => {
+        ParseError::Toml(toml_err) => SecretSpecError::Toml(toml_err),
+        ParseError::UnsupportedRevision(rev) => {
             SecretSpecError::UnsupportedRevision(rev)
         }
-        secretspec_types::ParseError::CircularDependency(msg) => {
+        ParseError::CircularDependency(msg) => {
+            SecretSpecError::Io(io::Error::new(io::ErrorKind::InvalidData, msg))
+        }
+        ParseError::Validation(msg) => {
             SecretSpecError::Io(io::Error::new(io::ErrorKind::InvalidData, msg))
         }
     })
 }
 
-/// Parses a project specification from a string
-///
-/// This function parses TOML content directly, useful for testing or when
-/// the configuration is already loaded in memory.
-///
-/// # Arguments
-///
-/// * `content` - The TOML content to parse
-/// * `base_path` - Optional base path for resolving extends references
-///
-/// # Returns
-///
-/// The parsed project configuration
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - The content cannot be parsed as TOML
-/// - The revision is unsupported
-/// - There are circular dependencies in extends
-pub fn parse_spec_from_str(content: &str, base_path: Option<&Path>) -> Result<ProjectConfig> {
-    secretspec_types::parse_spec_from_str(content, base_path).map_err(|e| match e {
-        secretspec_types::ParseError::Io(io_err) => SecretSpecError::Io(io_err),
-        secretspec_types::ParseError::Toml(toml_err) => SecretSpecError::Toml(toml_err),
-        secretspec_types::ParseError::UnsupportedRevision(rev) => {
-            SecretSpecError::UnsupportedRevision(rev)
-        }
-        secretspec_types::ParseError::CircularDependency(msg) => {
-            SecretSpecError::Io(io::Error::new(io::ErrorKind::InvalidData, msg))
-        }
-    })
-}
 
 /// Loads the project configuration from the default location
 ///

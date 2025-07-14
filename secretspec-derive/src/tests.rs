@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::capitalize_first;
-    use secretspec_types::ProjectConfig;
+    use secretspec_core::ProjectConfig;
 
     #[test]
     fn test_capitalize_first() {
@@ -187,7 +187,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_validate_rust_identifiers() {
         use crate::validate_rust_identifiers;
-        use secretspec_types::{ProfileConfig, ProjectInfo, SecretConfig};
+        use secretspec_core::{ProfileConfig, ProjectInfo, SecretConfig};
         use std::collections::HashMap;
 
         let mut errors = Vec::new();
@@ -294,7 +294,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_validate_rust_keywords() {
         use crate::validate_rust_identifiers;
-        use secretspec_types::{ProfileConfig, ProjectInfo, SecretConfig};
+        use secretspec_core::{ProfileConfig, ProjectInfo, SecretConfig};
         use std::collections::HashMap;
 
         let mut errors = Vec::new();
@@ -366,7 +366,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_validate_duplicate_field_names() {
         use crate::validate_rust_identifiers;
-        use secretspec_types::{ProfileConfig, ProjectInfo, SecretConfig};
+        use secretspec_core::{ProfileConfig, ProjectInfo, SecretConfig};
         use std::collections::HashMap;
 
         let mut errors = Vec::new();
@@ -431,7 +431,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_validate_profile_identifiers() {
         use crate::validate_profile_identifiers;
-        use secretspec_types::{ProfileConfig, ProjectInfo};
+        use secretspec_core::{ProfileConfig, ProjectInfo};
         use std::collections::HashMap;
 
         let mut errors = Vec::new();
@@ -521,7 +521,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_is_secret_optional() {
         use crate::is_secret_optional;
-        use secretspec_types::SecretConfig;
+        use secretspec_core::SecretConfig;
 
         // Required without default
         let required_no_default = SecretConfig {
@@ -559,7 +559,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_is_field_optional_across_profiles() {
         use crate::is_field_optional_across_profiles;
-        use secretspec_types::{ProfileConfig, ProjectInfo, SecretConfig};
+        use secretspec_core::{ProfileConfig, ProjectInfo, SecretConfig};
         use std::collections::HashMap;
 
         // Setup config with multiple profiles
@@ -694,7 +694,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_analyze_field_types() {
         use crate::analyze_field_types;
-        use secretspec_types::{ProfileConfig, ProjectInfo, SecretConfig};
+        use secretspec_core::{ProfileConfig, ProjectInfo, SecretConfig};
         use std::collections::HashMap;
 
         let mut profiles = HashMap::new();
@@ -876,7 +876,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_validate_config_for_codegen() {
         use crate::validate_config_for_codegen;
-        use secretspec_types::{ProfileConfig, ProjectInfo, SecretConfig};
+        use secretspec_core::{ProfileConfig, ProjectInfo, SecretConfig};
         use std::collections::HashMap;
 
         // Test valid config
