@@ -1,5 +1,6 @@
 use super::*;
 use secretspec_core::Secret;
+use std::convert::TryFrom;
 use std::{fs, io};
 use tempfile::TempDir;
 
@@ -205,7 +206,7 @@ fn test_validation_result_is_valid() {
         missing_required: Vec::new(),
         missing_optional: vec!["optional_secret".to_string()],
         with_defaults: Vec::new(),
-        provider: ProviderRegistry::create_from_string("keyring").unwrap(),
+        provider: Box::<dyn ProviderTrait>::try_from("keyring").unwrap(),
         profile: "default".to_string(),
     };
     assert!(valid_result.is_valid());
@@ -215,7 +216,7 @@ fn test_validation_result_is_valid() {
         missing_required: vec!["required_secret".to_string()],
         missing_optional: Vec::new(),
         with_defaults: Vec::new(),
-        provider: ProviderRegistry::create_from_string("keyring").unwrap(),
+        provider: Box::<dyn ProviderTrait>::try_from("keyring").unwrap(),
         profile: "default".to_string(),
     };
     assert!(!invalid_result.is_valid());

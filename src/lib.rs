@@ -41,7 +41,8 @@ use std::process::Command;
 use thiserror::Error;
 
 pub mod provider;
-use provider::{Provider as ProviderTrait, ProviderRegistry};
+use provider::Provider as ProviderTrait;
+use std::convert::TryFrom;
 
 #[cfg(feature = "macros")]
 pub use secretspec_derive::{define_secrets, provider};
@@ -325,12 +326,12 @@ impl Secrets {
             return Err(SecretSpecError::NoProviderConfigured);
         };
 
-        let backend = ProviderRegistry::create_from_string(&provider_spec)?;
+        let provider = Box::<dyn ProviderTrait>::try_from(provider_spec)?;
 
-        Ok(backend)
+        Ok(provider)
     }
 
-    /// Sets a secret value in the storage backend
+    /// Sets a secret value in the provider
     ///
     /// If no value is provided, the user will be prompted to enter it securely.
     ///
@@ -699,7 +700,7 @@ impl Secrets {
         let profile_display = self.resolve_profile(profile);
 
         // Create the "from" provider
-        let from_provider_backend = ProviderRegistry::create_from_string(from_provider)?;
+        let from_provider_instance = Box::<dyn ProviderTrait>::try_from(from_provider.to_string())?;
 
         println!(
             "Importing secrets from {} to {} (profile: {})...\n",
@@ -720,7 +721,7 @@ impl Secrets {
         // Process each secret in the profile
         for (name, config) in &profile_config.secrets {
             // First check if the secret exists in the "from" provider
-            match from_provider_backend.get(&self.config.project.name, name, profile_display)? {
+            match from_provider_instance.get(&self.config.project.name, name, profile_display)? {
                 Some(value) => {
                     // Secret exists in "from" provider, check if it exists in "to" provider
                     match to_provider.get(&self.config.project.name, name, profile_display)? {

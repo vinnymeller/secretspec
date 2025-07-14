@@ -1,6 +1,7 @@
 use crate::Result;
-use crate::provider::{Provider, ProviderRegistry};
+use crate::provider::Provider;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::sync::{Arc, Mutex};
 
 /// Mock provider for testing
@@ -38,67 +39,67 @@ impl Provider for MockProvider {
 #[test]
 fn test_create_from_string_with_full_uris() {
     // Test basic onepassword URI
-    let provider = ProviderRegistry::create_from_string("onepassword://Private").unwrap();
+    let provider = Box::<dyn Provider>::try_from("onepassword://Private").unwrap();
     assert_eq!(provider.name(), "onepassword");
 
     // Test onepassword with account
-    let provider = ProviderRegistry::create_from_string("onepassword://work@Production").unwrap();
+    let provider = Box::<dyn Provider>::try_from("onepassword://work@Production").unwrap();
     assert_eq!(provider.name(), "onepassword");
 
     // Test onepassword with token
     let provider =
-        ProviderRegistry::create_from_string("onepassword+token://:ops_abc123@Private").unwrap();
+        Box::<dyn Provider>::try_from("onepassword+token://:ops_abc123@Private").unwrap();
     assert_eq!(provider.name(), "onepassword");
 }
 
 #[test]
 fn test_create_from_string_with_plain_names() {
     // Test plain provider names
-    let provider = ProviderRegistry::create_from_string("env").unwrap();
+    let provider = Box::<dyn Provider>::try_from("env").unwrap();
     assert_eq!(provider.name(), "env");
 
-    let provider = ProviderRegistry::create_from_string("keyring").unwrap();
+    let provider = Box::<dyn Provider>::try_from("keyring").unwrap();
     assert_eq!(provider.name(), "keyring");
 
-    let provider = ProviderRegistry::create_from_string("dotenv").unwrap();
+    let provider = Box::<dyn Provider>::try_from("dotenv").unwrap();
     assert_eq!(provider.name(), "dotenv");
 
     // Test onepassword separately to debug the issue
-    match ProviderRegistry::create_from_string("onepassword") {
+    match Box::<dyn Provider>::try_from("onepassword") {
         Ok(provider) => assert_eq!(provider.name(), "onepassword"),
         Err(e) => panic!("Failed to create onepassword provider: {}", e),
     }
 
-    let provider = ProviderRegistry::create_from_string("lastpass").unwrap();
+    let provider = Box::<dyn Provider>::try_from("lastpass").unwrap();
     assert_eq!(provider.name(), "lastpass");
 }
 
 #[test]
 fn test_create_from_string_with_colon() {
     // Test provider names with colon
-    let provider = ProviderRegistry::create_from_string("env:").unwrap();
+    let provider = Box::<dyn Provider>::try_from("env:").unwrap();
     assert_eq!(provider.name(), "env");
 
-    let provider = ProviderRegistry::create_from_string("keyring:").unwrap();
+    let provider = Box::<dyn Provider>::try_from("keyring:").unwrap();
     assert_eq!(provider.name(), "keyring");
 }
 
 #[test]
 fn test_invalid_onepassword_scheme() {
     // Test that '1password' scheme gives proper error suggesting 'onepassword'
-    let result = ProviderRegistry::create_from_string("1password");
+    let result = Box::<dyn Provider>::try_from("1password");
     match result {
         Err(err) => assert!(err.to_string().contains("Use 'onepassword' instead")),
         Ok(_) => panic!("Expected error for '1password' scheme"),
     }
 
-    let result = ProviderRegistry::create_from_string("1password:");
+    let result = Box::<dyn Provider>::try_from("1password:");
     match result {
         Err(err) => assert!(err.to_string().contains("Use 'onepassword' instead")),
         Ok(_) => panic!("Expected error for '1password:' scheme"),
     }
 
-    let result = ProviderRegistry::create_from_string("1password://Private");
+    let result = Box::<dyn Provider>::try_from("1password://Private");
     match result {
         Err(err) => assert!(err.to_string().contains("Use 'onepassword' instead")),
         Ok(_) => panic!("Expected error for '1password://' scheme"),
@@ -108,17 +109,17 @@ fn test_invalid_onepassword_scheme() {
 #[test]
 fn test_dotenv_with_custom_path() {
     // Test dotenv provider with relative path - host part becomes first folder
-    let provider = ProviderRegistry::create_from_string("dotenv://custom/path/to/.env").unwrap();
+    let provider = Box::<dyn Provider>::try_from("dotenv://custom/path/to/.env").unwrap();
     assert_eq!(provider.name(), "dotenv");
 
     // Test with absolute path format
-    let provider = ProviderRegistry::create_from_string("dotenv:///custom/path/.env").unwrap();
+    let provider = Box::<dyn Provider>::try_from("dotenv:///custom/path/.env").unwrap();
     assert_eq!(provider.name(), "dotenv");
 }
 
 #[test]
 fn test_unknown_provider() {
-    let result = ProviderRegistry::create_from_string("unknown");
+    let result = Box::<dyn Provider>::try_from("unknown");
     assert!(result.is_err());
     match result {
         Err(crate::SecretSpecError::ProviderNotFound(scheme)) => {
@@ -131,7 +132,7 @@ fn test_unknown_provider() {
 #[test]
 fn test_dotenv_shorthand_from_docs() {
     // Test the example from line 187 of registry.rs
-    let provider = ProviderRegistry::create_from_string("dotenv:.env.production").unwrap();
+    let provider = Box::<dyn Provider>::try_from("dotenv:.env.production").unwrap();
     assert_eq!(provider.name(), "dotenv");
 }
 
@@ -140,41 +141,41 @@ fn test_documentation_examples() {
     // Test examples from the documentation
 
     // From line 102: onepassword://work@Production
-    let provider = ProviderRegistry::create_from_string("onepassword://work@Production").unwrap();
+    let provider = Box::<dyn Provider>::try_from("onepassword://work@Production").unwrap();
     assert_eq!(provider.name(), "onepassword");
 
     // From line 107: dotenv:/path/to/.env
-    let provider = ProviderRegistry::create_from_string("dotenv:/path/to/.env").unwrap();
+    let provider = Box::<dyn Provider>::try_from("dotenv:/path/to/.env").unwrap();
     assert_eq!(provider.name(), "dotenv");
 
     // From line 115: lastpass://folder
-    let provider = ProviderRegistry::create_from_string("lastpass://folder").unwrap();
+    let provider = Box::<dyn Provider>::try_from("lastpass://folder").unwrap();
     assert_eq!(provider.name(), "lastpass");
 
     // Test dotenv examples from provider list
-    let provider = ProviderRegistry::create_from_string("dotenv://path").unwrap();
+    let provider = Box::<dyn Provider>::try_from("dotenv://path").unwrap();
     assert_eq!(provider.name(), "dotenv");
 }
 
 #[test]
 fn test_edge_cases_and_normalization() {
     // Test scheme-only format (mentioned in docs line 151)
-    let provider = ProviderRegistry::create_from_string("keyring:").unwrap();
+    let provider = Box::<dyn Provider>::try_from("keyring:").unwrap();
     assert_eq!(provider.name(), "keyring");
 
     // Test dotenv special case without authority (line 152-153)
-    let provider = ProviderRegistry::create_from_string("dotenv:/absolute/path").unwrap();
+    let provider = Box::<dyn Provider>::try_from("dotenv:/absolute/path").unwrap();
     assert_eq!(provider.name(), "dotenv");
 
     // Test normalized URIs with localhost (line 154)
-    let provider = ProviderRegistry::create_from_string("env://localhost").unwrap();
+    let provider = Box::<dyn Provider>::try_from("env://localhost").unwrap();
     assert_eq!(provider.name(), "env");
 }
 
 #[test]
 fn test_documentation_example_line_184() {
     // Test the exact example from line 184 of registry.rs
-    let provider = ProviderRegistry::create_from_string("onepassword://vault/Production").unwrap();
+    let provider = Box::<dyn Provider>::try_from("onepassword://vault/Production").unwrap();
     assert_eq!(provider.name(), "onepassword");
 }
 

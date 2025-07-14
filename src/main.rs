@@ -339,10 +339,10 @@ fn main() -> Result<()> {
             // Initialize user configuration with interactive prompts
             ConfigAction::Init => {
                 use inquire::Select;
-                use secretspec::provider::ProviderRegistry;
+                use secretspec::provider;
 
                 // Get provider choices from the centralized registry
-                let provider_choices: Vec<String> = ProviderRegistry::providers()
+                let provider_choices: Vec<String> = provider::providers()
                     .into_iter()
                     .map(|info| info.display_with_examples())
                     .collect();

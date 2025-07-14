@@ -1,4 +1,5 @@
-use secretspec::provider::ProviderRegistry;
+use secretspec::provider::Provider;
+use std::convert::TryFrom;
 
 fn generate_test_project_name() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -32,12 +33,12 @@ mod generic_provider_tests {
                 let temp_dir = TempDir::new().expect("Create temp directory");
                 let dotenv_path = temp_dir.path().join(".env");
                 let provider_spec = format!("dotenv:{}", dotenv_path.to_str().unwrap());
-                let provider = ProviderRegistry::create_from_string(&provider_spec)
+                let provider = Box::<dyn Provider>::try_from(provider_spec.as_str())
                     .expect("Should create dotenv provider with path");
                 (provider, Some(temp_dir))
             }
             _ => {
-                let provider = ProviderRegistry::create_from_string(provider_name)
+                let provider = Box::<dyn Provider>::try_from(provider_name)
                     .expect(&format!("{} provider should exist", provider_name));
                 (provider, None)
             }

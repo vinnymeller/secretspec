@@ -35,10 +35,11 @@
 //! ## Example
 //!
 //! ```rust,ignore
-//! use secretspec::provider::{Provider, ProviderRegistry};
+//! use secretspec::provider::Provider;
+//! use std::convert::TryFrom;
 //!
 //! // Create a provider from a URI string
-//! let provider = ProviderRegistry::create_from_string("keyring://")?;
+//! let provider = Box::<dyn Provider>::try_from("keyring://")?;
 //!
 //! // Store a secret
 //! provider.set("myproject", "API_KEY", "secret123", "production")?;
@@ -49,19 +50,70 @@
 //! }
 //! ```
 
-use crate::Result;
+use crate::{Result, SecretSpecError};
+use std::convert::TryFrom;
+use url::Url;
 
 pub mod dotenv;
 pub mod env;
 pub mod keyring;
 pub mod lastpass;
 pub mod onepassword;
-pub mod registry;
 #[macro_use]
 pub mod macros;
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+/// Information about a secret storage provider.
+///
+/// Contains metadata used for displaying available providers to users,
+/// including the provider's name, description, and example URIs.
+#[derive(Debug, Clone)]
+pub struct ProviderInfo {
+    /// The canonical name of the provider (e.g., "keyring", "1password").
+    pub name: &'static str,
+    /// A human-readable description of what the provider does.
+    pub description: &'static str,
+    /// Example URIs showing how to configure this provider.
+    pub examples: &'static [&'static str],
+}
+
+impl ProviderInfo {
+    /// Formats the provider information for display, including examples if available.
+    ///
+    /// # Returns
+    ///
+    /// A formatted string in one of two formats:
+    /// - Without examples: "name: description"
+    /// - With examples: "name: description (e.g., example1, example2)"
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let info = ProviderInfo {
+    ///     name: "onepassword",
+    ///     description: "OnePassword password manager",
+    ///     examples: &["onepassword://vault", "onepassword://work@Production"],
+    /// };
+    /// assert_eq!(
+    ///     info.display_with_examples(),
+    ///     "onepassword: OnePassword password manager (e.g., onepassword://vault, onepassword://work@Production)"
+    /// );
+    /// ```
+    pub fn display_with_examples(&self) -> String {
+        if self.examples.is_empty() {
+            format!("{}: {}", self.name, self.description)
+        } else {
+            format!(
+                "{}: {} (e.g., {})",
+                self.name,
+                self.description,
+                self.examples.join(", ")
+            )
+        }
+    }
+}
 
 /// Configuration and implementation for `.env` file provider
 pub use dotenv::{DotEnvConfig, DotEnvProvider};
@@ -75,8 +127,21 @@ pub use lastpass::{LastPassConfig, LastPassProvider};
 pub use macros::{PROVIDER_REGISTRY, ProviderRegistration};
 /// Configuration and implementation for OnePassword provider
 pub use onepassword::{OnePasswordConfig, OnePasswordProvider};
-/// Provider registry and metadata types
-pub use registry::{ProviderInfo, ProviderRegistry};
+
+/// Returns a list of all available providers with their metadata.
+///
+/// This includes the provider name, description, and example URIs for each
+/// supported provider type.
+///
+/// # Returns
+///
+/// A vector of `ProviderInfo` structs containing metadata for each provider.
+pub fn providers() -> Vec<ProviderInfo> {
+    PROVIDER_REGISTRY
+        .iter()
+        .map(|reg| reg.info.clone())
+        .collect()
+}
 
 /// Trait defining the interface for secret storage providers.
 ///
@@ -177,4 +242,118 @@ pub trait Provider: Send + Sync {
     ///
     /// This should match the name registered with the provider macro.
     fn name(&self) -> &'static str;
+}
+
+impl TryFrom<String> for Box<dyn Provider> {
+    type Error = SecretSpecError;
+
+    /// Creates a provider instance from a URI string.
+    ///
+    /// This function handles various URI formats and normalizes them before parsing.
+    /// It supports both full URIs and shorthand notations.
+    ///
+    /// # URI Formats
+    ///
+    /// - **Full URI**: `scheme://authority/path` (e.g., `onepassword://vault/Production`)
+    ///
+    /// # Special Cases
+    ///
+    /// - **1password**: Will error suggesting to use `onepassword` instead
+    /// - **Bare provider names**: Automatically converted to `provider://`
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use std::convert::TryFrom;
+    ///
+    /// // Simple provider name
+    /// let provider = Box::<dyn Provider>::try_from("keyring".to_string())?;
+    ///
+    /// // Full URI with configuration
+    /// let provider = Box::<dyn Provider>::try_from("onepassword://vault/Production".to_string())?;
+    ///
+    /// // Dotenv with path
+    /// let provider = Box::<dyn Provider>::try_from("dotenv:.env.production".to_string())?;
+    /// ```
+    fn try_from(s: String) -> Result<Self> {
+        Self::try_from(&s as &str)
+    }
+}
+
+impl TryFrom<&str> for Box<dyn Provider> {
+    type Error = SecretSpecError;
+
+    fn try_from(s: &str) -> Result<Self> {
+        // Parse the scheme from the input string
+        let (scheme, rest) = if let Some(pos) = s.find(':') {
+            let scheme = &s[..pos];
+            let rest = &s[pos + 1..];
+            (scheme, rest)
+        } else {
+            // Just a provider name, no URI components
+            (s, "")
+        };
+
+        // Validate scheme first
+        if scheme == "1password" {
+            return Err(SecretSpecError::ProviderOperationFailed(
+                "Invalid scheme '1password'. Use 'onepassword' instead (e.g., onepassword://vault/path)".to_string()
+            ));
+        }
+
+        // Check if the scheme is registered
+        let is_valid_scheme = PROVIDER_REGISTRY
+            .iter()
+            .any(|reg| reg.schemes.contains(&scheme));
+
+        if !is_valid_scheme {
+            // Check if it's a known provider name to give a better error
+            if PROVIDER_REGISTRY.iter().any(|reg| reg.info.name == scheme) {
+                return Err(SecretSpecError::ProviderOperationFailed(format!(
+                    "Provider '{}' exists but URI parsing failed",
+                    scheme
+                )));
+            } else {
+                return Err(SecretSpecError::ProviderNotFound(scheme.to_string()));
+            }
+        }
+
+        // Build a proper URL with the correct scheme
+        let url_string = match rest {
+            // Just scheme name (e.g., "keyring")
+            "" | ":" => format!("{}://", scheme),
+            // Standard URI format already has // (e.g., "onepassword://vault/path")
+            s if s.starts_with("//") => format!("{}:{}", scheme, s),
+            // Path only format (e.g., "dotenv:/path/to/.env")
+            s if s.starts_with('/') => format!("{}://{}", scheme, s),
+            // Everything else - assume it's a host or path component
+            s => format!("{}://{}", scheme, s),
+        };
+
+        let proper_url = Url::parse(&url_string).map_err(|e| {
+            SecretSpecError::ProviderOperationFailed(format!(
+                "Invalid provider specification '{}': {}",
+                s, e
+            ))
+        })?;
+
+        Self::try_from(&proper_url)
+    }
+}
+
+impl TryFrom<&Url> for Box<dyn Provider> {
+    type Error = SecretSpecError;
+
+    fn try_from(url: &Url) -> Result<Self> {
+        let scheme = url.scheme();
+
+        // Find the provider registration for this scheme
+        let registration = PROVIDER_REGISTRY
+            .iter()
+            .find(|reg| reg.schemes.contains(&scheme))
+            .ok_or_else(|| SecretSpecError::ProviderNotFound(scheme.to_string()))?;
+
+        // Use the factory function to create the provider
+        (registration.factory)(url)
+    }
 }
