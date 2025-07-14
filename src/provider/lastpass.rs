@@ -13,7 +13,7 @@ use url::Url;
 ///
 /// # Examples
 ///
-/// ```no_run
+/// ```ignore
 /// use secretspec::provider::lastpass::LastPassConfig;
 ///
 /// // Create a default configuration
@@ -62,7 +62,7 @@ impl TryFrom<&Url> for LastPassConfig {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
     /// use url::Url;
     /// use secretspec::provider::lastpass::LastPassConfig;
     ///
@@ -120,7 +120,7 @@ impl TryFrom<&Url> for LastPassConfig {
 ///
 /// # Examples
 ///
-/// ```no_run
+/// ```ignore
 /// use secretspec::provider::lastpass::{LastPassProvider, LastPassConfig};
 ///
 /// // Create provider with default config
@@ -131,7 +131,7 @@ impl TryFrom<&Url> for LastPassConfig {
 ///     folder_prefix: Some("work".to_string()),
 /// };
 /// let provider = LastPassProvider::new(config);
-/// ```
+/// ```ignore
 #[crate::provider(
     name = "lastpass",
     description = "LastPass password manager",

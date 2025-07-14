@@ -4,6 +4,9 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::{Arc, Mutex};
 
+#[cfg(test)]
+use tempfile::TempDir;
+
 /// Mock provider for testing
 pub struct MockProvider {
     storage: Arc<Mutex<HashMap<String, String>>>,
@@ -194,4 +197,203 @@ fn test_url_parsing_behavior() {
     assert_eq!(url.scheme(), "dotenv");
     assert_eq!(url.host_str(), Some("path"));
     assert_eq!(url.path(), "/to/.env");
+}
+
+// Integration tests for all providers
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+
+    fn generate_test_project_name() -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros();
+        let suffix = timestamp % 100000;
+        format!("secretspec_test_{}", suffix)
+    }
+
+    fn get_test_providers() -> Vec<String> {
+        std::env::var("SECRETSPEC_TEST_PROVIDERS")
+            .unwrap_or_else(|_| String::new())
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.trim().to_string())
+            .collect()
+    }
+
+    fn create_provider_with_temp_path(provider_name: &str) -> (Box<dyn Provider>, Option<TempDir>) {
+        match provider_name {
+            "dotenv" => {
+                let temp_dir = TempDir::new().expect("Create temp directory");
+                let dotenv_path = temp_dir.path().join(".env");
+                let provider_spec = format!("dotenv:{}", dotenv_path.to_str().unwrap());
+                let provider = Box::<dyn Provider>::try_from(provider_spec.as_str())
+                    .expect("Should create dotenv provider with path");
+                (provider, Some(temp_dir))
+            }
+            _ => {
+                let provider = Box::<dyn Provider>::try_from(provider_name)
+                    .expect(&format!("{} provider should exist", provider_name));
+                (provider, None)
+            }
+        }
+    }
+
+    // Generic test function that tests a provider implementation
+    fn test_provider_basic_workflow(provider: &dyn Provider, provider_name: &str) {
+        let project_name = generate_test_project_name();
+
+        // Test 1: Get non-existent secret
+        let result = provider.get(&project_name, "TEST_PASSWORD", "default");
+        match result {
+            Ok(None) => {
+                // Expected: key doesn't exist
+            }
+            Ok(Some(_)) => {
+                panic!("[{}] Should not find non-existent secret", provider_name);
+            }
+            Err(_) => {
+                // Some providers may return error instead of None
+            }
+        }
+
+        // Test 2: Try to set a secret (may fail for read-only providers)
+        let test_value = format!("test_password_{}", provider_name);
+
+        if provider.allows_set() {
+            // Provider claims to support set, so it should work
+            provider
+                .set(&project_name, "TEST_PASSWORD", &test_value, "default")
+                .expect(&format!(
+                    "[{}] Provider claims to support set but failed",
+                    provider_name
+                ));
+
+            // Verify we can retrieve it
+            let retrieved = provider
+                .get(&project_name, "TEST_PASSWORD", "default")
+                .expect(&format!(
+                    "[{}] Should not error when getting after set",
+                    provider_name
+                ));
+
+            match retrieved {
+                Some(value) => {
+                    assert_eq!(
+                        value, test_value,
+                        "[{}] Retrieved value should match set value",
+                        provider_name
+                    );
+                }
+                None => {
+                    panic!("[{}] Should find secret after setting it", provider_name);
+                }
+            }
+        } else {
+            // Provider is read-only, verify set fails
+            match provider.set(&project_name, "TEST_PASSWORD", &test_value, "default") {
+                Ok(_) => {
+                    panic!(
+                        "[{}] Read-only provider should not allow set operations",
+                        provider_name
+                    );
+                }
+                Err(_) => {
+                    println!(
+                        "[{}] Read-only provider correctly rejected set",
+                        provider_name
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_all_providers_basic_workflow() {
+        // Test with our internal providers directly
+        println!("Testing MockProvider");
+        let mock = MockProvider::new();
+        test_provider_basic_workflow(&mock, "mock");
+
+        // Test actual providers if environment variable is set
+        let providers = get_test_providers();
+        for provider_name in providers {
+            println!("Testing provider: {}", provider_name);
+            let (provider, _temp_dir) = create_provider_with_temp_path(&provider_name);
+            test_provider_basic_workflow(provider.as_ref(), &provider_name);
+        }
+    }
+
+    #[test]
+    fn test_provider_special_characters() {
+        let test_cases = vec![
+            ("SPACED_VALUE", "value with spaces"),
+            ("NEWLINE_VALUE", "value\nwith\nnewlines"),
+            ("SPECIAL_CHARS", "!@#%^&*()_+-=[]{}|;',./<>?"),
+            ("UNICODE_VALUE", "🔐 Secret with émojis and ñ"),
+        ];
+
+        // Test with MockProvider
+        let provider = MockProvider::new();
+        let project_name = generate_test_project_name();
+
+        for (key, value) in &test_cases {
+            provider
+                .set(&project_name, key, value, "default")
+                .expect("Mock provider should handle all characters");
+
+            let result = provider
+                .get(&project_name, key, "default")
+                .expect("Should not error when getting");
+
+            assert_eq!(
+                result.as_deref(),
+                Some(*value),
+                "Special characters should be preserved"
+            );
+        }
+    }
+
+    #[test]
+    fn test_provider_profile_support() {
+        let provider = MockProvider::new();
+        let project_name = generate_test_project_name();
+        let profiles = vec!["dev", "staging", "prod"];
+        let test_key = "API_KEY";
+
+        for profile in &profiles {
+            let value = format!("key_for_{}", profile);
+            provider
+                .set(&project_name, test_key, &value, profile)
+                .expect("Should set with profile");
+
+            let result = provider
+                .get(&project_name, test_key, profile)
+                .expect("Should get with profile");
+
+            assert_eq!(result, Some(value), "Profile-specific value should match");
+        }
+
+        // Verify isolation between profiles
+        for i in 0..profiles.len() {
+            for j in 0..profiles.len() {
+                let result = provider
+                    .get(&project_name, test_key, profiles[j])
+                    .expect("Should not error");
+
+                if i == j {
+                    assert!(result.is_some(), "Should find value in same profile");
+                } else {
+                    let expected_value = format!("key_for_{}", profiles[j]);
+                    assert_eq!(
+                        result,
+                        Some(expected_value),
+                        "Should find profile-specific value"
+                    );
+                }
+            }
+        }
+    }
 }

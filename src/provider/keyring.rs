@@ -23,7 +23,7 @@ impl TryFrom<&Url> for KeyringConfig {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
     /// # use url::Url;
     /// # use secretspec::provider::keyring::KeyringConfig;
     /// let url = Url::parse("keyring://").unwrap();

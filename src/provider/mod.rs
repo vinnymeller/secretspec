@@ -115,18 +115,8 @@ impl ProviderInfo {
     }
 }
 
-/// Configuration and implementation for `.env` file provider
-pub use dotenv::{DotEnvConfig, DotEnvProvider};
-/// Configuration and implementation for environment variable provider
-pub use env::{EnvConfig, EnvProvider};
-/// Configuration and implementation for system keyring provider
-pub use keyring::{KeyringConfig, KeyringProvider};
-/// Configuration and implementation for LastPass provider
-pub use lastpass::{LastPassConfig, LastPassProvider};
 /// Macro support types
 pub use macros::{PROVIDER_REGISTRY, ProviderRegistration};
-/// Configuration and implementation for OnePassword provider
-pub use onepassword::{OnePasswordConfig, OnePasswordProvider};
 
 /// Returns a list of all available providers with their metadata.
 ///

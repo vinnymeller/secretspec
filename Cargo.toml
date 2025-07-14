@@ -45,7 +45,8 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "secretspec"
-path = "src/main.rs"
+path = "src/bin/secretspec.rs"
+required-features = ["cli"]
 
 [dependencies]
 clap.workspace = true
@@ -70,7 +71,8 @@ whoami.workspace = true
 linkme.workspace = true
 
 [features]
-default = ["macros"]
+default = ["macros", "cli"]
 macros = ["secretspec-derive"]
+cli = []
 
 [dev-dependencies]

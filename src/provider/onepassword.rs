@@ -80,7 +80,7 @@ struct OnePasswordFieldTemplate {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// # use secretspec::provider::onepassword::OnePasswordConfig;
 /// // Using default configuration (interactive auth)
 /// let config = OnePasswordConfig::default();
@@ -201,7 +201,7 @@ impl OnePasswordConfig {}
 ///
 /// # Example Usage
 ///
-/// ```bash
+/// ```ignore
 /// # Interactive auth
 /// op signin
 /// secretspec set MY_SECRET --provider onepassword://Development

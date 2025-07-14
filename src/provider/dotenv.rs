@@ -13,7 +13,7 @@ use url::Url;
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use std::path::PathBuf;
 /// use secretspec::provider::dotenv::DotEnvConfig;
 ///
@@ -58,7 +58,7 @@ impl TryFrom<&Url> for DotEnvConfig {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
     /// use url::Url;
     /// use secretspec::provider::dotenv::DotEnvConfig;
     ///
@@ -143,7 +143,7 @@ impl DotEnvProvider {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
     /// use secretspec::provider::dotenv::{DotEnvProvider, DotEnvConfig};
     ///
     /// let config = DotEnvConfig::default();
@@ -166,7 +166,7 @@ impl DotEnvProvider {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
     /// use secretspec::provider::dotenv::{DotEnvProvider, DotEnvConfig};
     ///
     /// let provider = DotEnvProvider::new(DotEnvConfig::default());

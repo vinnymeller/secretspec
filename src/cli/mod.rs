@@ -1,7 +1,8 @@
+use crate::provider::{dotenv::DotEnvProvider, providers};
+use crate::{Config, GlobalConfig, GlobalDefaults, Profile, Project, Secrets};
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::{Result, WrapErr};
 use directories::ProjectDirs;
-use secretspec::{Config, GlobalConfig, GlobalDefaults, Secrets};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
@@ -114,13 +115,7 @@ enum ConfigAction {
 /// * `Ok(PathBuf)` - The path to the configuration file
 /// * `Err` - If the configuration directory cannot be determined
 ///
-/// # Example
-///
-/// ```no_run
-/// let config_path = get_config_path()?;
-/// println!("Config file: {}", config_path.display());
-/// ```
-fn get_config_path() -> secretspec::Result<PathBuf> {
+fn get_config_path() -> crate::Result<PathBuf> {
     let dirs = ProjectDirs::from("", "", "secretspec").ok_or_else(|| {
         io::Error::new(io::ErrorKind::NotFound, "Could not find config directory")
     })?;
@@ -137,7 +132,7 @@ fn get_config_path() -> secretspec::Result<PathBuf> {
 /// * `Ok(Some(GlobalConfig))` - The parsed configuration
 /// * `Ok(None)` - If the configuration file doesn't exist
 /// * `Err` - If reading or parsing the configuration fails
-fn load_global_config() -> secretspec::Result<Option<GlobalConfig>> {
+fn load_global_config() -> crate::Result<Option<GlobalConfig>> {
     let config_path = get_config_path()?;
     if !config_path.exists() {
         return Ok(None);
@@ -159,7 +154,7 @@ fn load_global_config() -> secretspec::Result<Option<GlobalConfig>> {
 ///
 /// * `Ok(())` - If the configuration was saved successfully
 /// * `Err` - If creating directories or writing the file fails
-fn save_global_config(config: &GlobalConfig) -> secretspec::Result<()> {
+fn save_global_config(config: &GlobalConfig) -> crate::Result<()> {
     let config_path = get_config_path()?;
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent)?;
@@ -206,7 +201,7 @@ fn get_example_toml() -> &'static str {
 /// # Errors
 ///
 /// Returns an error if the configuration cannot be serialized
-fn generate_toml_with_comments(config: &Config) -> secretspec::Result<String> {
+fn generate_toml_with_comments(config: &Config) -> crate::Result<String> {
     let mut output = String::new();
 
     // Project section
@@ -248,7 +243,7 @@ fn generate_toml_with_comments(config: &Config) -> secretspec::Result<String> {
 ///
 /// * `Ok(())` - If the command executed successfully
 /// * `Err` - If any error occurred during execution
-fn main() -> Result<()> {
+pub fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
@@ -285,15 +280,15 @@ fn main() -> Result<()> {
 
             // Create dotenv provider and reflect secrets
             let dotenv_config = (&uri).try_into()?;
-            let dotenv_provider = secretspec::provider::dotenv::DotEnvProvider::new(dotenv_config);
+            let dotenv_provider = DotEnvProvider::new(dotenv_config);
             let secrets = dotenv_provider.reflect()?;
 
             // Create a new project config
             let mut profiles = HashMap::new();
-            profiles.insert("default".to_string(), secretspec::Profile { secrets });
+            profiles.insert("default".to_string(), Profile { secrets });
 
-            let project_config = secretspec::Config {
-                project: secretspec::Project {
+            let project_config = Config {
+                project: Project {
                     name: std::env::current_dir()?
                         .file_name()
                         .unwrap_or_default()
@@ -339,10 +334,9 @@ fn main() -> Result<()> {
             // Initialize user configuration with interactive prompts
             ConfigAction::Init => {
                 use inquire::Select;
-                use secretspec::provider;
 
                 // Get provider choices from the centralized registry
-                let provider_choices: Vec<String> = provider::providers()
+                let provider_choices: Vec<String> = providers()
                     .into_iter()
                     .map(|info| info.display_with_examples())
                     .collect();

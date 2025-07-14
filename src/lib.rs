@@ -40,12 +40,18 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use thiserror::Error;
 
-pub mod provider;
+pub(crate) mod provider;
 use provider::Provider as ProviderTrait;
 use std::convert::TryFrom;
 
+// CLI module (feature-gated)
+#[cfg(feature = "cli")]
+pub mod cli;
+
 #[cfg(feature = "macros")]
-pub use secretspec_derive::{define_secrets, provider};
+pub use secretspec_derive::define_secrets;
+#[cfg(feature = "macros")]
+pub(crate) use secretspec_derive::provider;
 
 // Re-export only the types needed by users and generated code
 pub use secretspec_core::Resolved;

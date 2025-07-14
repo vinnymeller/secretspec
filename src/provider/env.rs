@@ -12,7 +12,7 @@ use url::Url;
 ///
 /// # Example
 ///
-/// ```
+/// ```ignore
 /// # use secretspec::provider::env::EnvConfig;
 /// let config = EnvConfig::default();
 /// ```
@@ -30,7 +30,7 @@ impl TryFrom<&Url> for EnvConfig {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// # use url::Url;
     /// # use secretspec::provider::env::EnvConfig;
     /// let url = Url::parse("env://").unwrap();
@@ -68,7 +68,7 @@ impl EnvConfig {}
 ///
 /// # Example
 ///
-/// ```
+/// ```ignore
 /// # use secretspec::provider::env::{EnvProvider, EnvConfig};
 /// let provider = EnvProvider::new(EnvConfig::default());
 /// // Can only read values, not set them
@@ -93,7 +93,7 @@ impl EnvProvider {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// # use secretspec::provider::env::{EnvProvider, EnvConfig};
     /// let config = EnvConfig::default();
     /// let provider = EnvProvider::new(config);
@@ -128,7 +128,7 @@ impl Provider for EnvProvider {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// # use secretspec::provider::{Provider, env::{EnvProvider, EnvConfig}};
     /// # unsafe { std::env::set_var("MY_SECRET", "value123"); }
     /// let provider = EnvProvider::new(EnvConfig::default());
@@ -159,7 +159,7 @@ impl Provider for EnvProvider {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// # use secretspec::provider::{Provider, env::{EnvProvider, EnvConfig}};
     /// let provider = EnvProvider::new(EnvConfig::default());
     /// let result = provider.set("myproject", "MY_SECRET", "value", "production");
