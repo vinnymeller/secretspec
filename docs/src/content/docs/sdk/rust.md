@@ -22,7 +22,7 @@ secretspec::define_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load secrets using the builder pattern
-    let secretspec = SecretSpec::builder()
+    let secretspec = Secrets::builder()
         .with_provider("keyring")  // Can use provider name or URI like "dotenv:/path/to/.env"
         .with_profile("development")  // Can use string or Profile enum
         .load()?;  // All conversions and errors are handled here
@@ -42,10 +42,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set all secrets as environment variables
     secretspec.secrets.set_as_env_vars();
 
-    // Get a single secret
-    let db_secret = secretspec.secrets.get("DATABASE_URL", secretspec::GetOptions::default())?;
-    println!("Database secret value: {}", db_secret.secret);
-
     Ok(())
 }
 ```
@@ -59,7 +55,7 @@ secretspec::define_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load secrets with profile-specific types
-    let secretspec = SecretSpec::builder()
+    let secretspec = Secrets::builder()
         .with_provider("keyring")
         .with_profile(Profile::Production)
         .load_profile()?;

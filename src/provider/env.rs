@@ -1,8 +1,8 @@
 use super::Provider;
 use crate::{Result, SecretSpecError};
-use http::Uri;
 use serde::{Deserialize, Serialize};
 use std::env;
+use url::Url;
 
 /// Configuration for the environment variables provider.
 ///
@@ -19,45 +19,36 @@ use std::env;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct EnvConfig {}
 
-impl EnvConfig {
-    /// Creates an `EnvConfig` from a URI.
+impl TryFrom<&Url> for EnvConfig {
+    type Error = SecretSpecError;
+
+    /// Creates an `EnvConfig` from a URL.
     ///
-    /// This method validates that the URI has the correct scheme ("env")
+    /// This method validates that the URL has the correct scheme ("env")
     /// and returns an `EnvConfig` instance. The environment provider
-    /// doesn't require any additional configuration from the URI.
-    ///
-    /// # Arguments
-    ///
-    /// * `uri` - The URI to parse, must have scheme "env"
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(EnvConfig)` - If the URI is valid with "env" scheme
-    /// * `Err(SecretSpecError)` - If the URI is invalid or has wrong scheme
+    /// doesn't require any additional configuration from the URL.
     ///
     /// # Example
     ///
     /// ```
-    /// # use http::Uri;
+    /// # use url::Url;
     /// # use secretspec::provider::env::EnvConfig;
-    /// let uri = "env://localhost".parse::<Uri>().unwrap();
-    /// let config = EnvConfig::from_uri(&uri).unwrap();
+    /// let url = Url::parse("env://").unwrap();
+    /// let config: EnvConfig = (&url).try_into().unwrap();
     /// ```
-    pub fn from_uri(uri: &Uri) -> Result<Self> {
-        let scheme = uri.scheme_str().ok_or_else(|| {
-            SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string())
-        })?;
-
-        if scheme != "env" {
+    fn try_from(url: &Url) -> std::result::Result<Self, Self::Error> {
+        if url.scheme() != "env" {
             return Err(SecretSpecError::ProviderOperationFailed(format!(
                 "Invalid scheme '{}' for env provider",
-                scheme
+                url.scheme()
             )));
         }
 
         Ok(Self::default())
     }
 }
+
+impl EnvConfig {}
 
 /// A read-only provider that reads secrets from environment variables.
 ///
@@ -82,8 +73,15 @@ impl EnvConfig {
 /// let provider = EnvProvider::new(EnvConfig::default());
 /// // Can only read values, not set them
 /// ```
+#[crate::provider(
+    name = "env",
+    description = "Read-only environment variables",
+    schemes = ["env"],
+    examples = ["env://"],
+)]
 pub struct EnvProvider {
-    _config: EnvConfig,
+    #[allow(dead_code)]
+    config: EnvConfig,
 }
 
 impl EnvProvider {
@@ -101,38 +99,15 @@ impl EnvProvider {
     /// let provider = EnvProvider::new(config);
     /// ```
     pub fn new(config: EnvConfig) -> Self {
-        Self { _config: config }
-    }
-
-    /// Creates an `EnvProvider` from a URI.
-    ///
-    /// This is a convenience method that parses the URI into an `EnvConfig`
-    /// and then creates the provider.
-    ///
-    /// # Arguments
-    ///
-    /// * `uri` - The URI to parse, must have scheme "env"
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(EnvProvider)` - If the URI is valid
-    /// * `Err(SecretSpecError)` - If the URI is invalid
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use http::Uri;
-    /// # use secretspec::provider::env::EnvProvider;
-    /// let uri = "env://localhost".parse::<Uri>().unwrap();
-    /// let provider = EnvProvider::from_uri(&uri).unwrap();
-    /// ```
-    pub fn from_uri(uri: &Uri) -> Result<Self> {
-        let config = EnvConfig::from_uri(uri)?;
-        Ok(Self::new(config))
+        Self { config }
     }
 }
 
 impl Provider for EnvProvider {
+    fn name(&self) -> &'static str {
+        Self::PROVIDER_NAME
+    }
+
     /// Retrieves a secret value from environment variables.
     ///
     /// This method reads the value directly from the process environment
@@ -209,23 +184,5 @@ impl Provider for EnvProvider {
     /// Always returns `false`
     fn allows_set(&self) -> bool {
         false
-    }
-
-    /// Returns the name identifier for this provider.
-    ///
-    /// # Returns
-    ///
-    /// Always returns `"env"`
-    fn name(&self) -> &'static str {
-        "env"
-    }
-
-    /// Returns a human-readable description of this provider.
-    ///
-    /// # Returns
-    ///
-    /// Always returns `"Read-only environment variables"`
-    fn description(&self) -> &'static str {
-        "Read-only environment variables"
     }
 }

@@ -5,30 +5,31 @@ description: Step-by-step guide for implementing custom provider backends
 
 ## Provider Trait
 
+All providers must implement the `Provider` trait:
+
 ```rust
 pub trait Provider: Send + Sync {
-    fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>>;
-    fn set(&self, project: &str, key: &str, value: &str, profile: Option<&str>) -> Result<()>;
     fn name(&self) -> &'static str;
-    fn description(&self) -> &'static str;
-    fn allows_set(&self) -> bool { true }  // Optional
+    fn get(&self, project: &str, key: &str, profile: &str) -> Result<Option<String>>;
+    fn set(&self, project: &str, key: &str, value: &str, profile: &str) -> Result<()>;
+    fn allows_set(&self) -> bool { true }  // Optional, defaults to true
 }
 ```
 
 ## Implementation Steps
 
 1. **Create provider module** in `src/provider/mybackend.rs`
-2. **Define config struct** with `Serialize`, `Deserialize`, `Default`, and `from_uri()`
-3. **Implement Provider trait** for your provider struct
-4. **Export from mod.rs**: Add `pub mod mybackend;` and exports
-5. **Register in registry.rs**: Add to `providers()` list and `create_from_string()` match
+2. **Define config struct** with `Serialize`, `Deserialize`, `Default`, and `TryFrom<&Url>`
+3. **Implement provider struct** with the `#[provider]` macro for automatic registration
+4. **Implement Provider trait** for your provider struct
+5. **Export from mod.rs**: Add `pub mod mybackend;`
 
 ## Example Implementation
 
 ```rust
 use super::Provider;
 use crate::{Result, SecretSpecError};
-use http::Uri;
+use url::Url;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,19 +43,29 @@ impl Default for MyBackendConfig {
     }
 }
 
-impl MyBackendConfig {
-    pub fn from_uri(uri: &Uri) -> Result<Self> {
-        if uri.scheme_str() != Some("mybackend") {
+impl TryFrom<&Url> for MyBackendConfig {
+    type Error = SecretSpecError;
+
+    fn try_from(url: &Url) -> std::result::Result<Self, Self::Error> {
+        if url.scheme() != "mybackend" {
             return Err(SecretSpecError::ProviderOperationFailed(
-                "Invalid scheme".to_string()
+                format!("Invalid scheme '{}' for mybackend provider", url.scheme())
             ));
         }
+        
+        // Parse URL into configuration
         Ok(Self {
-            endpoint: uri.host().map(|h| h.to_string()),
+            endpoint: url.host_str().map(|s| s.to_string()),
         })
     }
 }
 
+#[crate::provider(
+    name = "mybackend",
+    description = "My custom backend provider",
+    schemes = ["mybackend"],
+    examples = ["mybackend://api.example.com", "mybackend://localhost:8080"],
+)]
 pub struct MyBackendProvider {
     config: MyBackendConfig,
 }
@@ -66,22 +77,18 @@ impl MyBackendProvider {
 }
 
 impl Provider for MyBackendProvider {
-    fn get(&self, project: &str, key: &str, profile: Option<&str>) -> Result<Option<String>> {
+    fn name(&self) -> &'static str {
+        Self::PROVIDER_NAME
+    }
+
+    fn get(&self, project: &str, key: &str, profile: &str) -> Result<Option<String>> {
         // Implementation
         Ok(None)
     }
 
-    fn set(&self, project: &str, key: &str, value: &str, profile: Option<&str>) -> Result<()> {
+    fn set(&self, project: &str, key: &str, value: &str, profile: &str) -> Result<()> {
         // Implementation
         Ok(())
-    }
-
-    fn name(&self) -> &'static str {
-        "mybackend"
-    }
-
-    fn description(&self) -> &'static str {
-        "My custom backend"
     }
 }
 ```

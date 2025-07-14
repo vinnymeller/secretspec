@@ -1,10 +1,10 @@
 use super::Provider;
 use crate::{Result, SecretSpecError};
-use http::Uri;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use url::Url;
 
 /// Configuration for the dotenv provider.
 ///
@@ -42,111 +42,64 @@ impl Default for DotEnvConfig {
     }
 }
 
-impl DotEnvConfig {
-    /// Creates a DotEnvConfig from a URI.
+impl TryFrom<&Url> for DotEnvConfig {
+    type Error = SecretSpecError;
+
+    /// Creates a DotEnvConfig from a URL.
     ///
-    /// Parses a URI in the format `dotenv://[host]/[path]` to extract
-    /// the path to the .env file. The URI parsing handles several cases:
+    /// Parses a URL in the format `dotenv://[path]` to extract
+    /// the path to the .env file. The URL parsing handles several cases:
     ///
-    /// # URI Formats
+    /// # URL Formats
     ///
-    /// - `dotenv://localhost/absolute/path` - Absolute path on localhost
-    /// - `dotenv://localhost/./relative/path` - Relative path (the leading ./ is preserved)
-    /// - `dotenv://localhost` - Uses default `.env` in current directory
-    /// - `dotenv:relative/path` - Relative path without authority
-    ///
-    /// # Arguments
-    ///
-    /// * `uri` - The URI to parse, must have scheme "dotenv"
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(DotEnvConfig)` - Successfully parsed configuration
-    /// * `Err(SecretSpecError)` - If the URI scheme is not "dotenv" or parsing fails
+    /// - `dotenv:///absolute/path` - Absolute path
+    /// - `dotenv://.env` - Relative path (authority as filename)
+    /// - `dotenv://` - Uses default `.env` in current directory
     ///
     /// # Examples
     ///
     /// ```
-    /// use http::Uri;
+    /// use url::Url;
     /// use secretspec::provider::dotenv::DotEnvConfig;
     ///
-    /// let uri = "dotenv://localhost/.env.production".parse::<Uri>().unwrap();
-    /// let config = DotEnvConfig::from_uri(&uri).unwrap();
+    /// let url = Url::parse("dotenv:///.env.production").unwrap();
+    /// let config: DotEnvConfig = (&url).try_into().unwrap();
     /// assert_eq!(config.path.to_str().unwrap(), "/.env.production");
     /// ```
-    pub fn from_uri(uri: &Uri) -> Result<Self> {
-        let scheme = uri.scheme_str().ok_or_else(|| {
-            SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string())
-        })?;
-
-        if scheme != "dotenv" {
+    fn try_from(url: &Url) -> std::result::Result<Self, Self::Error> {
+        if url.scheme() != "dotenv" {
             return Err(SecretSpecError::ProviderOperationFailed(format!(
                 "Invalid scheme '{}' for dotenv provider",
-                scheme
+                url.scheme()
             )));
         }
 
-        // For dotenv URIs, we want to handle paths specially
-        // The URI might be in the form:
-        // - dotenv://localhost/absolute/path
-        // - dotenv://localhost (default .env)
-        // - dotenv:relative/path (gets normalized with authority)
+        // For dotenv URLs:
+        // - dotenv:///absolute/path -> url.path() = "/absolute/path"
+        // - dotenv://.env -> url.host_str() = ".env", url.path() = ""
+        // - dotenv:// -> url.host_str() = None, url.path() = ""
 
-        let path = if uri.authority().is_some()
-            && uri.authority().map(|a| a.host()) == Some("localhost")
-        {
-            // URI was normalized with localhost authority
-            let uri_path = uri.path();
-            if uri_path.is_empty() || uri_path == "/" {
-                ".env"
-            } else if uri_path.starts_with("/./") {
-                // Handle relative paths that were normalized with leading /
-                &uri_path[1..]
+        let path = if url.path() != "" && url.path() != "/" {
+            // Check if this is an absolute path (starts with /) or has a host
+            if let Some(host) = url.host_str() {
+                // Case like dotenv://config/.env.local -> host="config", path="/.env.local"
+                // We want "config/.env.local"
+                format!("{}{}", host, url.path())
             } else {
-                // Path from URI with authority always starts with /
-                uri_path
+                // Absolute path from dotenv:///path
+                url.path().to_string()
             }
+        } else if let Some(host) = url.host_str() {
+            // Relative path from dotenv://filename
+            host.to_string()
         } else {
-            // No authority or non-localhost authority, use path as-is
-            let uri_path = uri.path();
-            if uri_path.is_empty() {
-                ".env"
-            } else {
-                uri_path
-            }
+            // Default case dotenv://
+            ".env".to_string()
         };
 
         Ok(Self {
             path: PathBuf::from(path),
         })
-    }
-
-    /// Creates a DotEnvConfig directly from a path string.
-    ///
-    /// This is a convenience method for creating a configuration
-    /// when you have a plain file path without needing URI parsing.
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - The path to the .env file. If empty, defaults to ".env"
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use secretspec::provider::dotenv::DotEnvConfig;
-    ///
-    /// // Use default .env
-    /// let config = DotEnvConfig::from_path_string("");
-    /// assert_eq!(config.path.to_str().unwrap(), ".env");
-    ///
-    /// // Use custom path
-    /// let config = DotEnvConfig::from_path_string("config/.env.local");
-    /// assert_eq!(config.path.to_str().unwrap(), "config/.env.local");
-    /// ```
-    pub fn from_path_string(path: &str) -> Self {
-        Self {
-            path: PathBuf::from(if path.is_empty() { ".env" } else { path }),
-        }
     }
 }
 
@@ -170,6 +123,12 @@ impl DotEnvConfig {
 /// This provider ignores the project and profile parameters as .env files
 /// typically don't have built-in namespacing. All secrets are stored
 /// flat in the file.
+#[crate::provider(
+    name = "dotenv",
+    description = "Traditional .env files",
+    schemes = ["dotenv"],
+    examples = ["dotenv://.env", "dotenv://.env.production"],
+)]
 pub struct DotEnvProvider {
     /// Configuration containing the path to the .env file
     config: DotEnvConfig,
@@ -194,36 +153,69 @@ impl DotEnvProvider {
         Self { config }
     }
 
-    /// Creates a new DotEnvProvider from a URI.
+    /// Reflects all secrets available in the .env file as Secret entries.
     ///
-    /// This is a convenience method that parses the URI and creates
-    /// the provider in one step.
-    ///
-    /// # Arguments
-    ///
-    /// * `uri` - The URI to parse, must have scheme "dotenv"
+    /// This method reads the .env file and returns all environment variables
+    /// as Secret entries with default descriptions and all marked as required.
+    /// If the file doesn't exist, returns an empty HashMap.
     ///
     /// # Returns
     ///
-    /// * `Ok(DotEnvProvider)` - Successfully created provider
-    /// * `Err(SecretSpecError)` - If URI parsing fails
+    /// * `Ok(HashMap<String, Secret>)` - All environment variables as Secret
+    /// * `Err(SecretSpecError)` - If reading the file fails
     ///
     /// # Examples
     ///
-    /// ```
-    /// use http::Uri;
-    /// use secretspec::provider::dotenv::DotEnvProvider;
+    /// ```no_run
+    /// use secretspec::provider::dotenv::{DotEnvProvider, DotEnvConfig};
     ///
-    /// let uri = "dotenv://localhost/.env.staging".parse::<Uri>().unwrap();
-    /// let provider = DotEnvProvider::from_uri(&uri).unwrap();
+    /// let provider = DotEnvProvider::new(DotEnvConfig::default());
+    /// let secrets = provider.reflect().unwrap();
+    /// for (key, config) in secrets {
+    ///     println!("Found secret: {} - {}", key, config.description);
+    /// }
     /// ```
-    pub fn from_uri(uri: &Uri) -> Result<Self> {
-        let config = DotEnvConfig::from_uri(uri)?;
-        Ok(Self::new(config))
+    pub fn reflect(&self) -> Result<HashMap<String, secretspec_core::Secret>> {
+        use secretspec_core::Secret;
+
+        if !self.config.path.exists() {
+            return Ok(HashMap::new());
+        }
+
+        // Check if path is a directory
+        if self.config.path.is_dir() {
+            return Err(SecretSpecError::Io(std::io::Error::new(
+                std::io::ErrorKind::IsADirectory,
+                format!(
+                    "Expected file but found directory: {}",
+                    self.config.path.display()
+                ),
+            )));
+        }
+
+        let mut secrets = HashMap::new();
+        let env_vars = dotenvy::from_path_iter(&self.config.path)?;
+        for item in env_vars {
+            let (key, _value) = item?;
+            secrets.insert(
+                key.clone(),
+                Secret {
+                    description: format!("{} secret", key),
+                    required: true,
+                    default: None,
+                },
+            );
+        }
+
+        Ok(secrets)
     }
 }
 
 impl Provider for DotEnvProvider {
+    fn name(&self) -> &'static str {
+        Self::PROVIDER_NAME
+    }
+
     /// Retrieves a secret value from the .env file.
     ///
     /// Reads the .env file and returns the value for the specified key.
@@ -310,20 +302,6 @@ impl Provider for DotEnvProvider {
         fs::write(&self.config.path, content)?;
         Ok(())
     }
-
-    /// Returns the name of this provider.
-    ///
-    /// Always returns "dotenv" to identify this provider type.
-    fn name(&self) -> &'static str {
-        "dotenv"
-    }
-
-    /// Returns a human-readable description of this provider.
-    ///
-    /// Provides a brief description for user interfaces and help text.
-    fn description(&self) -> &'static str {
-        "Traditional .env files"
-    }
 }
 
 #[cfg(test)]
@@ -331,41 +309,71 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_dotenv_absolute_path() {
-        // Test with absolute path - should preserve the leading slash
-        let uri = "dotenv://localhost/tmp/test/.env".parse::<Uri>().unwrap();
-        let config = DotEnvConfig::from_uri(&uri).unwrap();
+    fn test_dotenv_url_parsing() {
+        // Test with absolute path using three slashes - this is the main syntax we want to support
+        let url = Url::parse("dotenv:///tmp/test/.env").unwrap();
+        let config: DotEnvConfig = (&url).try_into().unwrap();
         assert_eq!(config.path.to_str().unwrap(), "/tmp/test/.env");
 
-        // Test with relative path
-        let uri = "dotenv://localhost/./test/.env".parse::<Uri>().unwrap();
-        let config = DotEnvConfig::from_uri(&uri).unwrap();
-        assert_eq!(config.path.to_str().unwrap(), "./test/.env");
-
-        // Test with default path
-        let uri = "dotenv://localhost".parse::<Uri>().unwrap();
-        let config = DotEnvConfig::from_uri(&uri).unwrap();
-        assert_eq!(config.path.to_str().unwrap(), ".env");
-    }
-
-    #[test]
-    fn test_from_path_string() {
-        // Test empty path defaults to .env
-        let config = DotEnvConfig::from_path_string("");
+        // Test with relative path using two slashes - authority as filename
+        let url = Url::parse("dotenv://.env").unwrap();
+        let config: DotEnvConfig = (&url).try_into().unwrap();
         assert_eq!(config.path.to_str().unwrap(), ".env");
 
-        // Test relative path
-        let config = DotEnvConfig::from_path_string("custom/.env");
-        assert_eq!(config.path.to_str().unwrap(), "custom/.env");
+        // Test with relative path in subdirectory
+        let url = Url::parse("dotenv://config/.env.local").unwrap();
+        let config: DotEnvConfig = (&url).try_into().unwrap();
+        assert_eq!(config.path.to_str().unwrap(), "config/.env.local");
 
-        // Test absolute path
-        let config = DotEnvConfig::from_path_string("/etc/secrets/.env");
-        assert_eq!(config.path.to_str().unwrap(), "/etc/secrets/.env");
+        // Test with default (empty after //)
+        let url = Url::parse("dotenv://").unwrap();
+        let config: DotEnvConfig = (&url).try_into().unwrap();
+        assert_eq!(config.path.to_str().unwrap(), ".env");
+
+        // Test with relative path - host part becomes first part of path
+        let url = Url::parse("dotenv://foobar/custom/path/.env").unwrap();
+        let config: DotEnvConfig = (&url).try_into().unwrap();
+        assert_eq!(config.path.to_str().unwrap(), "foobar/custom/path/.env");
     }
 
     #[test]
     fn test_default_config() {
         let config = DotEnvConfig::default();
         assert_eq!(config.path.to_str().unwrap(), ".env");
+    }
+
+    #[test]
+    fn test_reflect() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let env_file = dir.path().join(".env");
+
+        let mut file = std::fs::File::create(&env_file).unwrap();
+        writeln!(file, "API_KEY=test123").unwrap();
+        writeln!(file, "DATABASE_URL=postgres://localhost").unwrap();
+
+        let provider = DotEnvProvider::new(DotEnvConfig {
+            path: env_file.clone(),
+        });
+
+        let secrets = provider.reflect().unwrap();
+        assert_eq!(secrets.len(), 2);
+        assert!(secrets.contains_key("API_KEY"));
+        assert!(secrets.contains_key("DATABASE_URL"));
+
+        let api_key_config = &secrets["API_KEY"];
+        assert_eq!(api_key_config.description, "API_KEY secret");
+        assert!(api_key_config.required);
+        assert!(api_key_config.default.is_none());
+    }
+
+    #[test]
+    fn test_reflect_nonexistent_file() {
+        let provider = DotEnvProvider::new(DotEnvConfig {
+            path: PathBuf::from("/tmp/nonexistent/.env"),
+        });
+
+        let secrets = provider.reflect().unwrap();
+        assert!(secrets.is_empty());
     }
 }

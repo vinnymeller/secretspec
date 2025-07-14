@@ -33,26 +33,22 @@ impl Provider for MockProvider {
     fn name(&self) -> &'static str {
         "mock"
     }
-
-    fn description(&self) -> &'static str {
-        "Mock provider for testing"
-    }
 }
 
 #[test]
 fn test_create_from_string_with_full_uris() {
-    // Test basic 1password URI
-    let provider = ProviderRegistry::create_from_string("1password://Private").unwrap();
-    assert_eq!(provider.name(), "1password");
+    // Test basic onepassword URI
+    let provider = ProviderRegistry::create_from_string("onepassword://Private").unwrap();
+    assert_eq!(provider.name(), "onepassword");
 
-    // Test 1password with account
-    let provider = ProviderRegistry::create_from_string("1password://work@Production").unwrap();
-    assert_eq!(provider.name(), "1password");
+    // Test onepassword with account
+    let provider = ProviderRegistry::create_from_string("onepassword://work@Production").unwrap();
+    assert_eq!(provider.name(), "onepassword");
 
-    // Test 1password with token
+    // Test onepassword with token
     let provider =
-        ProviderRegistry::create_from_string("1password+token://:ops_abc123@Private").unwrap();
-    assert_eq!(provider.name(), "1password");
+        ProviderRegistry::create_from_string("onepassword+token://:ops_abc123@Private").unwrap();
+    assert_eq!(provider.name(), "onepassword");
 }
 
 #[test]
@@ -67,8 +63,11 @@ fn test_create_from_string_with_plain_names() {
     let provider = ProviderRegistry::create_from_string("dotenv").unwrap();
     assert_eq!(provider.name(), "dotenv");
 
-    let provider = ProviderRegistry::create_from_string("1password").unwrap();
-    assert_eq!(provider.name(), "1password");
+    // Test onepassword separately to debug the issue
+    match ProviderRegistry::create_from_string("onepassword") {
+        Ok(provider) => assert_eq!(provider.name(), "onepassword"),
+        Err(e) => panic!("Failed to create onepassword provider: {}", e),
+    }
 
     let provider = ProviderRegistry::create_from_string("lastpass").unwrap();
     assert_eq!(provider.name(), "lastpass");
@@ -86,35 +85,34 @@ fn test_create_from_string_with_colon() {
 
 #[test]
 fn test_invalid_onepassword_scheme() {
-    // Test that 'onepassword' scheme gives proper error
-    let result = ProviderRegistry::create_from_string("onepassword");
+    // Test that '1password' scheme gives proper error suggesting 'onepassword'
+    let result = ProviderRegistry::create_from_string("1password");
     match result {
-        Err(err) => assert!(err.to_string().contains("Use '1password' instead")),
-        Ok(_) => panic!("Expected error for 'onepassword' scheme"),
+        Err(err) => assert!(err.to_string().contains("Use 'onepassword' instead")),
+        Ok(_) => panic!("Expected error for '1password' scheme"),
     }
 
-    let result = ProviderRegistry::create_from_string("onepassword:");
+    let result = ProviderRegistry::create_from_string("1password:");
     match result {
-        Err(err) => assert!(err.to_string().contains("Use '1password' instead")),
-        Ok(_) => panic!("Expected error for 'onepassword:' scheme"),
+        Err(err) => assert!(err.to_string().contains("Use 'onepassword' instead")),
+        Ok(_) => panic!("Expected error for '1password:' scheme"),
     }
 
-    let result = ProviderRegistry::create_from_string("onepassword://Private");
+    let result = ProviderRegistry::create_from_string("1password://Private");
     match result {
-        Err(err) => assert!(err.to_string().contains("Use '1password' instead")),
-        Ok(_) => panic!("Expected error for 'onepassword://' scheme"),
+        Err(err) => assert!(err.to_string().contains("Use 'onepassword' instead")),
+        Ok(_) => panic!("Expected error for '1password://' scheme"),
     }
 }
 
 #[test]
 fn test_dotenv_with_custom_path() {
-    // Test dotenv provider with custom path
-    let provider =
-        ProviderRegistry::create_from_string("dotenv://localhost/custom/path/.env").unwrap();
+    // Test dotenv provider with relative path - host part becomes first folder
+    let provider = ProviderRegistry::create_from_string("dotenv://custom/path/to/.env").unwrap();
     assert_eq!(provider.name(), "dotenv");
 
-    // Test with the simplified format
-    let provider = ProviderRegistry::create_from_string("dotenv:/custom/path/.env").unwrap();
+    // Test with absolute path format
+    let provider = ProviderRegistry::create_from_string("dotenv:///custom/path/.env").unwrap();
     assert_eq!(provider.name(), "dotenv");
 }
 
@@ -141,9 +139,9 @@ fn test_dotenv_shorthand_from_docs() {
 fn test_documentation_examples() {
     // Test examples from the documentation
 
-    // From line 102: 1password://work@Production
-    let provider = ProviderRegistry::create_from_string("1password://work@Production").unwrap();
-    assert_eq!(provider.name(), "1password");
+    // From line 102: onepassword://work@Production
+    let provider = ProviderRegistry::create_from_string("onepassword://work@Production").unwrap();
+    assert_eq!(provider.name(), "onepassword");
 
     // From line 107: dotenv:/path/to/.env
     let provider = ProviderRegistry::create_from_string("dotenv:/path/to/.env").unwrap();
@@ -176,28 +174,23 @@ fn test_edge_cases_and_normalization() {
 #[test]
 fn test_documentation_example_line_184() {
     // Test the exact example from line 184 of registry.rs
-    let provider = ProviderRegistry::create_from_string("1password://vault/Production").unwrap();
-    assert_eq!(provider.name(), "1password");
+    let provider = ProviderRegistry::create_from_string("onepassword://vault/Production").unwrap();
+    assert_eq!(provider.name(), "onepassword");
 }
 
 #[test]
-fn test_uri_parsing_behavior() {
-    use http::Uri;
+fn test_url_parsing_behavior() {
+    use url::Url;
 
-    // Test how URIs are actually parsed
-    let uri = "1password://vault/Production".parse::<Uri>().unwrap();
-    assert_eq!(uri.scheme_str(), Some("1password"));
-    assert_eq!(uri.authority().map(|a| a.as_str()), Some("vault"));
-    assert_eq!(uri.path(), "/Production");
-    assert_eq!(uri.host(), Some("vault"));
+    // Test how URLs are actually parsed
+    let url = "onepassword://vault/Production".parse::<Url>().unwrap();
+    assert_eq!(url.scheme(), "onepassword");
+    assert_eq!(url.host_str(), Some("vault"));
+    assert_eq!(url.path(), "/Production");
 
-    // Test dotenv URI - our normalize function handles this format
-    // by converting "dotenv:/path" to "dotenv://localhost/path"
-    let normalized = "dotenv://localhost/path/to/.env".parse::<Uri>().unwrap();
-    assert_eq!(normalized.scheme_str(), Some("dotenv"));
-    assert_eq!(
-        normalized.authority().map(|a| a.as_str()),
-        Some("localhost")
-    );
-    assert_eq!(normalized.path(), "/path/to/.env");
+    // Test dotenv URL parsing - host part becomes part of the path
+    let url = "dotenv://path/to/.env".parse::<Url>().unwrap();
+    assert_eq!(url.scheme(), "dotenv");
+    assert_eq!(url.host_str(), Some("path"));
+    assert_eq!(url.path(), "/to/.env");
 }

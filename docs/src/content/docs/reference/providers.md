@@ -52,14 +52,14 @@ lastpass://localhost         # Root (no folder)
 **Prerequisites**: `lpass` CLI, authenticated with `lpass login`
 **Storage**: Item name `{folder}/{profile}/{project}/{key}`
 
-## 1Password Provider
+## OnePassword Provider
 
-**URI**: `1password://[account@]vault` or `1password+token://user:token@vault`
+**URI**: `onepassword://[account@]vault` or `onepassword+token://user:token@vault`
 
 ```bash
-1password://MyVault                           # Default account
-1password://work@CompanyVault                 # Specific account
-1password+token://user:op_token@SecureVault   # Service account
+onepassword://MyVault                           # Default account
+onepassword://work@CompanyVault                 # Specific account
+onepassword+token://user:op_token@SecureVault   # Service account
 ```
 
 **Features**: Read/write, cloud sync, profiles via vaults, service accounts
@@ -77,8 +77,8 @@ secretspec get API_KEY --provider env
 
 # URIs with configuration
 secretspec get API_KEY --provider dotenv:/path/to/.env
-secretspec get API_KEY --provider 1password://vault
-secretspec get API_KEY --provider "1password://account@vault"
+secretspec get API_KEY --provider onepassword://vault
+secretspec get API_KEY --provider "onepassword://account@vault"
 ```
 
 ### Environment Variables
@@ -96,4 +96,4 @@ export SECRETSPEC_PROVIDER="dotenv:///config/.env"
 | Environment | ❌ Plain text | Process memory | ❌ No |
 | Keyring | ✅ System encryption | System keychain | ❌ No |
 | LastPass | ✅ End-to-end | Cloud (LastPass) | ✅ Yes |
-| 1Password | ✅ End-to-end | Cloud (1Password) | ✅ Yes |
+| OnePassword | ✅ End-to-end | Cloud (OnePassword) | ✅ Yes |

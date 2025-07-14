@@ -12,7 +12,7 @@ Providers are pluggable storage backends that handle the storage and retrieval o
 | **keyring** | System credential storage (macOS Keychain, Windows Credential Manager, Linux Secret Service) | ✓ | ✓ | ✓ |
 | **dotenv** | Traditional `.env` file in your project directory | ✓ | ✓ | ✗ |
 | **env** | Read-only access to existing environment variables | ✓ | ✗ | ✗ |
-| **1password** | Integration with 1Password password manager | ✓ | ✓ | ✓ |
+| **onepassword** | Integration with OnePassword password manager | ✓ | ✓ | ✓ |
 | **lastpass** | Integration with LastPass password manager | ✓ | ✓ | ✓ |
 
 ## Provider Selection
@@ -54,8 +54,8 @@ profile = "development"  # optional default profile
 You can use provider URIs for more specific configuration:
 
 ```bash
-# Use a specific 1Password vault
-$ secretspec run --provider "1password://Personal/Development" -- npm start
+# Use a specific OnePassword vault
+$ secretspec run --provider "onepassword://Personal/Development" -- npm start
 
 # Use a specific dotenv file
 $ secretspec run --provider "dotenv:/home/user/work/.env" -- npm test

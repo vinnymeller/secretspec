@@ -15,7 +15,7 @@ SecretSpec separates the declaration of what secrets an application needs from w
 ## Features
 
 - **[Declarative Configuration](https://secretspec.dev/docs/reference/configuration/)**: Define your secrets in `secretspec.toml` with descriptions and requirements
-- **[Multiple Provider Backends](https://secretspec.dev/docs/concepts/providers/)**: [Keyring](https://secretspec.dev/docs/providers/keyring), [.env](https://secretspec.dev/docs/providers/dotenv), [1Password](https://secretspec.dev/docs/providers/1password), [LastPass](https://secretspec.dev/docs/providers/lastpass), and [environment variables](https://secretspec.dev/docs/providers/env)
+- **[Multiple Provider Backends](https://secretspec.dev/docs/concepts/providers/)**: [Keyring](https://secretspec.dev/docs/providers/keyring), [.env](https://secretspec.dev/docs/providers/dotenv), [OnePassword](https://secretspec.dev/docs/providers/onepassword), [LastPass](https://secretspec.dev/docs/providers/lastpass), and [environment variables](https://secretspec.dev/docs/providers/env)
 - **[Type-Safe Rust SDK](https://secretspec.dev/docs/sdk/rust/)**: Generate strongly-typed structs from your `secretspec.toml` for compile-time safety
 - **[Profile Support](https://secretspec.dev/docs/concepts/profiles/)**: Override secret requirements and defaults per profile (development, production, etc.)
 - **Configuration Inheritance**: Extend and override shared configurations using the `extends` feature
@@ -36,7 +36,7 @@ Next steps:
 # 2. Set up provider backend
 $ secretspec config init
 ? Select your preferred provider backend:
-> 1password: 1Password password manager
+> onepassword: OnePassword password manager
   dotenv: Traditional .env files
   env: Read-only environment variables
   keyring: Uses system keychain (Recommended)
@@ -117,7 +117,7 @@ SecretSpec supports multiple storage backends for secrets:
 - **[Keyring](https://secretspec.dev/docs/providers/keyring)** - System credential store (recommended)
 - **[.env files](https://secretspec.dev/docs/providers/dotenv)** - Traditional dotenv files
 - **[Environment variables](https://secretspec.dev/docs/providers/env)** - Read-only for CI/CD
-- **[1Password](https://secretspec.dev/docs/providers/1password)** - Team secret management
+- **[OnePassword](https://secretspec.dev/docs/providers/onepassword)** - Team secret management
 - **[LastPass](https://secretspec.dev/docs/providers/lastpass)** - Cloud password manager
 
 ```bash

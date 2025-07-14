@@ -127,7 +127,7 @@ mod json_serialization {
 
     #[test]
     fn test_secret_spec_secrets_json_serialization() {
-        use secretspec::{Provider, SecretSpecSecrets};
+        use secretspec::Resolved;
 
         // Create a mock SecretSpec instance
         let spec = SecretSpec {
@@ -136,12 +136,10 @@ mod json_serialization {
             optional_secret: Some("optional".to_string()),
         };
 
-        let secrets_wrapper =
-            SecretSpecSecrets::new(spec, Provider::Dotenv, "production".to_string());
+        let secrets_wrapper = Resolved::new(spec, "dotenv".to_string(), "production".to_string());
 
         // Test serialization to JSON
-        let json =
-            serde_json::to_string(&secrets_wrapper).expect("Failed to serialize SecretSpecSecrets");
+        let json = serde_json::to_string(&secrets_wrapper).expect("Failed to serialize Resolved");
 
         // Verify JSON contains expected fields
         let parsed: serde_json::Value = serde_json::from_str(&json).expect("Failed to parse JSON");
@@ -150,9 +148,9 @@ mod json_serialization {
         assert_eq!(parsed["secrets"]["api_key"], "test_key");
 
         // Test round-trip deserialization
-        let deserialized: SecretSpecSecrets<SecretSpec> =
-            serde_json::from_str(&json).expect("Failed to deserialize SecretSpecSecrets");
-        assert_eq!(deserialized.provider, Provider::Dotenv);
+        let deserialized: Resolved<SecretSpec> =
+            serde_json::from_str(&json).expect("Failed to deserialize Resolved");
+        assert_eq!(deserialized.provider, "dotenv");
         assert_eq!(deserialized.profile, "production");
         assert_eq!(deserialized.secrets.api_key, "test_key");
     }

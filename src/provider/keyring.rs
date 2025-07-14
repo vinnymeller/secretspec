@@ -1,8 +1,8 @@
 use super::Provider;
 use crate::{Result, SecretSpecError};
-use http::Uri;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 /// Configuration for the keyring provider.
 ///
@@ -13,44 +13,35 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct KeyringConfig {}
 
-impl KeyringConfig {
-    /// Creates a new KeyringConfig from a URI.
+impl TryFrom<&Url> for KeyringConfig {
+    type Error = SecretSpecError;
+
+    /// Creates a new KeyringConfig from a URL.
     ///
-    /// The URI must have the scheme "keyring" (e.g., "keyring://").
-    /// Currently, no additional parameters are supported in the URI.
-    ///
-    /// # Arguments
-    ///
-    /// * `uri` - The URI to parse, must have scheme "keyring"
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(KeyringConfig)` - A new default configuration
-    /// * `Err` - If the URI is invalid or has wrong scheme
+    /// The URL must have the scheme "keyring" (e.g., "keyring://").
+    /// Currently, no additional parameters are supported in the URL.
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// # use http::Uri;
+    /// # use url::Url;
     /// # use secretspec::provider::keyring::KeyringConfig;
-    /// let uri: Uri = "keyring://".parse().unwrap();
-    /// let config = KeyringConfig::from_uri(&uri).unwrap();
+    /// let url = Url::parse("keyring://").unwrap();
+    /// let config: KeyringConfig = (&url).try_into().unwrap();
     /// ```
-    pub fn from_uri(uri: &Uri) -> Result<Self> {
-        let scheme = uri.scheme_str().ok_or_else(|| {
-            SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string())
-        })?;
-
-        if scheme != "keyring" {
+    fn try_from(url: &Url) -> std::result::Result<Self, Self::Error> {
+        if url.scheme() != "keyring" {
             return Err(SecretSpecError::ProviderOperationFailed(format!(
                 "Invalid scheme '{}' for keyring provider",
-                scheme
+                url.scheme()
             )));
         }
 
         Ok(Self::default())
     }
 }
+
+impl KeyringConfig {}
 
 /// Provider for storing secrets in the system keychain.
 ///
@@ -65,8 +56,15 @@ impl KeyringConfig {
 ///
 /// This ensures secrets are properly namespaced by project and profile,
 /// preventing conflicts between different projects or environments.
+#[crate::provider(
+    name = "keyring",
+    description = "Uses system keychain (Recommended)",
+    schemes = ["keyring"],
+    examples = ["keyring://"],
+)]
 pub struct KeyringProvider {
-    _config: KeyringConfig,
+    #[allow(dead_code)]
+    config: KeyringConfig,
 }
 
 impl KeyringProvider {
@@ -80,38 +78,15 @@ impl KeyringProvider {
     ///
     /// A new instance of KeyringProvider
     pub fn new(config: KeyringConfig) -> Self {
-        Self { _config: config }
-    }
-
-    /// Creates a new KeyringProvider from a URI.
-    ///
-    /// This is a convenience method that parses the URI into a KeyringConfig
-    /// and then creates the provider.
-    ///
-    /// # Arguments
-    ///
-    /// * `uri` - The URI to parse (e.g., "keyring://")
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(KeyringProvider)` - A new provider instance
-    /// * `Err` - If the URI is invalid
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # use http::Uri;
-    /// # use secretspec::provider::keyring::KeyringProvider;
-    /// let uri: Uri = "keyring://".parse().unwrap();
-    /// let provider = KeyringProvider::from_uri(&uri).unwrap();
-    /// ```
-    pub fn from_uri(uri: &Uri) -> Result<Self> {
-        let config = KeyringConfig::from_uri(uri)?;
-        Ok(Self::new(config))
+        Self { config }
     }
 }
 
 impl Provider for KeyringProvider {
+    fn name(&self) -> &'static str {
+        Self::PROVIDER_NAME
+    }
+
     /// Retrieves a secret from the system keychain.
     ///
     /// The secret is looked up using a hierarchical key structure:
@@ -166,19 +141,5 @@ impl Provider for KeyringProvider {
         let entry = Entry::new(&service, &whoami::username())?;
         entry.set_password(value)?;
         Ok(())
-    }
-
-    /// Returns the name identifier for this provider.
-    ///
-    /// This is used for provider selection and configuration.
-    fn name(&self) -> &'static str {
-        "keyring"
-    }
-
-    /// Returns a human-readable description of this provider.
-    ///
-    /// This is displayed in help text and provider listings.
-    fn description(&self) -> &'static str {
-        "Uses system keychain (Recommended)"
     }
 }

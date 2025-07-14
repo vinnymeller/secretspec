@@ -1,21 +1,21 @@
 use crate::provider::Provider;
 use crate::{Result, SecretSpecError};
-use http::Uri;
 use serde::{Deserialize, Serialize};
 use std::process::Command;
+use url::Url;
 
-/// Represents a 1Password item retrieved from the CLI.
+/// Represents a OnePassword item retrieved from the CLI.
 ///
 /// This struct deserializes the JSON output from the `op item get` command
 /// and contains an array of fields that hold the actual secret data.
 #[derive(Debug, Deserialize)]
 struct OnePasswordItem {
-    /// Collection of fields within the 1Password item.
+    /// Collection of fields within the OnePassword item.
     /// Each field represents a piece of data stored in the item.
     fields: Vec<OnePasswordField>,
 }
 
-/// Represents a single field within a 1Password item.
+/// Represents a single field within a OnePassword item.
 ///
 /// Fields can contain various types of data such as passwords, strings,
 /// or concealed values. The field's label is used to identify specific
@@ -35,7 +35,7 @@ struct OnePasswordField {
     value: Option<String>,
 }
 
-/// Template for creating new 1Password items via the CLI.
+/// Template for creating new OnePassword items via the CLI.
 ///
 /// This struct is serialized to JSON and passed to the `op item create` command
 /// using the `--template` flag. It defines the structure and metadata for
@@ -47,7 +47,7 @@ struct OnePasswordItemTemplate {
     /// The category of the item. Always "SECURE_NOTE" for secretspec items.
     category: String,
     /// The vault where the item should be created.
-    /// If None, 1Password will use the default vault.
+    /// If None, OnePassword will use the default vault.
     vault: Option<String>,
     /// Collection of fields to include in the item.
     /// Contains project, key, and value fields.
@@ -57,7 +57,7 @@ struct OnePasswordItemTemplate {
     tags: Vec<String>,
 }
 
-/// Template for individual fields when creating 1Password items.
+/// Template for individual fields when creating OnePassword items.
 ///
 /// Each field represents a piece of data to store in the item.
 /// Used within OnePasswordItemTemplate to define the item's content.
@@ -72,10 +72,10 @@ struct OnePasswordFieldTemplate {
     value: String,
 }
 
-/// Configuration for the 1Password provider.
+/// Configuration for the OnePassword provider.
 ///
 /// This struct contains all the necessary configuration options for
-/// interacting with 1Password CLI. It supports both interactive authentication
+/// interacting with OnePassword CLI. It supports both interactive authentication
 /// and service account tokens for automated workflows.
 ///
 /// # Examples
@@ -101,7 +101,7 @@ struct OnePasswordFieldTemplate {
 pub struct OnePasswordConfig {
     /// Optional account shorthand (for multiple accounts).
     ///
-    /// Used with the `--account` flag when you have multiple 1Password
+    /// Used with the `--account` flag when you have multiple OnePassword
     /// accounts configured. This should match the shorthand shown in
     /// `op account list`.
     pub account: Option<String>,
@@ -118,74 +118,48 @@ pub struct OnePasswordConfig {
     pub service_account_token: Option<String>,
 }
 
-impl OnePasswordConfig {
-    /// Creates a OnePasswordConfig from a URI.
-    ///
-    /// Supports the following URI formats:
-    /// - `1password://` - Basic 1Password with interactive auth
-    /// - `1password://vault` - Specify default vault
-    /// - `1password://account@vault` - Specify account and vault
-    /// - `1password+token://token@vault` - Use service account token
-    ///
-    /// # Arguments
-    ///
-    /// * `uri` - The URI to parse
-    ///
-    /// # Returns
-    ///
-    /// * `Result<Self>` - The parsed configuration or an error
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The URI scheme is not "1password" or "1password+token"
-    /// - The URI uses the incorrect "onepassword" scheme
-    pub fn from_uri(uri: &Uri) -> Result<Self> {
-        let scheme = uri.scheme_str().ok_or_else(|| {
-            SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string())
-        })?;
+impl TryFrom<&Url> for OnePasswordConfig {
+    type Error = SecretSpecError;
+
+    fn try_from(url: &Url) -> std::result::Result<Self, Self::Error> {
+        let scheme = url.scheme();
 
         match scheme {
-            "onepassword" => {
+            "1password" => {
                 return Err(SecretSpecError::ProviderOperationFailed(
-                    "Invalid scheme 'onepassword'. Use '1password' instead (e.g., 1password://vault/path)".to_string()
+                    "Invalid scheme '1password'. Use 'onepassword' instead (e.g., onepassword://vault/path)".to_string()
                 ));
             }
-            "1password" | "1password+token" => {}
+            "onepassword" | "onepassword+token" => {}
             _ => {
                 return Err(SecretSpecError::ProviderOperationFailed(format!(
-                    "Invalid scheme '{}' for 1Password provider",
+                    "Invalid scheme '{}' for OnePassword provider",
                     scheme
                 )));
             }
         }
 
-        let authority = uri.authority().map(|a| a.as_str());
         let mut config = Self::default();
 
-        // Parse authority for account@vault format, ignoring dummy localhost
-        if let Some(auth) = authority {
-            if auth != "localhost" {
-                if let Some(at_pos) = auth.find('@') {
-                    let user_info = &auth[..at_pos];
-                    let vault = &auth[at_pos + 1..];
-
+        // Parse URL components for account@vault format, ignoring dummy localhost
+        if let Some(host) = url.host_str() {
+            if host != "localhost" {
+                // Check if we have username (account) information
+                if !url.username().is_empty() {
                     // Handle user:token format for service account tokens
-                    if scheme == "1password+token" {
-                        if let Some(colon_pos) = user_info.find(':') {
-                            config.service_account_token =
-                                Some(user_info[colon_pos + 1..].to_string());
+                    if scheme == "onepassword+token" {
+                        if let Some(password) = url.password() {
+                            config.service_account_token = Some(password.to_string());
                         } else {
-                            config.service_account_token = Some(user_info.to_string());
+                            config.service_account_token = Some(url.username().to_string());
                         }
                     } else {
-                        config.account = Some(user_info.to_string());
+                        config.account = Some(url.username().to_string());
                     }
-
-                    config.default_vault = Some(vault.to_string());
+                    config.default_vault = Some(host.to_string());
                 } else {
-                    // No @, so the entire authority is the vault
-                    config.default_vault = Some(auth.to_string());
+                    // No username, so the host is the vault
+                    config.default_vault = Some(host.to_string());
                 }
             }
         }
@@ -194,10 +168,20 @@ impl OnePasswordConfig {
     }
 }
 
-/// Provider implementation for 1Password password manager.
+impl TryFrom<Url> for OnePasswordConfig {
+    type Error = SecretSpecError;
+
+    fn try_from(url: Url) -> std::result::Result<Self, Self::Error> {
+        (&url).try_into()
+    }
+}
+
+impl OnePasswordConfig {}
+
+/// Provider implementation for OnePassword password manager.
 ///
-/// This provider integrates with 1Password CLI (`op`) to store and retrieve
-/// secrets. It organizes secrets in a hierarchical structure within 1Password
+/// This provider integrates with OnePassword CLI (`op`) to store and retrieve
+/// secrets. It organizes secrets in a hierarchical structure within OnePassword
 /// items using the format: `secretspec/{project}/{profile}/{key}`.
 ///
 /// # Authentication
@@ -209,7 +193,7 @@ impl OnePasswordConfig {
 ///
 /// # Storage Structure
 ///
-/// Secrets are stored as Secure Note items in 1Password with:
+/// Secrets are stored as Secure Note items in OnePassword with:
 /// - Title: `secretspec/{project}/{profile}/{key}`
 /// - Category: SECURE_NOTE
 /// - Fields: project, key, value
@@ -220,12 +204,18 @@ impl OnePasswordConfig {
 /// ```bash
 /// # Interactive auth
 /// op signin
-/// secretspec set MY_SECRET --provider 1password://Development
+/// secretspec set MY_SECRET --provider onepassword://Development
 ///
 /// # Service account token
 /// export OP_SERVICE_ACCOUNT_TOKEN="ops_eyJzaWduSW..."
-/// secretspec get MY_SECRET --provider 1password+token://Development
+/// secretspec get MY_SECRET --provider onepassword+token://Development
 /// ```
+#[crate::provider(
+    name = "onepassword",
+    description = "OnePassword password manager",
+    schemes = ["onepassword", "onepassword+token"],
+    examples = ["onepassword://vault", "onepassword://work@Production", "onepassword+token://vault"],
+)]
 pub struct OnePasswordProvider {
     /// Configuration for the provider including auth settings and default vault.
     config: OnePasswordConfig,
@@ -241,24 +231,7 @@ impl OnePasswordProvider {
         Self { config }
     }
 
-    /// Creates a new OnePasswordProvider from a URI.
-    ///
-    /// This is a convenience method that parses the URI and creates
-    /// the appropriate configuration.
-    ///
-    /// # Arguments
-    ///
-    /// * `uri` - The URI to parse (e.g., "1password://vault")
-    ///
-    /// # Returns
-    ///
-    /// * `Result<Self>` - The configured provider or an error
-    pub fn from_uri(uri: &Uri) -> Result<Self> {
-        let config = OnePasswordConfig::from_uri(uri)?;
-        Ok(Self::new(config))
-    }
-
-    /// Executes a 1Password CLI command with proper error handling.
+    /// Executes a OnePassword CLI command with proper error handling.
     ///
     /// This method handles:
     /// - Setting up authentication (account, service token)
@@ -277,7 +250,7 @@ impl OnePasswordProvider {
     /// # Errors
     ///
     /// Returns specific errors for:
-    /// - Missing 1Password CLI installation
+    /// - Missing OnePassword CLI installation
     /// - Authentication required
     /// - Command execution failures
     fn execute_op_command(&self, args: &[&str]) -> Result<String> {
@@ -299,7 +272,7 @@ impl OnePasswordProvider {
             Ok(output) => output,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return Err(SecretSpecError::ProviderOperationFailed(
-                    "1Password CLI (op) is not installed.\n\nTo install it:\n  - macOS: brew install 1password-cli\n  - Linux: Download from https://1password.com/downloads/command-line/\n  - Windows: Download from https://1password.com/downloads/command-line/\n  - NixOS: nix-env -iA nixpkgs.onepassword\n\nAfter installation, run 'op signin' to authenticate.".to_string(),
+                    "OnePassword CLI (op) is not installed.\n\nTo install it:\n  - macOS: brew install 1password-cli\n  - Linux: Download from https://1password.com/downloads/command-line/\n  - Windows: Download from https://1password.com/downloads/command-line/\n  - NixOS: nix-env -iA nixpkgs.onepassword\n\nAfter installation, run 'op signin' to authenticate.".to_string(),
                 ));
             }
             Err(e) => return Err(e.into()),
@@ -309,7 +282,8 @@ impl OnePasswordProvider {
             let error_msg = String::from_utf8_lossy(&output.stderr);
             if error_msg.contains("not currently signed in") {
                 return Err(SecretSpecError::ProviderOperationFailed(
-                    "1Password authentication required. Please run 'op signin' first.".to_string(),
+                    "OnePassword authentication required. Please run 'op signin' first."
+                        .to_string(),
                 ));
             }
             return Err(SecretSpecError::ProviderOperationFailed(
@@ -321,7 +295,7 @@ impl OnePasswordProvider {
             .map_err(|e| SecretSpecError::ProviderOperationFailed(e.to_string()))
     }
 
-    /// Checks if the user is authenticated with 1Password.
+    /// Checks if the user is authenticated with OnePassword.
     ///
     /// Uses the `op whoami` command to verify authentication status.
     /// This is non-intrusive and doesn't require any permissions.
@@ -365,7 +339,7 @@ impl OnePasswordProvider {
         }
     }
 
-    /// Formats the item name for storage in 1Password.
+    /// Formats the item name for storage in OnePassword.
     ///
     /// Creates a hierarchical name that includes project, profile, and key
     /// to ensure uniqueness and organization.
@@ -383,7 +357,7 @@ impl OnePasswordProvider {
         format!("secretspec/{}/{}/{}", project, profile, key)
     }
 
-    /// Creates a template for a new 1Password item.
+    /// Creates a template for a new OnePassword item.
     ///
     /// This template is serialized to JSON and used with `op item create`.
     /// The item is created as a Secure Note with structured fields.
@@ -434,7 +408,11 @@ impl OnePasswordProvider {
 }
 
 impl Provider for OnePasswordProvider {
-    /// Retrieves a secret from 1Password.
+    fn name(&self) -> &'static str {
+        Self::PROVIDER_NAME
+    }
+
+    /// Retrieves a secret from OnePassword.
     ///
     /// Searches for an item with the title "secretspec/{project}/{profile}/{key}"
     /// in the appropriate vault. The method looks for a field labeled "value"
@@ -461,7 +439,7 @@ impl Provider for OnePasswordProvider {
         // Check authentication status first
         if !self.whoami()? {
             return Err(SecretSpecError::ProviderOperationFailed(
-                "1Password authentication required. Please run 'op signin' first.".to_string(),
+                "OnePassword authentication required. Please run 'op signin' first.".to_string(),
             ));
         }
 
@@ -500,7 +478,7 @@ impl Provider for OnePasswordProvider {
         }
     }
 
-    /// Stores or updates a secret in 1Password.
+    /// Stores or updates a secret in OnePassword.
     ///
     /// If an item with the same title exists, it updates the "value" field.
     /// Otherwise, it creates a new Secure Note item with the secret data.
@@ -526,7 +504,7 @@ impl Provider for OnePasswordProvider {
         // Check authentication status first
         if !self.whoami()? {
             return Err(SecretSpecError::ProviderOperationFailed(
-                "1Password authentication required. Please run 'op signin' first.".to_string(),
+                "OnePassword authentication required. Please run 'op signin' first.".to_string(),
             ));
         }
 
@@ -573,20 +551,6 @@ impl Provider for OnePasswordProvider {
         }
 
         Ok(())
-    }
-
-    /// Returns the name of this provider.
-    ///
-    /// Used for provider identification and selection.
-    fn name(&self) -> &'static str {
-        "1password"
-    }
-
-    /// Returns a human-readable description of this provider.
-    ///
-    /// Used in help text and provider listings.
-    fn description(&self) -> &'static str {
-        "1Password password manager"
     }
 }
 

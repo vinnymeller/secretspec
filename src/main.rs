@@ -1,7 +1,8 @@
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::{Result, WrapErr};
 use directories::ProjectDirs;
-use secretspec::{GlobalConfig, GlobalDefaults, SecretSpec, ProjectConfig};
+use secretspec::{Config, GlobalConfig, GlobalDefaults, Secrets};
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 #[cfg(unix)]
@@ -27,11 +28,12 @@ struct Cli {
 /// initialization, secret management, configuration, and import operations.
 #[derive(Subcommand)]
 enum Commands {
-    /// Initialize a new secretspec.toml from existing .env file
+    /// Initialize a new secretspec.toml from a provider
     Init {
-        /// Path to .env file to import from
-        #[arg(short, long, default_value = ".env")]
-        from: PathBuf,
+        /// Provider URL to import from (e.g., dotenv://.env, dotenv://.env.production)
+        /// Currently only dotenv provider is supported.
+        #[arg(short, long, default_value = "dotenv://.env")]
+        from: String,
     },
     /// Set a secret value
     Set {
@@ -204,7 +206,7 @@ fn get_example_toml() -> &'static str {
 /// # Errors
 ///
 /// Returns an error if the configuration cannot be serialized
-fn generate_toml_with_comments(config: &ProjectConfig) -> secretspec::Result<String> {
+fn generate_toml_with_comments(config: &Config) -> secretspec::Result<String> {
     let mut output = String::new();
 
     // Project section
@@ -265,7 +267,43 @@ fn main() -> Result<()> {
                 }
             }
 
-            let project_config = secretspec::project_config_from_path(&from)?;
+            // Parse the provider URL
+            let uri = from
+                .parse::<url::Url>()
+                .map_err(|e| color_eyre::eyre::eyre!("Invalid provider URL '{}': {}", from, e))?;
+
+            // Extract scheme from URI to validate provider
+            let scheme = uri.scheme();
+
+            // Currently only support dotenv provider
+            if scheme != "dotenv" {
+                return Err(color_eyre::eyre::eyre!(
+                    "Only 'dotenv://' provider URLs are currently supported for init --from. Got: {}",
+                    from
+                ));
+            }
+
+            // Create dotenv provider and reflect secrets
+            let dotenv_config = (&uri).try_into()?;
+            let dotenv_provider = secretspec::provider::dotenv::DotEnvProvider::new(dotenv_config);
+            let secrets = dotenv_provider.reflect()?;
+
+            // Create a new project config
+            let mut profiles = HashMap::new();
+            profiles.insert("default".to_string(), secretspec::Profile { secrets });
+
+            let project_config = secretspec::Config {
+                project: secretspec::Project {
+                    name: std::env::current_dir()?
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                    revision: "1.0".to_string(),
+                    extends: None,
+                },
+                profiles,
+            };
             let mut content = generate_toml_with_comments(&project_config)?;
 
             // Append comprehensive example
@@ -288,14 +326,6 @@ fn main() -> Result<()> {
                 .map(|p| p.secrets.len())
                 .sum::<usize>();
             println!("✓ Created secretspec.toml with {} secrets", secret_count);
-
-            if from.exists() {
-                println!(
-                    "\n! Remove {} after migrating secrets with:",
-                    from.display()
-                );
-                println!("  secretspec set <SECRET_NAME>");
-            }
 
             println!("\nNext steps:");
             println!("  1. secretspec config init    # Set up user configuration");
@@ -381,7 +411,7 @@ fn main() -> Result<()> {
             provider,
             profile,
         } => {
-            let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
+            let app = Secrets::load().wrap_err("Failed to load secretspec configuration")?;
             app.set(&name, value, provider, profile)
                 .wrap_err("Failed to set secret")?;
             Ok(())
@@ -392,7 +422,7 @@ fn main() -> Result<()> {
             provider,
             profile,
         } => {
-            let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
+            let app = Secrets::load().wrap_err("Failed to load secretspec configuration")?;
             app.get(&name, provider, profile)
                 .wrap_err("Failed to get secret")?;
             Ok(())
@@ -403,21 +433,21 @@ fn main() -> Result<()> {
             provider,
             profile,
         } => {
-            let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
+            let app = Secrets::load().wrap_err("Failed to load secretspec configuration")?;
             app.run(command, provider, profile)
                 .wrap_err("Failed to run command")?;
             Ok(())
         }
         // Verify all required secrets are available
         Commands::Check { provider, profile } => {
-            let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
+            let app = Secrets::load().wrap_err("Failed to load secretspec configuration")?;
             app.check(provider, profile)
                 .wrap_err("Failed to check secrets")?;
             Ok(())
         }
         // Import secrets from one provider to another
         Commands::Import { from_provider } => {
-            let app = SecretSpec::load().wrap_err("Failed to load secretspec configuration")?;
+            let app = Secrets::load().wrap_err("Failed to load secretspec configuration")?;
             app.import(&from_provider)
                 .wrap_err("Failed to import secrets")?;
             Ok(())

@@ -21,7 +21,7 @@
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use secretspec_core::{ProjectConfig, SecretConfig};
+use secretspec_core::{Config, Secret};
 use std::collections::{BTreeMap, HashSet};
 use syn::{LitStr, parse_macro_input};
 
@@ -229,7 +229,7 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
     let full_path = std::path::Path::new(&manifest_dir).join(&path);
 
-    let config: ProjectConfig = match ProjectConfig::try_from(full_path.as_path()) {
+    let config: Config = match Config::try_from(full_path.as_path()) {
         Ok(config) => config,
         Err(e) => {
             let error = format!("Failed to parse TOML: {}", e);
@@ -274,7 +274,7 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
 ///
 /// - `Ok(())` if validation passes
 /// - `Err(Vec<String>)` containing all validation errors if any are found
-fn validate_config_for_codegen(config: &ProjectConfig) -> Result<(), Vec<String>> {
+fn validate_config_for_codegen(config: &Config) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
 
     // Validate secret names produce valid Rust identifiers
@@ -307,7 +307,7 @@ fn validate_config_for_codegen(config: &ProjectConfig) -> Result<(), Vec<String>
 /// - Secret names with invalid characters (e.g., "my-secret" with hyphen)
 /// - Secret names that are Rust keywords (e.g., "TYPE", "IMPL")
 /// - Multiple secrets producing the same field name (e.g., "API_KEY" and "api_key")
-fn validate_rust_identifiers(config: &ProjectConfig, errors: &mut Vec<String>) {
+fn validate_rust_identifiers(config: &Config, errors: &mut Vec<String>) {
     let rust_keywords = [
         "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum",
         "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move",
@@ -403,7 +403,7 @@ fn is_valid_rust_identifier(s: &str) -> bool {
 ///
 /// - Profile names that start with numbers (e.g., "1production")
 /// - Profile names with invalid characters (e.g., "prod-env")
-fn validate_profile_identifiers(config: &ProjectConfig, errors: &mut Vec<String>) {
+fn validate_profile_identifiers(config: &Config, errors: &mut Vec<String>) {
     for profile_name in config.profiles.keys() {
         let variant_name = capitalize_first(profile_name);
         if !is_valid_rust_identifier(&variant_name) {
@@ -452,7 +452,7 @@ fn field_name_ident(name: &str) -> proc_macro2::Ident {
 /// # Returns
 ///
 /// `true` if the secret is optional, `false` if required
-fn is_secret_optional(secret_config: &SecretConfig) -> bool {
+fn is_secret_optional(secret_config: &Secret) -> bool {
     !secret_config.required || secret_config.default.is_some()
 }
 
@@ -476,7 +476,7 @@ fn is_secret_optional(secret_config: &SecretConfig) -> bool {
 /// - If the secret is missing from any profile → optional
 /// - If the secret is optional in any profile → optional
 /// - Only if required in ALL profiles → not optional
-fn is_field_optional_across_profiles(secret_name: &str, config: &ProjectConfig) -> bool {
+fn is_field_optional_across_profiles(secret_name: &str, config: &Config) -> bool {
     // Check each profile
     for (_, profile_config) in &config.profiles {
         if let Some(secret_config) = profile_config.secrets.get(secret_name) {
@@ -556,7 +556,7 @@ fn generate_secret_assignment(
 /// 2. For each secret, determine if it's optional across profiles
 /// 3. Generate appropriate type (String or Option<String>)
 /// 4. Create FieldInfo with all metadata needed for code generation
-fn analyze_field_types(config: &ProjectConfig) -> BTreeMap<String, FieldInfo> {
+fn analyze_field_types(config: &Config) -> BTreeMap<String, FieldInfo> {
     let mut field_info = BTreeMap::new();
 
     // Collect all unique secrets across all profiles
@@ -857,7 +857,7 @@ mod secret_spec_generation {
     /// - Empty profiles → generates a Default variant with all fields
     /// - Each profile → generates variant with profile-specific fields
     pub fn generate_profile_enum_variants(
-        config: &ProjectConfig,
+        config: &Config,
         field_info: &BTreeMap<String, FieldInfo>,
         variants: &[ProfileVariant],
     ) -> Vec<proc_macro2::TokenStream> {
@@ -926,7 +926,7 @@ mod secret_spec_generation {
     /// })
     /// ```
     pub fn generate_load_profile_arms(
-        config: &ProjectConfig,
+        config: &Config,
         field_info: &BTreeMap<String, FieldInfo>,
         variants: &[ProfileVariant],
     ) -> Vec<proc_macro2::TokenStream> {
@@ -988,8 +988,8 @@ mod secret_spec_generation {
             fn load_internal(
                 provider_str: Option<String>,
                 profile_str: Option<String>,
-            ) -> Result<secretspec::ValidationResult, secretspec::SecretSpecError> {
-                let spec = secretspec::SecretSpec::load()?;
+            ) -> Result<secretspec::ValidatedSecrets, secretspec::SecretSpecError> {
+                let spec = secretspec::Secrets::load()?;
                 spec.validate(provider_str, profile_str)
             }
         }
@@ -1026,14 +1026,15 @@ mod secret_spec_generation {
                 }
 
                 /// Load secrets with optional provider and/or profile
+                /// Provider can be any type that implements Into<String> (e.g., &str, String, etc.)
                 /// If provider is None, uses SECRETSPEC_PROVIDER env var or global config
                 /// If profile is None, uses SECRETSPEC_PROFILE env var if set
-                pub fn load(provider: Option<Provider>, profile: Option<Profile>) -> Result<secretspec::SecretSpecSecrets<Self>, secretspec::SecretSpecError> {
+                pub fn load<P>(provider: Option<P>, profile: Option<Profile>) -> Result<secretspec::Resolved<Self>, secretspec::SecretSpecError>
+                where
+                    P: Into<String>,
+                {
                     // Convert options to strings
-                    let provider_str = match provider {
-                        Some(p) => Some(p.to_string()),
-                        None => std::env::var("SECRETSPEC_PROVIDER").ok(),
-                    };
+                    let provider_str = provider.map(Into::into).or_else(|| std::env::var("SECRETSPEC_PROVIDER").ok());
 
                     let profile_str = match profile {
                         Some(p) => Some(p.as_str().to_string()),
@@ -1041,16 +1042,18 @@ mod secret_spec_generation {
                     };
 
                     let validation_result = load_internal(provider_str, profile_str)?;
+                    let provider_name = validation_result.provider_name();
+                    let profile = validation_result.profile;
                     let secrets = validation_result.secrets;
 
                     let data = Self {
                         #(#load_assignments,)*
                     };
 
-                    Ok(secretspec::SecretSpecSecrets::new(
+                    Ok(secretspec::Resolved::new(
                         data,
-                        validation_result.provider,
-                        validation_result.profile
+                        provider_name,
+                        profile
                     ))
                 }
 
@@ -1083,14 +1086,14 @@ mod builder_generation {
     ///
     /// ```ignore
     /// pub struct SecretSpecBuilder {
-    ///     provider: Option<Box<dyn FnOnce() -> Result<http::Uri, String>>>,
+    ///     provider: Option<Box<dyn FnOnce() -> Result<url::Url, String>>>,
     ///     profile: Option<Box<dyn FnOnce() -> Result<Profile, String>>>,
     /// }
     /// ```
     pub fn generate_struct() -> proc_macro2::TokenStream {
         quote! {
             pub struct SecretSpecBuilder {
-                provider: Option<Box<dyn FnOnce() -> Result<http::Uri, String>>>,
+                provider: Option<Box<dyn FnOnce() -> Result<url::Url, String>>>,
                 profile: Option<Box<dyn FnOnce() -> Result<Profile, String>>>,
             }
         }
@@ -1133,8 +1136,8 @@ mod builder_generation {
 
                 pub fn with_provider<T>(mut self, provider: T) -> Self
                 where
-                    T: TryInto<http::Uri> + 'static,
-                    T::Error: std::fmt::Display + 'static
+                    T: TryInto<url::Url> + 'static,
+                    T::Error: std::fmt::Display + 'static,
                 {
                     self.provider = Some(Box::new(move || {
                         provider.try_into()
@@ -1240,25 +1243,27 @@ mod builder_generation {
 
         quote! {
             impl SecretSpecBuilder {
-                pub fn load(mut self) -> Result<secretspec::SecretSpecSecrets<SecretSpec>, secretspec::SecretSpecError> {
+                pub fn load(mut self) -> Result<secretspec::Resolved<SecretSpec>, secretspec::SecretSpecError> {
                     #resolve_provider_load
                     #resolve_profile_load
 
                     let validation_result = load_internal(provider_str, profile_str)?;
+                    let provider_name = validation_result.provider_name();
+                    let profile = validation_result.profile;
                     let secrets = validation_result.secrets;
 
                     let data = SecretSpec {
                         #(#load_assignments,)*
                     };
 
-                    Ok(secretspec::SecretSpecSecrets::new(
+                    Ok(secretspec::Resolved::new(
                         data,
-                        validation_result.provider,
-                        validation_result.profile
+                        provider_name,
+                        profile
                     ))
                 }
 
-                pub fn load_profile(mut self) -> Result<secretspec::SecretSpecSecrets<SecretSpecProfile>, secretspec::SecretSpecError> {
+                pub fn load_profile(mut self) -> Result<secretspec::Resolved<SecretSpecProfile>, secretspec::SecretSpecError> {
                     #resolve_provider_profile
 
                     let (profile_str, selected_profile) = if let Some(profile_fn) = self.profile.take() {
@@ -1277,6 +1282,8 @@ mod builder_generation {
                     };
 
                     let validation_result = load_internal(provider_str, profile_str)?;
+                    let provider_name = validation_result.provider_name();
+                    let profile = validation_result.profile;
                     let secrets = validation_result.secrets;
 
                     let data_result: LoadResult<SecretSpecProfile> = match selected_profile {
@@ -1284,10 +1291,10 @@ mod builder_generation {
                     };
                     let data = data_result?;
 
-                    Ok(secretspec::SecretSpecSecrets::new(
+                    Ok(secretspec::Resolved::new(
                         data,
-                        validation_result.provider,
-                        validation_result.profile
+                        provider_name,
+                        profile
                     ))
                 }
             }
@@ -1349,7 +1356,7 @@ mod builder_generation {
 /// 4. Generate SecretSpecProfile enum (profile-specific types)
 /// 5. Generate builder pattern implementation
 /// 6. Combine all components with necessary imports
-fn generate_secret_spec_code(config: ProjectConfig) -> proc_macro2::TokenStream {
+fn generate_secret_spec_code(config: Config) -> proc_macro2::TokenStream {
     // Collect all profiles
     let all_profiles: HashSet<String> = config.profiles.keys().cloned().collect();
     let profile_variants = get_profile_variants(&all_profiles);
@@ -1407,10 +1414,6 @@ fn generate_secret_spec_code(config: ProjectConfig) -> proc_macro2::TokenStream 
         #secret_spec_profile_enum
         #profile_code
 
-        // Use Provider from secretspec_types
-        pub use secretspec::Provider;
-        // Import the extension trait for .get() method
-        use secretspec::SecretSpecSecretsExt;
 
         // Type alias to help with type inference
         type LoadResult<T> = Result<T, secretspec::SecretSpecError>;
@@ -1445,6 +1448,168 @@ fn capitalize_first(s: &str) -> String {
     match chars.next() {
         None => String::new(),
         Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+    }
+}
+
+/// Provider registration macro.
+///
+/// This attribute macro registers a provider struct with the global provider registry.
+/// It should be applied to provider struct definitions.
+///
+/// # Usage
+///
+/// ```ignore
+/// #[provider(
+///     name = "keyring",
+///     description = "Uses system keychain (Recommended)",
+///     schemes = ["keyring"],
+/// )]
+/// pub struct KeyringProvider {
+///     config: KeyringConfig,
+/// }
+/// ```
+///
+/// The macro automatically infers the config type from the `config` field in the struct.
+#[proc_macro_attribute]
+pub fn provider(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = match syn::parse::<ProviderArgs>(args) {
+        Ok(args) => args,
+        Err(e) => {
+            let err_msg = e.to_string();
+            return TokenStream::from(quote! { compile_error!(#err_msg); });
+        }
+    };
+
+    let item_struct = match syn::parse::<syn::ItemStruct>(input.clone()) {
+        Ok(item) => item,
+        Err(e) => {
+            let err_msg = e.to_string();
+            return TokenStream::from(quote! { compile_error!(#err_msg); });
+        }
+    };
+
+    let struct_name = &item_struct.ident;
+    let name = &args.name;
+    let description = &args.description;
+
+    // Always infer config type from the 'config' field
+    let config = if let syn::Fields::Named(fields) = &item_struct.fields {
+        let config_field = fields.named.iter().find(|field| {
+            field
+                .ident
+                .as_ref()
+                .map(|id| id == "config")
+                .unwrap_or(false)
+        });
+
+        if let Some(field) = config_field {
+            field.ty.clone()
+        } else {
+            let err_msg = "Provider struct must have a 'config' field";
+            return TokenStream::from(quote! { compile_error!(#err_msg); });
+        }
+    } else {
+        let err_msg = "Provider struct must have named fields";
+        return TokenStream::from(quote! { compile_error!(#err_msg); });
+    };
+
+    let schemes = &args.schemes;
+    let examples = &args.examples;
+
+    let output = quote! {
+        #item_struct
+
+        // Store provider name as a constant
+        impl #struct_name {
+            const PROVIDER_NAME: &'static str = #name;
+        }
+
+        const _: () = {
+            #[linkme::distributed_slice(crate::provider::PROVIDER_REGISTRY)]
+            #[doc(hidden)]
+            static PROVIDER_REGISTRATION: crate::provider::ProviderRegistration = crate::provider::ProviderRegistration {
+                info: crate::provider::ProviderInfo {
+                    name: #name,
+                    description: #description,
+                    examples: &[#(#examples),*],
+                },
+                schemes: &[#(#schemes),*],
+                factory: |url| {
+                    let config = <#config>::try_from(url)?;
+                    Ok(Box::new(<#struct_name>::new(config)))
+                },
+            };
+        };
+    };
+
+    TokenStream::from(output)
+}
+
+#[derive(Debug)]
+struct ProviderArgs {
+    name: String,
+    description: String,
+    schemes: Vec<String>,
+    examples: Vec<String>,
+}
+
+impl syn::parse::Parse for ProviderArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut name = None;
+        let mut description = None;
+        let mut schemes = Vec::new();
+        let mut examples = Vec::new();
+
+        while !input.is_empty() {
+            let key: syn::Ident = input.parse()?;
+            let _: syn::Token![=] = input.parse()?;
+
+            match key.to_string().as_str() {
+                "name" => {
+                    let lit: syn::LitStr = input.parse()?;
+                    name = Some(lit.value());
+                }
+                "description" => {
+                    let lit: syn::LitStr = input.parse()?;
+                    description = Some(lit.value());
+                }
+                "schemes" => {
+                    let content;
+                    let _ = syn::bracketed!(content in input);
+                    while !content.is_empty() {
+                        let lit: syn::LitStr = content.parse()?;
+                        schemes.push(lit.value());
+                        if !content.is_empty() {
+                            let _: syn::Token![,] = content.parse()?;
+                        }
+                    }
+                }
+                "examples" => {
+                    let content;
+                    let _ = syn::bracketed!(content in input);
+                    while !content.is_empty() {
+                        let lit: syn::LitStr = content.parse()?;
+                        examples.push(lit.value());
+                        if !content.is_empty() {
+                            let _: syn::Token![,] = content.parse()?;
+                        }
+                    }
+                }
+                _ => return Err(syn::Error::new(key.span(), "unexpected argument")),
+            }
+
+            if !input.is_empty() {
+                let _: syn::Token![,] = input.parse()?;
+            }
+        }
+
+        Ok(ProviderArgs {
+            name: name.ok_or_else(|| syn::Error::new(input.span(), "missing `name` argument"))?,
+            description: description
+                .ok_or_else(|| syn::Error::new(input.span(), "missing `description` argument"))?,
+            schemes,
+            examples,
+        })
     }
 }
 

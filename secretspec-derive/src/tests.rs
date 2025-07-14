@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::capitalize_first;
-    use secretspec_core::ProjectConfig;
+    use secretspec_core::Config;
 
     #[test]
     fn test_capitalize_first() {
@@ -23,7 +23,7 @@ API_KEY = { description = "API key", required = true }
 DATABASE_URL = { description = "Database URL", required = false, default = "postgres://localhost" }
 "#;
 
-        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        let config: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(config.profiles.len(), 1);
         let default_profile = &config.profiles["default"];
         assert_eq!(default_profile.secrets.len(), 2);
@@ -50,7 +50,7 @@ DATABASE_URL = { description = "Database URL", required = false, default = "post
             API_KEY = { description = "API key", required = true }
         "#;
 
-        let config: ProjectConfig = toml::from_str(&format!(
+        let config: Config = toml::from_str(&format!(
             r#"[project]
 name = "test"
 revision = "1.0"
@@ -86,7 +86,7 @@ SOMETIMES_REQUIRED = { description = "Sometimes required secret", required = tru
 SOMETIMES_REQUIRED = { description = "Sometimes required secret", required = false }
 "#;
 
-        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        let config: Config = toml::from_str(toml_str).unwrap();
 
         // Simulate the logic from the macro - check if secret is optional across all profiles
         let mut is_ever_optional = false;
@@ -126,7 +126,7 @@ ALWAYS_REQUIRED = { description = "Always required secret", required = true }
 ALWAYS_REQUIRED = { description = "Always required secret", required = true }
 "#;
 
-        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        let config: Config = toml::from_str(toml_str).unwrap();
         let secret_config = &config.profiles["default"].secrets["ALWAYS_REQUIRED"];
         let mut is_ever_optional = false;
 
@@ -150,7 +150,7 @@ revision = "1.0"
 HAS_DEFAULT = { description = "Secret with default", required = true, default = "some-default" }
 "#;
 
-        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        let config: Config = toml::from_str(toml_str).unwrap();
         let secret_config = &config.profiles["default"].secrets["HAS_DEFAULT"];
 
         let is_ever_optional = !secret_config.required || secret_config.default.is_some();
@@ -187,7 +187,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_validate_rust_identifiers() {
         use crate::validate_rust_identifiers;
-        use secretspec_core::{ProfileConfig, ProjectInfo, SecretConfig};
+        use secretspec_core::{Profile, Project, Secret};
         use std::collections::HashMap;
 
         let mut errors = Vec::new();
@@ -196,7 +196,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut valid_secrets = HashMap::new();
         valid_secrets.insert(
             "API_KEY".to_string(),
-            SecretConfig {
+            Secret {
                 description: "API Key".to_string(),
                 required: true,
                 default: None,
@@ -204,7 +204,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         valid_secrets.insert(
             "database_url".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Database URL".to_string(),
                 required: true,
                 default: None,
@@ -214,13 +214,13 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut valid_profiles = HashMap::new();
         valid_profiles.insert(
             "default".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: valid_secrets,
             },
         );
 
-        let valid_config = ProjectConfig {
-            project: ProjectInfo {
+        let valid_config = Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -238,7 +238,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut invalid_secrets = HashMap::new();
         invalid_secrets.insert(
             "123invalid".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Invalid name".to_string(),
                 required: true,
                 default: None,
@@ -246,7 +246,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         invalid_secrets.insert(
             "invalid-name".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Invalid name".to_string(),
                 required: true,
                 default: None,
@@ -256,13 +256,13 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut invalid_profiles = HashMap::new();
         invalid_profiles.insert(
             "default".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: invalid_secrets,
             },
         );
 
-        let invalid_config = ProjectConfig {
-            project: ProjectInfo {
+        let invalid_config = Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -294,7 +294,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_validate_rust_keywords() {
         use crate::validate_rust_identifiers;
-        use secretspec_core::{ProfileConfig, ProjectInfo, SecretConfig};
+        use secretspec_core::{Profile, Project, Secret};
         use std::collections::HashMap;
 
         let mut errors = Vec::new();
@@ -303,7 +303,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut keyword_secrets = HashMap::new();
         keyword_secrets.insert(
             "fn".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Function keyword".to_string(),
                 required: true,
                 default: None,
@@ -311,7 +311,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         keyword_secrets.insert(
             "struct".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Struct keyword".to_string(),
                 required: true,
                 default: None,
@@ -319,7 +319,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         keyword_secrets.insert(
             "async".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Async keyword".to_string(),
                 required: true,
                 default: None,
@@ -329,13 +329,13 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut keyword_profiles = HashMap::new();
         keyword_profiles.insert(
             "default".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: keyword_secrets,
             },
         );
 
-        let keyword_config = ProjectConfig {
-            project: ProjectInfo {
+        let keyword_config = Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -366,7 +366,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_validate_duplicate_field_names() {
         use crate::validate_rust_identifiers;
-        use secretspec_core::{ProfileConfig, ProjectInfo, SecretConfig};
+        use secretspec_core::{Profile, Project, Secret};
         use std::collections::HashMap;
 
         let mut errors = Vec::new();
@@ -375,7 +375,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut duplicate_secrets = HashMap::new();
         duplicate_secrets.insert(
             "API_KEY".to_string(),
-            SecretConfig {
+            Secret {
                 description: "API Key upper".to_string(),
                 required: true,
                 default: None,
@@ -383,7 +383,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         duplicate_secrets.insert(
             "api_key".to_string(),
-            SecretConfig {
+            Secret {
                 description: "API Key lower".to_string(),
                 required: true,
                 default: None,
@@ -391,7 +391,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         duplicate_secrets.insert(
             "Api_Key".to_string(),
-            SecretConfig {
+            Secret {
                 description: "API Key mixed".to_string(),
                 required: true,
                 default: None,
@@ -401,13 +401,13 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut duplicate_profiles = HashMap::new();
         duplicate_profiles.insert(
             "default".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: duplicate_secrets,
             },
         );
 
-        let duplicate_config = ProjectConfig {
-            project: ProjectInfo {
+        let duplicate_config = Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -431,7 +431,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_validate_profile_identifiers() {
         use crate::validate_profile_identifiers;
-        use secretspec_core::{ProfileConfig, ProjectInfo};
+        use secretspec_core::{Profile, Project};
         use std::collections::HashMap;
 
         let mut errors = Vec::new();
@@ -440,25 +440,25 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut valid_profiles = HashMap::new();
         valid_profiles.insert(
             "default".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: HashMap::new(),
             },
         );
         valid_profiles.insert(
             "development".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: HashMap::new(),
             },
         );
         valid_profiles.insert(
             "production".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: HashMap::new(),
             },
         );
 
-        let valid_config = ProjectConfig {
-            project: ProjectInfo {
+        let valid_config = Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -476,19 +476,19 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut invalid_profiles = HashMap::new();
         invalid_profiles.insert(
             "123invalid".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: HashMap::new(),
             },
         );
         invalid_profiles.insert(
             "invalid-name".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: HashMap::new(),
             },
         );
 
-        let invalid_config = ProjectConfig {
-            project: ProjectInfo {
+        let invalid_config = Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -521,10 +521,10 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_is_secret_optional() {
         use crate::is_secret_optional;
-        use secretspec_core::SecretConfig;
+        use secretspec_core::Secret;
 
         // Required without default
-        let required_no_default = SecretConfig {
+        let required_no_default = Secret {
             description: "Required".to_string(),
             required: true,
             default: None,
@@ -532,7 +532,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         assert!(!is_secret_optional(&required_no_default));
 
         // Required with default (should be optional)
-        let required_with_default = SecretConfig {
+        let required_with_default = Secret {
             description: "Required with default".to_string(),
             required: true,
             default: Some("default_value".to_string()),
@@ -540,7 +540,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         assert!(is_secret_optional(&required_with_default));
 
         // Not required
-        let not_required = SecretConfig {
+        let not_required = Secret {
             description: "Not required".to_string(),
             required: false,
             default: None,
@@ -548,7 +548,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         assert!(is_secret_optional(&not_required));
 
         // Not required with default
-        let not_required_with_default = SecretConfig {
+        let not_required_with_default = Secret {
             description: "Not required with default".to_string(),
             required: false,
             default: Some("default_value".to_string()),
@@ -559,7 +559,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_is_field_optional_across_profiles() {
         use crate::is_field_optional_across_profiles;
-        use secretspec_core::{ProfileConfig, ProjectInfo, SecretConfig};
+        use secretspec_core::{Profile, Project, Secret};
         use std::collections::HashMap;
 
         // Setup config with multiple profiles
@@ -569,7 +569,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut default_secrets = HashMap::new();
         default_secrets.insert(
             "API_KEY".to_string(),
-            SecretConfig {
+            Secret {
                 description: "API Key".to_string(),
                 required: true,
                 default: None,
@@ -577,7 +577,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         default_secrets.insert(
             "DATABASE_URL".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Database URL".to_string(),
                 required: false,
                 default: None,
@@ -585,7 +585,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         profiles.insert(
             "default".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: default_secrets,
             },
         );
@@ -594,7 +594,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut dev_secrets = HashMap::new();
         dev_secrets.insert(
             "API_KEY".to_string(),
-            SecretConfig {
+            Secret {
                 description: "API Key".to_string(),
                 required: true,
                 default: Some("dev-key".to_string()),
@@ -602,7 +602,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         dev_secrets.insert(
             "DATABASE_URL".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Database URL".to_string(),
                 required: true,
                 default: None,
@@ -611,7 +611,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         // Note: CACHE_URL only exists in development
         dev_secrets.insert(
             "CACHE_URL".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Cache URL".to_string(),
                 required: true,
                 default: None,
@@ -619,13 +619,13 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         profiles.insert(
             "development".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: dev_secrets,
             },
         );
 
-        let config = ProjectConfig {
-            project: ProjectInfo {
+        let config = Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -647,7 +647,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut strict_default = HashMap::new();
         strict_default.insert(
             "ALWAYS_REQUIRED".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Always required".to_string(),
                 required: true,
                 default: None,
@@ -656,7 +656,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut strict_dev = HashMap::new();
         strict_dev.insert(
             "ALWAYS_REQUIRED".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Always required".to_string(),
                 required: true,
                 default: None,
@@ -664,19 +664,19 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         strict_profiles.insert(
             "default".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: strict_default,
             },
         );
         strict_profiles.insert(
             "development".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: strict_dev,
             },
         );
 
-        let strict_config = ProjectConfig {
-            project: ProjectInfo {
+        let strict_config = Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -694,7 +694,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_analyze_field_types() {
         use crate::analyze_field_types;
-        use secretspec_core::{ProfileConfig, ProjectInfo, SecretConfig};
+        use secretspec_core::{Profile, Project, Secret};
         use std::collections::HashMap;
 
         let mut profiles = HashMap::new();
@@ -703,7 +703,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut default_secrets = HashMap::new();
         default_secrets.insert(
             "REQUIRED_SECRET".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Always required".to_string(),
                 required: true,
                 default: None,
@@ -711,7 +711,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         default_secrets.insert(
             "OPTIONAL_SECRET".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Optional".to_string(),
                 required: false,
                 default: None,
@@ -719,7 +719,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         default_secrets.insert(
             "DEFAULT_SECRET".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Has default".to_string(),
                 required: true,
                 default: Some("default_value".to_string()),
@@ -727,7 +727,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         profiles.insert(
             "default".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: default_secrets,
             },
         );
@@ -736,7 +736,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut dev_secrets = HashMap::new();
         dev_secrets.insert(
             "REQUIRED_SECRET".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Always required".to_string(),
                 required: true,
                 default: None,
@@ -744,7 +744,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         dev_secrets.insert(
             "DEV_ONLY_SECRET".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Development only".to_string(),
                 required: true,
                 default: None,
@@ -752,13 +752,13 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         profiles.insert(
             "development".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: dev_secrets,
             },
         );
 
-        let config = ProjectConfig {
-            project: ProjectInfo {
+        let config = Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -876,14 +876,14 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
     #[test]
     fn test_validate_config_for_codegen() {
         use crate::validate_config_for_codegen;
-        use secretspec_core::{ProfileConfig, ProjectInfo, SecretConfig};
+        use secretspec_core::{Profile, Project, Secret};
         use std::collections::HashMap;
 
         // Test valid config
         let mut valid_secrets = HashMap::new();
         valid_secrets.insert(
             "API_KEY".to_string(),
-            SecretConfig {
+            Secret {
                 description: "API Key".to_string(),
                 required: true,
                 default: None,
@@ -891,7 +891,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         valid_secrets.insert(
             "database_url".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Database URL".to_string(),
                 required: true,
                 default: None,
@@ -901,19 +901,19 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut valid_profiles = HashMap::new();
         valid_profiles.insert(
             "default".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: valid_secrets,
             },
         );
         valid_profiles.insert(
             "development".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: HashMap::new(),
             },
         );
 
-        let valid_config = ProjectConfig {
-            project: ProjectInfo {
+        let valid_config = Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -928,7 +928,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut invalid_secrets = HashMap::new();
         invalid_secrets.insert(
             "123invalid".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Invalid name".to_string(),
                 required: true,
                 default: None,
@@ -936,7 +936,7 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         );
         invalid_secrets.insert(
             "fn".to_string(),
-            SecretConfig {
+            Secret {
                 description: "Rust keyword".to_string(),
                 required: true,
                 default: None,
@@ -946,13 +946,13 @@ HAS_DEFAULT = { description = "Secret with default", required = true, default = 
         let mut invalid_profiles = HashMap::new();
         invalid_profiles.insert(
             "123invalid-profile".to_string(),
-            ProfileConfig {
+            Profile {
                 secrets: invalid_secrets,
             },
         );
 
-        let invalid_config = ProjectConfig {
-            project: ProjectInfo {
+        let invalid_config = Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,

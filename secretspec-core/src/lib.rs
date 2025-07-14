@@ -45,14 +45,14 @@ use std::str::FromStr;
 /// This is the top-level type that represents the entire `secretspec.toml` file.
 /// It contains project metadata and profile-specific secret definitions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProjectConfig {
+pub struct Config {
     /// Project metadata including name, revision, and optional inheritance
-    pub project: ProjectInfo,
+    pub project: Project,
     /// Map of profile names to their configurations (e.g., "default", "production", "staging")
-    pub profiles: HashMap<String, ProfileConfig>,
+    pub profiles: HashMap<String, Profile>,
 }
 
-impl ProjectConfig {
+impl Config {
     /// Validate the configuration.
     ///
     /// Ensures that:
@@ -88,12 +88,12 @@ impl ProjectConfig {
     }
 
     /// Get a profile by name.
-    pub fn get_profile(&self, name: &str) -> Option<&ProfileConfig> {
+    pub fn get_profile(&self, name: &str) -> Option<&Profile> {
         self.profiles.get(name)
     }
 
     /// Get a mutable profile by name.
-    pub fn get_profile_mut(&mut self, name: &str) -> Option<&mut ProfileConfig> {
+    pub fn get_profile_mut(&mut self, name: &str) -> Option<&mut Profile> {
         self.profiles.get_mut(name)
     }
 
@@ -101,7 +101,7 @@ impl ProjectConfig {
     ///
     /// The current configuration takes precedence - values from `other`
     /// are only used if not already present.
-    pub fn merge_with(&mut self, other: ProjectConfig) {
+    pub fn merge_with(&mut self, other: Config) {
         // Merge profiles
         for (profile_name, profile_config) in other.profiles {
             match self.profiles.get_mut(&profile_name) {
@@ -146,7 +146,7 @@ impl ProjectConfig {
         base_path: Option<&Path>,
         visited: &mut HashSet<PathBuf>,
     ) -> Result<Self, ParseError> {
-        let mut config: ProjectConfig = toml::from_str(content)?;
+        let mut config: Config = toml::from_str(content)?;
 
         // Validate revision
         if config.project.revision != "1.0" {
@@ -154,10 +154,10 @@ impl ProjectConfig {
         }
 
         // Process extends if present
-        if let Some(extends_paths) = config.project.extends.clone() {
+        if let Some(ref extends_paths) = config.project.extends {
             if let Some(base) = base_path {
                 let base_dir = base.parent().unwrap_or(Path::new("."));
-                config = Self::merge_extended_configs(config, &extends_paths, base_dir, visited)?;
+                config = Self::merge_extended_configs(config, extends_paths, base_dir, visited)?;
             }
         }
 
@@ -165,11 +165,11 @@ impl ProjectConfig {
     }
 
     fn merge_extended_configs(
-        mut base_config: ProjectConfig,
+        mut base_config: Config,
         extends_paths: &[String],
         base_dir: &Path,
         visited: &mut HashSet<PathBuf>,
-    ) -> Result<ProjectConfig, ParseError> {
+    ) -> Result<Config, ParseError> {
         for extend_path in extends_paths {
             let full_path = base_dir.join(extend_path).join("secretspec.toml");
 
@@ -188,7 +188,7 @@ impl ProjectConfig {
     }
 }
 
-impl FromStr for ProjectConfig {
+impl FromStr for Config {
     type Err = ParseError;
 
     /// Parse configuration from a TOML string.
@@ -201,7 +201,7 @@ impl FromStr for ProjectConfig {
     }
 }
 
-impl TryFrom<&Path> for ProjectConfig {
+impl TryFrom<&Path> for Config {
     type Error = ParseError;
 
     /// Load configuration from a file path.
@@ -219,7 +219,7 @@ impl TryFrom<&Path> for ProjectConfig {
 /// The `extends` field allows projects to inherit secrets from other configurations,
 /// enabling shared configuration patterns across multiple projects.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProjectInfo {
+pub struct Project {
     /// The name of the project, used for identification and namespacing
     pub name: String,
     /// Configuration format revision (currently must be "1.0")
@@ -234,13 +234,13 @@ pub struct ProjectInfo {
 /// A profile represents a specific environment or context (e.g., "default", "production", "staging").
 /// Each profile contains its own set of secret definitions with their requirements.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProfileConfig {
+pub struct Profile {
     /// Map of secret names to their configurations, flattened in TOML for cleaner syntax
     #[serde(flatten)]
-    pub secrets: HashMap<String, SecretConfig>,
+    pub secrets: HashMap<String, Secret>,
 }
 
-impl ProfileConfig {
+impl Profile {
     /// Create a new empty profile configuration.
     pub fn new() -> Self {
         Self {
@@ -277,14 +277,14 @@ impl ProfileConfig {
     ///
     /// The current profile takes precedence - secrets from `other`
     /// are only added if they don't already exist.
-    pub fn merge_with(&mut self, other: ProfileConfig) {
+    pub fn merge_with(&mut self, other: Profile) {
         for (secret_name, secret_config) in other.secrets {
             self.secrets.entry(secret_name).or_insert(secret_config);
         }
     }
 }
 
-impl Default for ProfileConfig {
+impl Default for Profile {
     fn default() -> Self {
         Self::new()
     }
@@ -295,7 +295,7 @@ impl Default for ProfileConfig {
 /// Defines the properties of a secret including its documentation,
 /// whether it's required, and an optional default value.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SecretConfig {
+pub struct Secret {
     /// Human-readable description of what this secret is used for
     pub description: String,
     /// Whether this secret must be provided (no default value)
@@ -307,7 +307,7 @@ pub struct SecretConfig {
     pub default: Option<String>,
 }
 
-impl SecretConfig {
+impl Secret {
     /// Validate the secret configuration.
     ///
     /// Ensures that required secrets don't have default values.
@@ -344,75 +344,12 @@ fn is_valid_identifier(s: &str) -> bool {
     chars.all(|c| c.is_alphanumeric() || c == '_')
 }
 
-/// Available secret storage providers.
-///
-/// This enum represents the different backends that can be used to store and retrieve secrets.
-/// Each provider has its own characteristics and use cases.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Provider {
-    /// System keyring (OS-specific secure storage)
-    Keyring,
-    /// Local `.env` files
-    Dotenv,
-    /// Environment variables (read-only)
-    Env,
-    /// 1Password secret manager
-    #[serde(rename = "1password")]
-    OnePassword,
-    /// LastPass password manager
-    Lastpass,
-}
-
-impl Provider {
-    /// Get the string representation of this provider.
-    ///
-    /// This is the canonical name used in configuration files and CLI arguments.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Provider::Keyring => "keyring",
-            Provider::Dotenv => "dotenv",
-            Provider::Env => "env",
-            Provider::OnePassword => "1password",
-            Provider::Lastpass => "lastpass",
-        }
-    }
-}
-
-impl std::fmt::Display for Provider {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl<'a> TryFrom<&'a str> for Provider {
-    type Error = String;
-
-    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
-        // Extract the scheme from the URI-like string
-        // Handle both "provider" and "provider://..." formats
-        let scheme = if let Some(colon_pos) = s.find(':') {
-            &s[..colon_pos]
-        } else {
-            s
-        };
-
-        match scheme {
-            "keyring" => Ok(Provider::Keyring),
-            "dotenv" => Ok(Provider::Dotenv),
-            "env" => Ok(Provider::Env),
-            "1password" => Ok(Provider::OnePassword),
-            "lastpass" => Ok(Provider::Lastpass),
-            _ => Err(format!("Unknown provider: {}", scheme)),
-        }
-    }
-}
-
 /// Global user configuration for SecretSpec.
 ///
 /// This configuration is stored in the user's config directory and provides
 /// defaults that apply across all projects.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[doc(hidden)]
 pub struct GlobalConfig {
     /// Default settings
     #[serde(default)]
@@ -421,6 +358,7 @@ pub struct GlobalConfig {
 
 /// Default settings in the global configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[doc(hidden)]
 pub struct GlobalDefaults {
     /// Default provider to use when not specified
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -437,24 +375,24 @@ pub struct GlobalDefaults {
 /// The generic parameter `T` is typically a struct generated by the
 /// `secretspec-derive` macro containing the actual secret values.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SecretSpecSecrets<T> {
+pub struct Resolved<T> {
     /// The actual secret values, typically a generated struct
     pub secrets: T,
-    /// The provider that was used to retrieve these secrets
-    pub provider: Provider,
+    /// The provider name that was used to retrieve these secrets
+    pub provider: String,
     /// The profile that was active when retrieving these secrets
     pub profile: String,
 }
 
-impl<T> SecretSpecSecrets<T> {
+impl<T> Resolved<T> {
     /// Create a new container for secrets with their retrieval context.
     ///
     /// # Arguments
     ///
     /// * `secrets` - The actual secret values
-    /// * `provider` - The provider used to retrieve the secrets
+    /// * `provider` - The provider name used to retrieve the secrets
     /// * `profile` - The active profile when the secrets were retrieved
-    pub fn new(secrets: T, provider: Provider, profile: String) -> Self {
+    pub fn new(secrets: T, provider: String, profile: String) -> Self {
         Self {
             secrets,
             provider,
@@ -521,49 +459,5 @@ impl From<io::Error> for ParseError {
 impl From<toml::de::Error> for ParseError {
     fn from(e: toml::de::Error) -> Self {
         ParseError::Toml(e)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_provider_try_from_simple() {
-        assert_eq!(Provider::try_from("keyring").unwrap(), Provider::Keyring);
-        assert_eq!(Provider::try_from("dotenv").unwrap(), Provider::Dotenv);
-        assert_eq!(Provider::try_from("env").unwrap(), Provider::Env);
-        assert_eq!(
-            Provider::try_from("1password").unwrap(),
-            Provider::OnePassword
-        );
-        assert_eq!(Provider::try_from("lastpass").unwrap(), Provider::Lastpass);
-    }
-
-    #[test]
-    fn test_provider_try_from_with_uri() {
-        assert_eq!(Provider::try_from("keyring://").unwrap(), Provider::Keyring);
-        assert_eq!(
-            Provider::try_from("dotenv://.env").unwrap(),
-            Provider::Dotenv
-        );
-        assert_eq!(
-            Provider::try_from("dotenv://.env.production").unwrap(),
-            Provider::Dotenv
-        );
-        assert_eq!(
-            Provider::try_from("1password://vault").unwrap(),
-            Provider::OnePassword
-        );
-        assert_eq!(
-            Provider::try_from("1password://vault/Production").unwrap(),
-            Provider::OnePassword
-        );
-    }
-
-    #[test]
-    fn test_provider_try_from_unknown() {
-        assert!(Provider::try_from("unknown").is_err());
-        assert!(Provider::try_from("unknown://something").is_err());
     }
 }

@@ -18,7 +18,7 @@
 //! - [`KeyringProvider`]: System keyring integration (default)
 //! - [`DotEnvProvider`]: `.env` file support
 //! - [`EnvProvider`]: Environment variables (read-only)
-//! - [`OnePasswordProvider`]: 1Password integration
+//! - [`OnePasswordProvider`]: OnePassword integration
 //! - [`LastPassProvider`]: LastPass integration
 //!
 //! ## URI-Based Configuration
@@ -28,7 +28,7 @@
 //! ```text
 //! keyring://
 //! dotenv://.env.production
-//! 1password://vault/items
+//! onepassword://vault/items
 //! lastpass://folder
 //! ```
 //!
@@ -57,6 +57,8 @@ pub mod keyring;
 pub mod lastpass;
 pub mod onepassword;
 pub mod registry;
+#[macro_use]
+pub mod macros;
 
 #[cfg(test)]
 pub(crate) mod tests;
@@ -69,7 +71,9 @@ pub use env::{EnvConfig, EnvProvider};
 pub use keyring::{KeyringConfig, KeyringProvider};
 /// Configuration and implementation for LastPass provider
 pub use lastpass::{LastPassConfig, LastPassProvider};
-/// Configuration and implementation for 1Password provider
+/// Macro support types
+pub use macros::{PROVIDER_REGISTRY, ProviderRegistration};
+/// Configuration and implementation for OnePassword provider
 pub use onepassword::{OnePasswordConfig, OnePasswordProvider};
 /// Provider registry and metadata types
 pub use registry::{ProviderInfo, ProviderRegistry};
@@ -162,42 +166,15 @@ pub trait Provider: Send + Sync {
     /// if provider.allows_set() {
     ///     provider.set("myapp", "TOKEN", "value", "default")?;
     /// } else {
-    ///     eprintln!("Provider {} is read-only", provider.name());
+    ///     eprintln!("Provider is read-only");
     /// }
     /// ```
     fn allows_set(&self) -> bool {
         true
     }
 
-    /// Returns the name of this provider for display purposes.
+    /// Returns the name of this provider.
     ///
-    /// This should be a short, lowercase identifier that uniquely identifies
-    /// the provider type (e.g., "keyring", "dotenv", "1password").
-    ///
-    /// # Returns
-    ///
-    /// A static string slice with the provider's name
-    ///
-    /// # Example
-    ///
-    /// ```rust,ignore
-    /// println!("Using provider: {}", provider.name());
-    /// ```
+    /// This should match the name registered with the provider macro.
     fn name(&self) -> &'static str;
-
-    /// Returns a brief description of this provider.
-    ///
-    /// This should be a human-readable description explaining what the provider
-    /// does and how it stores secrets.
-    ///
-    /// # Returns
-    ///
-    /// A static string slice with the provider's description
-    ///
-    /// # Example
-    ///
-    /// ```rust,ignore
-    /// println!("{}: {}", provider.name(), provider.description());
-    /// ```
-    fn description(&self) -> &'static str;
 }

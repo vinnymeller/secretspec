@@ -1,9 +1,6 @@
-use crate::provider::{
-    DotEnvConfig, DotEnvProvider, EnvConfig, EnvProvider, KeyringConfig, KeyringProvider,
-    LastPassConfig, LastPassProvider, OnePasswordConfig, OnePasswordProvider, Provider,
-};
+use crate::provider::Provider;
 use crate::{Result, SecretSpecError};
-use http::Uri;
+use url::Url;
 
 /// Information about a secret storage provider.
 ///
@@ -16,7 +13,7 @@ pub struct ProviderInfo {
     /// A human-readable description of what the provider does.
     pub description: &'static str,
     /// Example URIs showing how to configure this provider.
-    pub examples: Vec<&'static str>,
+    pub examples: &'static [&'static str],
 }
 
 impl ProviderInfo {
@@ -32,13 +29,13 @@ impl ProviderInfo {
     ///
     /// ```ignore
     /// let info = ProviderInfo {
-    ///     name: "1password",
-    ///     description: "1Password password manager",
-    ///     examples: vec!["1password://vault", "1password://work@Production"],
+    ///     name: "onepassword",
+    ///     description: "OnePassword password manager",
+    ///     examples: &["onepassword://vault", "onepassword://work@Production"],
     /// };
     /// assert_eq!(
     ///     info.display_with_examples(),
-    ///     "1password: 1Password password manager (e.g., 1password://vault, 1password://work@Production)"
+    ///     "onepassword: OnePassword password manager (e.g., onepassword://vault, onepassword://work@Production)"
     /// );
     /// ```
     pub fn display_with_examples(&self) -> String {
@@ -65,7 +62,7 @@ impl ProviderInfo {
 /// # Supported Providers
 ///
 /// - **keyring**: System keychain integration (macOS Keychain, Windows Credential Manager, Linux Secret Service)
-/// - **1password**: 1Password password manager with vault support
+/// - **onepassword**: OnePassword password manager with vault support
 /// - **dotenv**: Traditional .env files with optional path specification
 /// - **env**: Read-only access to environment variables
 /// - **lastpass**: LastPass password manager with folder support
@@ -90,40 +87,17 @@ impl ProviderRegistry {
     /// }
     /// ```
     pub fn providers() -> Vec<ProviderInfo> {
-        vec![
-            ProviderInfo {
-                name: "keyring",
-                description: "Uses system keychain (Recommended)",
-                examples: vec![],
-            },
-            ProviderInfo {
-                name: "1password",
-                description: "1Password password manager",
-                examples: vec!["1password://vault", "1password://work@Production"],
-            },
-            ProviderInfo {
-                name: "dotenv",
-                description: "Traditional .env files",
-                examples: vec!["dotenv:/path/to/.env"],
-            },
-            ProviderInfo {
-                name: "env",
-                description: "Read-only environment variables",
-                examples: vec![],
-            },
-            ProviderInfo {
-                name: "lastpass",
-                description: "LastPass password manager",
-                examples: vec!["lastpass://folder"],
-            },
-        ]
+        super::PROVIDER_REGISTRY
+            .iter()
+            .map(|reg| reg.info.clone())
+            .collect()
     }
 
     /// Retrieves information about a specific provider by name.
     ///
     /// # Arguments
     ///
-    /// * `name` - The name of the provider to look up (e.g., "keyring", "1password")
+    /// * `name` - The name of the provider to look up (e.g., "keyring", "onepassword")
     ///
     /// # Returns
     ///
@@ -132,7 +106,7 @@ impl ProviderRegistry {
     /// # Example
     ///
     /// ```ignore
-    /// if let Some(info) = ProviderRegistry::get_info("1password") {
+    /// if let Some(info) = ProviderRegistry::get_info("onepassword") {
     ///     println!("Provider: {}", info.description);
     /// }
     /// ```
@@ -147,16 +121,12 @@ impl ProviderRegistry {
     ///
     /// # URI Formats
     ///
-    /// - **Full URI**: `scheme://authority/path` (e.g., `1password://vault/Production`)
-    /// - **Scheme only**: `scheme` or `scheme:` (e.g., `keyring`, `env:`)
-    /// - **Dotenv shorthand**: `dotenv:/path/to/.env` (special case without authority)
-    /// - **Provider with path**: `scheme:/path` (normalized to `scheme://localhost/path`)
+    /// - **Full URI**: `scheme://authority/path` (e.g., `onepassword://vault/Production`)
     ///
     /// # Special Cases
     ///
-    /// - **dotenv**: Supports both `dotenv://path` and `dotenv:/path` formats
-    /// - **onepassword**: Will error suggesting to use `1password` instead
-    /// - **Bare provider names**: Automatically converted to `provider://localhost`
+    /// - **1password**: Will error suggesting to use `onepassword` instead
+    /// - **Bare provider names**: Automatically converted to `provider://`
     ///
     /// # Arguments
     ///
@@ -181,90 +151,75 @@ impl ProviderRegistry {
     /// let provider = ProviderRegistry::create_from_string("keyring")?;
     ///
     /// // Full URI with configuration
-    /// let provider = ProviderRegistry::create_from_string("1password://vault/Production")?;
+    /// let provider = ProviderRegistry::create_from_string("onepassword://vault/Production")?;
     ///
     /// // Dotenv with path
     /// let provider = ProviderRegistry::create_from_string("dotenv:.env.production")?;
     /// ```
     pub fn create_from_string(s: &str) -> Result<Box<dyn Provider>> {
-        // Special handling for dotenv with paths
-        if s.starts_with("dotenv:") && !s.contains("://") {
-            let path = &s[7..]; // Remove "dotenv:" prefix
-            let config = if path.is_empty() {
-                DotEnvConfig::default()
-            } else {
-                DotEnvConfig::from_path_string(path)
-            };
-            return Ok(Box::new(DotEnvProvider::new(config)));
-        }
-
-        // Normalize the input to ensure it's a valid URI
-        let normalized = if s.contains("://") {
-            // Already has scheme separator
-            s.to_string()
-        } else if s.ends_with(':') {
-            // Has colon but no slashes, add dummy authority
-            format!("{}//localhost", s)
-        } else if s.contains(':') && s.contains('/') {
-            // Has colon and slashes but not "://", probably like "dotenv:/path"
-            // Insert authority after the colon
-            let colon_pos = s.find(':').ok_or_else(|| {
-                SecretSpecError::ProviderOperationFailed(
-                    "Invalid URI format: missing scheme separator".to_string(),
-                )
-            })?;
-            format!("{}://localhost{}", &s[..colon_pos], &s[colon_pos + 1..])
+        // Parse the scheme from the input string
+        let (scheme, rest) = if let Some(pos) = s.find(':') {
+            let scheme = &s[..pos];
+            let rest = &s[pos + 1..];
+            (scheme, rest)
         } else {
-            // Just a provider name, make it a proper URI
-            format!("{}://localhost", s)
+            // Just a provider name, no URI components
+            (s, "")
         };
 
-        // Parse the normalized URI
-        let uri = normalized.parse::<Uri>().map_err(|e| {
+        // Validate scheme first
+        if scheme == "1password" {
+            return Err(SecretSpecError::ProviderOperationFailed(
+                "Invalid scheme '1password'. Use 'onepassword' instead (e.g., onepassword://vault/path)".to_string()
+            ));
+        }
+
+        // Check if the scheme is registered
+        let is_valid_scheme = super::PROVIDER_REGISTRY
+            .iter()
+            .any(|reg| reg.schemes.contains(&scheme));
+
+        if !is_valid_scheme {
+            // Check if it's a known provider name to give a better error
+            if super::PROVIDER_REGISTRY
+                .iter()
+                .any(|reg| reg.info.name == scheme)
+            {
+                return Err(SecretSpecError::ProviderOperationFailed(format!(
+                    "Provider '{}' exists but URI parsing failed",
+                    scheme
+                )));
+            } else {
+                return Err(SecretSpecError::ProviderNotFound(scheme.to_string()));
+            }
+        }
+
+        // Build a proper URL with the correct scheme
+        let url_string = match rest {
+            // Just scheme name (e.g., "keyring")
+            "" | ":" => format!("{}://", scheme),
+            // Standard URI format already has // (e.g., "onepassword://vault/path")
+            s if s.starts_with("//") => format!("{}:{}", scheme, s),
+            // Path only format (e.g., "dotenv:/path/to/.env")
+            s if s.starts_with('/') => format!("{}://{}", scheme, s),
+            // Everything else - assume it's a host or path component
+            s => format!("{}://{}", scheme, s),
+        };
+
+        let proper_url = Url::parse(&url_string).map_err(|e| {
             SecretSpecError::ProviderOperationFailed(format!(
                 "Invalid provider specification '{}': {}",
                 s, e
             ))
         })?;
 
-        let scheme = uri.scheme_str().ok_or_else(|| {
-            SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string())
-        })?;
+        // Find the provider registration for this scheme
+        let registration = super::PROVIDER_REGISTRY
+            .iter()
+            .find(|reg| reg.schemes.contains(&scheme))
+            .ok_or_else(|| SecretSpecError::ProviderNotFound(scheme.to_string()))?;
 
-        match scheme {
-            "1password" | "1password+token" => {
-                let config = OnePasswordConfig::from_uri(&uri)?;
-                Ok(Box::new(OnePasswordProvider::new(config)))
-            }
-            "keyring" => {
-                let config = KeyringConfig::from_uri(&uri)?;
-                Ok(Box::new(KeyringProvider::new(config)))
-            }
-            "dotenv" => {
-                let config = DotEnvConfig::from_uri(&uri)?;
-                Ok(Box::new(DotEnvProvider::new(config)))
-            }
-            "env" => {
-                let config = EnvConfig::from_uri(&uri)?;
-                Ok(Box::new(EnvProvider::new(config)))
-            }
-            "lastpass" => {
-                let config = LastPassConfig::from_uri(&uri)?;
-                Ok(Box::new(LastPassProvider::new(config)))
-            }
-            "onepassword" => Err(SecretSpecError::ProviderOperationFailed(
-                "Invalid scheme 'onepassword'. Use '1password' instead (e.g., 1password://vault/path)".to_string()
-            )),
-            _ => {
-                // Check if it's a known provider name to give a better error
-                if Self::providers().iter().any(|p| p.name == scheme) {
-                    Err(SecretSpecError::ProviderOperationFailed(
-                        format!("Provider '{}' exists but URI parsing failed", scheme)
-                    ))
-                } else {
-                    Err(SecretSpecError::ProviderNotFound(scheme.to_string()))
-                }
-            }
-        }
+        // Use the factory function to create the provider
+        (registration.factory)(&proper_url)
     }
 }

@@ -1,5 +1,5 @@
 use crate::common::TestFixture;
-use secretspec_core::ProjectConfig;
+use secretspec_core::Config;
 
 // Integration tests for profile inheritance using the public API
 // (Unit tests for detailed inheritance logic are in src/tests.rs)
@@ -9,7 +9,7 @@ fn test_profile_inheritance_end_to_end() {
     let fixture = TestFixture::new();
     let (_, _, base_path) = fixture.create_extends_structure();
 
-    let config = ProjectConfig::try_from(base_path.as_path()).unwrap();
+    let config = Config::try_from(base_path.as_path()).unwrap();
 
     // Verify basic inheritance functionality through public API
     assert_eq!(config.project.name, "test_project");

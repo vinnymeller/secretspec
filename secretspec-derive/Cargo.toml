@@ -13,6 +13,7 @@ proc-macro2.workspace = true
 toml.workspace = true
 serde.workspace = true
 secretspec-core.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 trybuild.workspace = true

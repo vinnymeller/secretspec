@@ -5,5 +5,5 @@ edition.workspace = true
 
 [dependencies]
 secretspec.workspace = true
-http.workspace = true
+url.workspace = true
 serde.workspace = true

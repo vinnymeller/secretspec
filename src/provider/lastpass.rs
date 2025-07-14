@@ -1,9 +1,9 @@
 use crate::provider::Provider;
 use crate::{Result, SecretSpecError};
-use http::Uri;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::process::{Command, Stdio};
+use url::Url;
 
 /// Configuration for the LastPass provider.
 ///
@@ -42,64 +42,61 @@ impl Default for LastPassConfig {
     }
 }
 
-impl LastPassConfig {
-    /// Creates a LastPassConfig from a URI.
+impl TryFrom<&Url> for LastPassConfig {
+    type Error = SecretSpecError;
+
+    /// Creates a LastPassConfig from a URL.
     ///
-    /// Parses a URI in the format `lastpass://[folder]` where the folder
+    /// Parses a URL in the format `lastpass://[folder]` where the folder
     /// component is optional. The folder can be specified either as the
-    /// authority or the path component of the URI.
+    /// authority or the path component of the URL.
     ///
     /// # Arguments
     ///
-    /// * `uri` - A URI with the `lastpass` scheme
+    /// * `url` - A URL with the `lastpass` scheme
     ///
     /// # Returns
     ///
     /// Returns a `Result` containing the parsed configuration or an error
-    /// if the URI scheme is not `lastpass`.
+    /// if the URL scheme is not `lastpass`.
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use http::Uri;
+    /// use url::Url;
     /// use secretspec::provider::lastpass::LastPassConfig;
     ///
-    /// // URI without folder
-    /// let uri = "lastpass://".parse::<Uri>().unwrap();
-    /// let config = LastPassConfig::from_uri(&uri).unwrap();
+    /// // URL without folder
+    /// let url = Url::parse("lastpass://").unwrap();
+    /// let config: LastPassConfig = (&url).try_into().unwrap();
     ///
-    /// // URI with folder as authority
-    /// let uri = "lastpass://my-folder".parse::<Uri>().unwrap();
-    /// let config = LastPassConfig::from_uri(&uri).unwrap();
+    /// // URL with folder as authority
+    /// let url = Url::parse("lastpass://my-folder").unwrap();
+    /// let config: LastPassConfig = (&url).try_into().unwrap();
     ///
-    /// // URI with folder as path
-    /// let uri = "lastpass:///my-folder".parse::<Uri>().unwrap();
-    /// let config = LastPassConfig::from_uri(&uri).unwrap();
+    /// // URL with folder as path
+    /// let url = Url::parse("lastpass:///my-folder").unwrap();
+    /// let config: LastPassConfig = (&url).try_into().unwrap();
     /// ```
-    pub fn from_uri(uri: &Uri) -> Result<Self> {
-        let scheme = uri.scheme_str().ok_or_else(|| {
-            SecretSpecError::ProviderOperationFailed("URI must have a scheme".to_string())
-        })?;
-
-        if scheme != "lastpass" {
+    fn try_from(url: &Url) -> std::result::Result<Self, Self::Error> {
+        if url.scheme() != "lastpass" {
             return Err(SecretSpecError::ProviderOperationFailed(format!(
                 "Invalid scheme '{}' for lastpass provider",
-                scheme
+                url.scheme()
             )));
         }
 
         let mut config = Self::default();
 
         // Parse folder from authority or path, ignoring the dummy localhost
-        if let Some(auth) = uri.authority() {
-            let auth_str = auth.as_str();
-            if auth_str != "localhost" {
-                config.folder_prefix = Some(auth_str.to_string());
+        if let Some(host) = url.host_str() {
+            if host != "localhost" {
+                config.folder_prefix = Some(host.to_string());
             }
         }
 
-        if config.folder_prefix.is_none() && !uri.path().is_empty() && uri.path() != "/" {
-            config.folder_prefix = Some(uri.path().trim_start_matches('/').to_string());
+        if config.folder_prefix.is_none() && !url.path().is_empty() && url.path() != "/" {
+            config.folder_prefix = Some(url.path().trim_start_matches('/').to_string());
         }
 
         Ok(config)
@@ -135,8 +132,15 @@ impl LastPassConfig {
 /// };
 /// let provider = LastPassProvider::new(config);
 /// ```
+#[crate::provider(
+    name = "lastpass",
+    description = "LastPass password manager",
+    schemes = ["lastpass"],
+    examples = ["lastpass://", "lastpass://Shared-SecretSpec"],
+)]
 pub struct LastPassProvider {
-    _config: LastPassConfig,
+    #[allow(dead_code)]
+    config: LastPassConfig,
 }
 
 impl LastPassProvider {
@@ -146,25 +150,7 @@ impl LastPassProvider {
     ///
     /// * `config` - The LastPass configuration to use
     pub fn new(config: LastPassConfig) -> Self {
-        Self { _config: config }
-    }
-
-    /// Creates a LastPassProvider from a URI.
-    ///
-    /// This is a convenience method that parses the URI into a configuration
-    /// and creates a provider instance.
-    ///
-    /// # Arguments
-    ///
-    /// * `uri` - A URI with the `lastpass` scheme
-    ///
-    /// # Returns
-    ///
-    /// Returns a `Result` containing the provider instance or an error
-    /// if the URI is invalid.
-    pub fn from_uri(uri: &Uri) -> Result<Self> {
-        let config = LastPassConfig::from_uri(uri)?;
-        Ok(Self::new(config))
+        Self { config }
     }
 
     /// Executes a LastPass CLI command and returns its output.
@@ -283,6 +269,10 @@ impl LastPassProvider {
 }
 
 impl Provider for LastPassProvider {
+    fn name(&self) -> &'static str {
+        Self::PROVIDER_NAME
+    }
+
     /// Retrieves a secret from LastPass.
     ///
     /// Fetches the value of a secret stored in LastPass at the path
@@ -427,20 +417,6 @@ impl Provider for LastPassProvider {
         }
 
         Ok(())
-    }
-
-    /// Returns the name of this provider.
-    ///
-    /// Always returns "lastpass".
-    fn name(&self) -> &'static str {
-        "lastpass"
-    }
-
-    /// Returns a human-readable description of this provider.
-    ///
-    /// Always returns "LastPass password manager".
-    fn description(&self) -> &'static str {
-        "LastPass password manager"
     }
 }
 

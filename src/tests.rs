@@ -1,34 +1,31 @@
 use super::*;
+use secretspec_core::Secret;
 use std::{fs, io};
 use tempfile::TempDir;
 
 // Helper function for tests that need to parse from string
-fn parse_spec_from_str(content: &str, _base_path: Option<&Path>) -> Result<ProjectConfig> {
+fn parse_spec_from_str(content: &str, _base_path: Option<&Path>) -> Result<Config> {
     // Parse the TOML content directly
-    let config: ProjectConfig = toml::from_str(content).map_err(SecretSpecError::Toml)?;
-    
+    let config: Config = toml::from_str(content).map_err(SecretSpecError::Toml)?;
+
     // Validate the configuration
     if config.project.revision != "1.0" {
-        return Err(SecretSpecError::UnsupportedRevision(config.project.revision));
+        return Err(SecretSpecError::UnsupportedRevision(
+            config.project.revision,
+        ));
     }
-    
+
     config.validate().map_err(|e| SecretSpecError::from(e))?;
-    
+
     Ok(config)
 }
 
-#[test]
-fn test_builder_pattern() {
-    // Test default builder
-    let builder = SecretSpec::builder();
-    assert!(builder.project_config_path.is_none());
-    assert!(builder.global_config_path.is_none());
-}
+// Builder pattern test removed - SecretsBuilder no longer exists
 
 #[test]
-fn test_builder_with_project_config() {
-    let config = ProjectConfig {
-        project: ProjectInfo {
+fn test_new_with_project_config() {
+    let config = Config {
+        project: Project {
             name: "test-project".to_string(),
             revision: "1.0".to_string(),
             extends: None,
@@ -36,13 +33,13 @@ fn test_builder_with_project_config() {
         profiles: HashMap::new(),
     };
 
-    let spec = SecretSpec::builder().project_config(config).load().unwrap();
+    let spec = Secrets::new(config, None);
 
     assert_eq!(spec.config.project.name, "test-project");
 }
 
 #[test]
-fn test_builder_with_custom_paths() {
+fn test_new_with_custom_configs() {
     let temp_dir = TempDir::new().unwrap();
     let project_path = temp_dir.path().join("custom-secretspec.toml");
     let global_path = temp_dir.path().join("custom-global.toml");
@@ -66,11 +63,13 @@ profile = "development"
 "#;
     fs::write(&global_path, global_config).unwrap();
 
-    let spec = SecretSpec::builder()
-        .project_config_path(&project_path)
-        .global_config_path(&global_path)
-        .load()
-        .unwrap();
+    // Load configs from files
+    let config = Config::try_from(project_path.as_path()).unwrap();
+    // For tests, we'll parse the global config directly since load_global_config uses a fixed path
+    let global_config_content = fs::read_to_string(&global_path).unwrap();
+    let global_config: Option<GlobalConfig> = Some(toml::from_str(&global_config_content).unwrap());
+
+    let spec = Secrets::new(config, global_config);
 
     assert_eq!(spec.config.project.name, "custom-project");
     assert_eq!(
@@ -80,9 +79,9 @@ profile = "development"
 }
 
 #[test]
-fn test_builder_with_default_overrides() {
-    let config = ProjectConfig {
-        project: ProjectInfo {
+fn test_new_with_default_overrides() {
+    let config = Config {
+        project: Project {
             name: "test-project".to_string(),
             revision: "1.0".to_string(),
             extends: None,
@@ -90,12 +89,15 @@ fn test_builder_with_default_overrides() {
         profiles: HashMap::new(),
     };
 
-    let spec = SecretSpec::builder()
-        .project_config(config)
-        .default_provider("dotenv")
-        .default_profile("production")
-        .load()
-        .unwrap();
+    // Create a global config with specific defaults
+    let global_config = GlobalConfig {
+        defaults: GlobalDefaults {
+            provider: Some("dotenv".to_string()),
+            profile: Some("production".to_string()),
+        },
+    };
+
+    let spec = Secrets::new(config, Some(global_config));
 
     assert_eq!(spec.config.project.name, "test-project");
 }
@@ -157,7 +159,7 @@ API_KEY = { description = "API key for external service", required = false, defa
     fs::write(base_path.join("base/secretspec.toml"), base_config).unwrap();
 
     // Parse the config
-    let config = ProjectConfig::try_from(base_path.join("base/secretspec.toml").as_path()).unwrap();
+    let config = Config::try_from(base_path.join("base/secretspec.toml").as_path()).unwrap();
 
     // Verify the config has merged correctly
     assert_eq!(config.project.name, "test_project");
@@ -198,70 +200,31 @@ API_KEY = { description = "API key for external service", required = false, defa
 
 #[test]
 fn test_validation_result_is_valid() {
-    let valid_result = ValidationResult {
+    let valid_result = ValidatedSecrets {
         secrets: HashMap::new(),
         missing_required: Vec::new(),
         missing_optional: vec!["optional_secret".to_string()],
         with_defaults: Vec::new(),
-        provider: Provider::Keyring,
+        provider: ProviderRegistry::create_from_string("keyring").unwrap(),
         profile: "default".to_string(),
     };
     assert!(valid_result.is_valid());
 
-    let invalid_result = ValidationResult {
+    let invalid_result = ValidatedSecrets {
         secrets: HashMap::new(),
         missing_required: vec!["required_secret".to_string()],
         missing_optional: Vec::new(),
         with_defaults: Vec::new(),
-        provider: Provider::Keyring,
+        provider: ProviderRegistry::create_from_string("keyring").unwrap(),
         profile: "default".to_string(),
     };
     assert!(!invalid_result.is_valid());
 }
 
 #[test]
-fn test_project_config_from_path_with_empty_file() {
-    let temp_dir = TempDir::new().unwrap();
-    let empty_file = temp_dir.path().join(".env");
-    fs::write(&empty_file, "").unwrap();
-
-    let config = project_config_from_path(&empty_file).unwrap();
-    assert_eq!(config.project.revision, "1.0");
-    assert!(config.profiles.contains_key("default"));
-    assert!(config.profiles["default"].secrets.is_empty());
-}
-
-#[test]
-fn test_project_config_from_path_with_env_vars() {
-    let temp_dir = TempDir::new().unwrap();
-    let env_file = temp_dir.path().join(".env");
-    fs::write(&env_file, "API_KEY=test\nDATABASE_URL=postgres://localhost").unwrap();
-
-    let config = project_config_from_path(&env_file).unwrap();
-    let default_profile = &config.profiles["default"];
-
-    assert!(default_profile.secrets.contains_key("API_KEY"));
-    assert!(default_profile.secrets.contains_key("DATABASE_URL"));
-    assert_eq!(
-        default_profile.secrets["API_KEY"].description,
-        "API_KEY secret"
-    );
-    assert!(default_profile.secrets["API_KEY"].required);
-}
-
-#[test]
-fn test_project_config_from_nonexistent_path() {
-    let temp_dir = TempDir::new().unwrap();
-    let nonexistent = temp_dir.path().join("nonexistent.env");
-
-    let config = project_config_from_path(&nonexistent).unwrap();
-    assert!(config.profiles["default"].secrets.is_empty());
-}
-
-#[test]
 fn test_secretspec_new() {
-    let config = ProjectConfig {
-        project: ProjectInfo {
+    let config = Config {
+        project: Project {
             name: "test".to_string(),
             revision: "1.0".to_string(),
             extends: None,
@@ -276,7 +239,7 @@ fn test_secretspec_new() {
         },
     };
 
-    let spec = SecretSpec::new(config.clone(), Some(global_config.clone()));
+    let spec = Secrets::new(config.clone(), Some(global_config.clone()));
     assert_eq!(spec.config.project.name, "test");
     assert!(spec.global_config.is_some());
     assert_eq!(
@@ -284,7 +247,7 @@ fn test_secretspec_new() {
         Some("keyring".to_string())
     );
 
-    let spec_without_global = SecretSpec::new(config, None);
+    let spec_without_global = Secrets::new(config, None);
     assert!(spec_without_global.global_config.is_none());
 }
 
@@ -297,9 +260,9 @@ fn test_resolve_profile() {
         },
     };
 
-    let spec = SecretSpec::new(
-        ProjectConfig {
-            project: ProjectInfo {
+    let spec = Secrets::new(
+        Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -316,9 +279,9 @@ fn test_resolve_profile() {
     assert_eq!(spec.resolve_profile(None), "development");
 
     // Test without global config
-    let spec_no_global = SecretSpec::new(
-        ProjectConfig {
-            project: ProjectInfo {
+    let spec_no_global = Secrets::new(
+        Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -335,7 +298,7 @@ fn test_resolve_secret_config() {
     let mut default_secrets = HashMap::new();
     default_secrets.insert(
         "API_KEY".to_string(),
-        SecretConfig {
+        Secret {
             description: "API Key".to_string(),
             required: true,
             default: None,
@@ -343,7 +306,7 @@ fn test_resolve_secret_config() {
     );
     default_secrets.insert(
         "DATABASE_URL".to_string(),
-        SecretConfig {
+        Secret {
             description: "Database URL".to_string(),
             required: false,
             default: Some("sqlite:///default.db".to_string()),
@@ -353,7 +316,7 @@ fn test_resolve_secret_config() {
     let mut dev_secrets = HashMap::new();
     dev_secrets.insert(
         "API_KEY".to_string(),
-        SecretConfig {
+        Secret {
             description: "Dev API Key".to_string(),
             required: false,
             default: Some("dev-key".to_string()),
@@ -363,20 +326,20 @@ fn test_resolve_secret_config() {
     let mut profiles = HashMap::new();
     profiles.insert(
         "default".to_string(),
-        ProfileConfig {
+        Profile {
             secrets: default_secrets,
         },
     );
     profiles.insert(
         "development".to_string(),
-        ProfileConfig {
+        Profile {
             secrets: dev_secrets,
         },
     );
 
-    let spec = SecretSpec::new(
-        ProjectConfig {
-            project: ProjectInfo {
+    let spec = Secrets::new(
+        Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -409,9 +372,9 @@ fn test_resolve_secret_config() {
 
 #[test]
 fn test_get_provider_error_cases() {
-    let spec = SecretSpec::new(
-        ProjectConfig {
-            project: ProjectInfo {
+    let spec = Secrets::new(
+        Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -435,9 +398,9 @@ fn test_get_provider_with_global_config() {
         },
     };
 
-    let spec = SecretSpec::new(
-        ProjectConfig {
-            project: ProjectInfo {
+    let spec = Secrets::new(
+        Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -458,12 +421,12 @@ fn test_project_config_from_path_error_handling() {
     let invalid_toml = temp_dir.path().join("invalid.toml");
     fs::write(&invalid_toml, "[invalid toml content").unwrap();
 
-    let result = ProjectConfig::try_from(invalid_toml.as_path()).map_err(Into::<SecretSpecError>::into);
+    let result = Config::try_from(invalid_toml.as_path()).map_err(Into::<SecretSpecError>::into);
     assert!(matches!(result, Err(SecretSpecError::Toml(_))));
 
     // Test nonexistent file
     let nonexistent = temp_dir.path().join("nonexistent.toml");
-    let result = ProjectConfig::try_from(nonexistent.as_path()).map_err(Into::<SecretSpecError>::into);
+    let result = Config::try_from(nonexistent.as_path()).map_err(Into::<SecretSpecError>::into);
     assert!(matches!(result, Err(SecretSpecError::NoManifest)));
 }
 
@@ -487,58 +450,6 @@ API_KEY = { description = "API Key", required = true }
     let invalid_toml = "[invalid";
     let result = parse_spec_from_str(invalid_toml, None);
     assert!(matches!(result, Err(SecretSpecError::Toml(_))));
-}
-
-#[test]
-fn test_load_global_config_from_path_nonexistent() {
-    let temp_dir = TempDir::new().unwrap();
-    let nonexistent = temp_dir.path().join("nonexistent.toml");
-
-    let result = load_global_config_from_path(&nonexistent).unwrap();
-    assert!(result.is_none());
-}
-
-#[test]
-fn test_load_global_config_from_path_valid() {
-    let temp_dir = TempDir::new().unwrap();
-    let config_file = temp_dir.path().join("config.toml");
-    let config_content = r#"
-[defaults]
-provider = "keyring"
-profile = "development"
-"#;
-    fs::write(&config_file, config_content).unwrap();
-
-    let result = load_global_config_from_path(&config_file).unwrap();
-    assert!(result.is_some());
-    let config = result.unwrap();
-    assert_eq!(config.defaults.provider, Some("keyring".to_string()));
-    assert_eq!(config.defaults.profile, Some("development".to_string()));
-}
-
-#[test]
-fn test_secretspec_write() {
-    let temp_dir = TempDir::new().unwrap();
-    let env_file = temp_dir.path().join(".env");
-    fs::write(&env_file, "API_KEY=test\nDATABASE_URL=postgres://localhost").unwrap();
-
-    let spec = SecretSpec::new(
-        ProjectConfig {
-            project: ProjectInfo {
-                name: "test".to_string(),
-                revision: "1.0".to_string(),
-                extends: None,
-            },
-            profiles: HashMap::new(),
-        },
-        None,
-    );
-
-    let result = spec.write(&env_file, Some(temp_dir.path()));
-    assert!(result.is_ok());
-
-    // Check that secretspec.toml was created
-    assert!(temp_dir.path().join("secretspec.toml").exists());
 }
 
 #[test]
@@ -612,7 +523,7 @@ MONITORING_TOKEN = { description = "Token for monitoring service", required = tr
     fs::write(base_path.join("base/secretspec.toml"), base_config).unwrap();
 
     // Parse the config
-    let config = ProjectConfig::try_from(base_path.join("base/secretspec.toml").as_path()).unwrap();
+    let config = Config::try_from(base_path.join("base/secretspec.toml").as_path()).unwrap();
 
     // Verify project info
     assert_eq!(config.project.name, "my_app");
@@ -722,7 +633,7 @@ SECRET_B = { description = "Secret B", required = true }
     fs::write(base_path.join("b/secretspec.toml"), config_b).unwrap();
 
     // Parse should fail with circular dependency error
-    let result = ProjectConfig::try_from(base_path.join("a/secretspec.toml").as_path());
+    let result = Config::try_from(base_path.join("a/secretspec.toml").as_path());
     assert!(result.is_err());
     match result {
         Err(ParseError::CircularDependency(msg)) => {
@@ -779,7 +690,7 @@ SECRET_C = { description = "Secret C", required = true }
     fs::write(base_path.join("c/secretspec.toml"), config_c).unwrap();
 
     // Parse should fail with circular dependency error
-    let result = ProjectConfig::try_from(base_path.join("a/secretspec.toml").as_path());
+    let result = Config::try_from(base_path.join("a/secretspec.toml").as_path());
     assert!(result.is_err());
     match result {
         Err(ParseError::CircularDependency(msg)) => {
@@ -847,7 +758,7 @@ SECRET_A = { description = "Secret A for staging", required = false, default = "
     fs::write(base_path.join("a/secretspec.toml"), config_a).unwrap();
 
     // Parse config A
-    let config = ProjectConfig::try_from(base_path.join("a/secretspec.toml").as_path()).unwrap();
+    let config = Config::try_from(base_path.join("a/secretspec.toml").as_path()).unwrap();
 
     // Verify project info
     assert_eq!(config.project.name, "config_a");
@@ -932,8 +843,7 @@ PROJECT_SECRET = { description = "Project secret", required = true }
     )
     .unwrap();
 
-    let config =
-        ProjectConfig::try_from(base_path.join("project/src/secretspec.toml").as_path()).unwrap();
+    let config = Config::try_from(base_path.join("project/src/secretspec.toml").as_path()).unwrap();
     let default_profile = config.profiles.get("default").unwrap();
     assert_eq!(default_profile.secrets.len(), 3);
     assert!(default_profile.secrets.contains_key("COMMON_SECRET"));
@@ -957,7 +867,7 @@ PROJECT2_SECRET = { description = "Project2 secret", required = true }
     .unwrap();
 
     let config2 =
-        ProjectConfig::try_from(base_path.join("project/src/secretspec2.toml").as_path()).unwrap();
+        Config::try_from(base_path.join("project/src/secretspec2.toml").as_path()).unwrap();
     let default_profile2 = config2.profiles.get("default").unwrap();
     assert_eq!(default_profile2.secrets.len(), 2);
     assert!(default_profile2.secrets.contains_key("COMMON_SECRET"));
@@ -992,7 +902,7 @@ PROJECT3_SECRET = { description = "Project3 secret", required = true }
         .unwrap();
 
         let config3 =
-            ProjectConfig::try_from(base_path.join("project/secretspec3.toml").as_path()).unwrap();
+            Config::try_from(base_path.join("project/secretspec3.toml").as_path()).unwrap();
         let default_profile3 = config3.profiles.get("default").unwrap();
         assert_eq!(default_profile3.secrets.len(), 2);
         assert!(default_profile3.secrets.contains_key("SPACE_SECRET"));
@@ -1021,7 +931,7 @@ SECRET_B = { description = "Secret B", required = false, default = "prod-b" }
     fs::write(base_path.join("secretspec.toml"), config_empty_extends).unwrap();
 
     // Parse should succeed with empty extends
-    let config = ProjectConfig::try_from(base_path.join("secretspec.toml").as_path()).unwrap();
+    let config = Config::try_from(base_path.join("secretspec.toml").as_path()).unwrap();
 
     // Verify config is parsed correctly
     assert_eq!(config.project.name, "project");
@@ -1055,7 +965,7 @@ SECRET_A = { description = "Secret A", required = true }
     fs::write(base_path.join("secretspec.toml"), config_self_dot).unwrap();
 
     // This should fail with circular dependency
-    let result = ProjectConfig::try_from(base_path.join("secretspec.toml").as_path());
+    let result = Config::try_from(base_path.join("secretspec.toml").as_path());
     assert!(result.is_err());
     match result {
         Err(ParseError::CircularDependency(msg)) => {
@@ -1090,7 +1000,7 @@ CHILD_SECRET = { description = "Child secret", required = true }
     fs::write(base_path.join("subdir/secretspec.toml"), child_config).unwrap();
 
     // This should also fail with circular dependency
-    let result2 = ProjectConfig::try_from(base_path.join("secretspec.toml").as_path());
+    let result2 = Config::try_from(base_path.join("secretspec.toml").as_path());
     assert!(result2.is_err());
     match result2 {
         Err(ParseError::CircularDependency(msg)) => {
@@ -1145,8 +1055,7 @@ SECRET_E = { description = "New secret E", required = true }
     fs::write(base_path.join("override/secretspec.toml"), override_config).unwrap();
 
     // Parse the override config
-    let config =
-        ProjectConfig::try_from(base_path.join("override/secretspec.toml").as_path()).unwrap();
+    let config = Config::try_from(base_path.join("override/secretspec.toml").as_path()).unwrap();
     let default_profile = config.profiles.get("default").unwrap();
 
     // Verify SECRET_A: only description changed
@@ -1198,7 +1107,7 @@ API_KEY = { description = "API key for external service", required = true }
     fs::write(base_path.join("secretspec.toml"), base_config).unwrap();
 
     // Parse should fail with missing file error
-    let result = ProjectConfig::try_from(base_path.join("secretspec.toml").as_path());
+    let result = Config::try_from(base_path.join("secretspec.toml").as_path());
     assert!(result.is_err());
     match result {
         Err(ParseError::Io(e)) => {
@@ -1228,7 +1137,7 @@ SECRET_A = { description = "Secret A", required = true }
 "#;
     fs::write(base_path.join("secretspec.toml"), config_extend_file).unwrap();
 
-    let result = ProjectConfig::try_from(base_path.join("secretspec.toml").as_path());
+    let result = Config::try_from(base_path.join("secretspec.toml").as_path());
     assert!(result.is_err());
     match result {
         Err(ParseError::Io(e)) => {
@@ -1249,7 +1158,7 @@ SECRET_B = { description = "Secret B", required = true }
 "#;
     fs::write(base_path.join("secretspec2.toml"), config_empty_string).unwrap();
 
-    let result2 = ProjectConfig::try_from(base_path.join("secretspec2.toml").as_path());
+    let result2 = Config::try_from(base_path.join("secretspec2.toml").as_path());
     assert!(result2.is_err());
 
     // Test 3: Extend to non-existent directory
@@ -1264,7 +1173,7 @@ SECRET_C = { description = "Secret C", required = true }
 "#;
     fs::write(base_path.join("secretspec3.toml"), config_no_dir).unwrap();
 
-    let result3 = ProjectConfig::try_from(base_path.join("secretspec3.toml").as_path());
+    let result3 = Config::try_from(base_path.join("secretspec3.toml").as_path());
     assert!(result3.is_err());
     match result3 {
         Err(ParseError::Io(_e)) => {
@@ -1306,7 +1215,7 @@ NEW_SECRET = { description = "New secret", required = true }
     fs::write(base_path.join("secretspec.toml"), new_config).unwrap();
 
     // This should fail with unsupported revision error
-    let result = ProjectConfig::try_from(base_path.join("secretspec.toml").as_path());
+    let result = Config::try_from(base_path.join("secretspec.toml").as_path());
     assert!(result.is_err());
     match result {
         Err(ParseError::UnsupportedRevision(rev)) => {
@@ -1318,8 +1227,8 @@ NEW_SECRET = { description = "New secret", required = true }
 
 #[test]
 fn test_set_with_undefined_secret() {
-    let project_config = ProjectConfig {
-        project: ProjectInfo {
+    let project_config = Config {
+        project: Project {
             name: "test_project".to_string(),
             revision: "1.0".to_string(),
             extends: None,
@@ -1329,13 +1238,13 @@ fn test_set_with_undefined_secret() {
             let mut secrets = HashMap::new();
             secrets.insert(
                 "DEFINED_SECRET".to_string(),
-                SecretConfig {
+                Secret {
                     description: "A defined secret".to_string(),
                     required: true,
                     default: None,
                 },
             );
-            profiles.insert("default".to_string(), ProfileConfig { secrets });
+            profiles.insert("default".to_string(), Profile { secrets });
             profiles
         },
     };
@@ -1347,7 +1256,7 @@ fn test_set_with_undefined_secret() {
         },
     };
 
-    let spec = SecretSpec::new(project_config, Some(global_config));
+    let spec = Secrets::new(project_config, Some(global_config));
 
     // Test setting an undefined secret - env provider is read-only,
     // but we should get the SecretNotFound error before the provider error
@@ -1379,8 +1288,8 @@ fn test_set_with_defined_secret() {
     let original_dir = env::current_dir().unwrap();
     env::set_current_dir(&temp_dir).unwrap();
 
-    let project_config = ProjectConfig {
-        project: ProjectInfo {
+    let project_config = Config {
+        project: Project {
             name: "test_project".to_string(),
             revision: "1.0".to_string(),
             extends: None,
@@ -1390,13 +1299,13 @@ fn test_set_with_defined_secret() {
             let mut secrets = HashMap::new();
             secrets.insert(
                 "DEFINED_SECRET".to_string(),
-                SecretConfig {
+                Secret {
                     description: "A defined secret".to_string(),
                     required: true,
                     default: None,
                 },
             );
-            profiles.insert("default".to_string(), ProfileConfig { secrets });
+            profiles.insert("default".to_string(), Profile { secrets });
             profiles
         },
     };
@@ -1408,7 +1317,7 @@ fn test_set_with_defined_secret() {
         },
     };
 
-    let spec = SecretSpec::new(project_config, Some(global_config));
+    let spec = Secrets::new(project_config, Some(global_config));
 
     // This should succeed with dotenv provider
     let result = spec.set(
@@ -1427,8 +1336,8 @@ fn test_set_with_defined_secret() {
 
 #[test]
 fn test_set_with_readonly_provider() {
-    let project_config = ProjectConfig {
-        project: ProjectInfo {
+    let project_config = Config {
+        project: Project {
             name: "test_project".to_string(),
             revision: "1.0".to_string(),
             extends: None,
@@ -1438,13 +1347,13 @@ fn test_set_with_readonly_provider() {
             let mut secrets = HashMap::new();
             secrets.insert(
                 "DEFINED_SECRET".to_string(),
-                SecretConfig {
+                Secret {
                     description: "A defined secret".to_string(),
                     required: true,
                     default: None,
                 },
             );
-            profiles.insert("default".to_string(), ProfileConfig { secrets });
+            profiles.insert("default".to_string(), Profile { secrets });
             profiles
         },
     };
@@ -1456,7 +1365,7 @@ fn test_set_with_readonly_provider() {
         },
     };
 
-    let spec = SecretSpec::new(project_config, Some(global_config));
+    let spec = Secrets::new(project_config, Some(global_config));
 
     // Test setting a defined secret with env provider (which is read-only)
     let result = spec.set(
@@ -1482,8 +1391,8 @@ fn test_import_between_dotenv_files() {
     let project_path = temp_dir.path();
 
     // Create project config
-    let project_config = ProjectConfig {
-        project: ProjectInfo {
+    let project_config = Config {
+        project: Project {
             name: "test_import_project".to_string(),
             revision: "1.0".to_string(),
             extends: None,
@@ -1495,7 +1404,7 @@ fn test_import_between_dotenv_files() {
             // Add test secrets
             secrets.insert(
                 "SECRET_ONE".to_string(),
-                SecretConfig {
+                Secret {
                     description: "First test secret".to_string(),
                     required: true,
                     default: None,
@@ -1503,7 +1412,7 @@ fn test_import_between_dotenv_files() {
             );
             secrets.insert(
                 "SECRET_TWO".to_string(),
-                SecretConfig {
+                Secret {
                     description: "Second test secret".to_string(),
                     required: true,
                     default: None,
@@ -1511,7 +1420,7 @@ fn test_import_between_dotenv_files() {
             );
             secrets.insert(
                 "SECRET_THREE".to_string(),
-                SecretConfig {
+                Secret {
                     description: "Third test secret".to_string(),
                     required: false,
                     default: Some("default_value".to_string()),
@@ -1519,14 +1428,14 @@ fn test_import_between_dotenv_files() {
             );
             secrets.insert(
                 "SECRET_FOUR".to_string(),
-                SecretConfig {
+                Secret {
                     description: "Fourth test secret (not in source)".to_string(),
                     required: false,
                     default: None,
                 },
             );
 
-            profiles.insert("default".to_string(), ProfileConfig { secrets });
+            profiles.insert("default".to_string(), Profile { secrets });
             profiles
         },
     };
@@ -1546,16 +1455,16 @@ fn test_import_between_dotenv_files() {
     // Create global config with target dotenv as default provider
     let global_config = GlobalConfig {
         defaults: GlobalDefaults {
-            provider: Some(format!("dotenv:{}", target_env_path.display())),
+            provider: Some(format!("dotenv://{}", target_env_path.display())),
             profile: Some("default".to_string()),
         },
     };
 
     // Create SecretSpec instance
-    let spec = SecretSpec::new(project_config, Some(global_config));
+    let spec = Secrets::new(project_config, Some(global_config));
 
     // Import from source dotenv to target dotenv
-    let from_provider = format!("dotenv:{}", source_env_path.display());
+    let from_provider = format!("dotenv://{}", source_env_path.display());
     let result = spec.import(&from_provider);
     assert!(result.is_ok(), "Import should succeed: {:?}", result);
 
@@ -1601,8 +1510,8 @@ fn test_import_edge_cases() {
     let project_path = temp_dir.path();
 
     // Create project config
-    let project_config = ProjectConfig {
-        project: ProjectInfo {
+    let project_config = Config {
+        project: Project {
             name: "test_edge_cases".to_string(),
             revision: "1.0".to_string(),
             extends: None,
@@ -1613,7 +1522,7 @@ fn test_import_edge_cases() {
 
             secrets.insert(
                 "EMPTY_VALUE".to_string(),
-                SecretConfig {
+                Secret {
                     description: "Secret with empty value".to_string(),
                     required: true,
                     default: None,
@@ -1621,7 +1530,7 @@ fn test_import_edge_cases() {
             );
             secrets.insert(
                 "SPECIAL_CHARS".to_string(),
-                SecretConfig {
+                Secret {
                     description: "Secret with special characters".to_string(),
                     required: true,
                     default: None,
@@ -1629,14 +1538,14 @@ fn test_import_edge_cases() {
             );
             secrets.insert(
                 "MULTILINE".to_string(),
-                SecretConfig {
+                Secret {
                     description: "Secret with multiline value".to_string(),
                     required: true,
                     default: None,
                 },
             );
 
-            profiles.insert("default".to_string(), ProfileConfig { secrets });
+            profiles.insert("default".to_string(), Profile { secrets });
             profiles
         },
     };
@@ -1656,15 +1565,15 @@ fn test_import_edge_cases() {
     let target_env_path = project_path.join(".env.target");
     let global_config = GlobalConfig {
         defaults: GlobalDefaults {
-            provider: Some(format!("dotenv:{}", target_env_path.display())),
+            provider: Some(format!("dotenv://{}", target_env_path.display())),
             profile: Some("default".to_string()),
         },
     };
 
-    let spec = SecretSpec::new(project_config, Some(global_config));
+    let spec = Secrets::new(project_config, Some(global_config));
 
     // Import from source to target
-    let from_provider = format!("dotenv:{}", source_env_path.display());
+    let from_provider = format!("dotenv://{}", source_env_path.display());
     let result = spec.import(&from_provider);
     assert!(
         result.is_ok(),
@@ -1730,10 +1639,8 @@ API_KEY = { description = "Dev API key", required = true }
     fs::write(&project_path, config_content).unwrap();
 
     // Load the config
-    let spec = SecretSpec::builder()
-        .project_config_path(&project_path)
-        .load()
-        .unwrap();
+    let config = Config::try_from(project_path.as_path()).unwrap();
+    let spec = Secrets::new(config, None);
 
     // Test that profiles are completely independent
 
@@ -1798,8 +1705,8 @@ fn test_import_with_profiles() {
     let project_path = temp_dir.path();
 
     // Create project config with multiple profiles
-    let project_config = ProjectConfig {
-        project: ProjectInfo {
+    let project_config = Config {
+        project: Project {
             name: "test_profiles".to_string(),
             revision: "1.0".to_string(),
             extends: None,
@@ -1811,7 +1718,7 @@ fn test_import_with_profiles() {
             let mut dev_secrets = HashMap::new();
             dev_secrets.insert(
                 "DEV_SECRET".to_string(),
-                SecretConfig {
+                Secret {
                     description: "Development secret".to_string(),
                     required: true,
                     default: None,
@@ -1819,7 +1726,7 @@ fn test_import_with_profiles() {
             );
             dev_secrets.insert(
                 "SHARED_SECRET".to_string(),
-                SecretConfig {
+                Secret {
                     description: "Shared secret".to_string(),
                     required: true,
                     default: None,
@@ -1827,7 +1734,7 @@ fn test_import_with_profiles() {
             );
             profiles.insert(
                 "development".to_string(),
-                ProfileConfig {
+                Profile {
                     secrets: dev_secrets,
                 },
             );
@@ -1836,7 +1743,7 @@ fn test_import_with_profiles() {
             let mut prod_secrets = HashMap::new();
             prod_secrets.insert(
                 "PROD_SECRET".to_string(),
-                SecretConfig {
+                Secret {
                     description: "Production secret".to_string(),
                     required: true,
                     default: None,
@@ -1844,7 +1751,7 @@ fn test_import_with_profiles() {
             );
             prod_secrets.insert(
                 "SHARED_SECRET".to_string(),
-                SecretConfig {
+                Secret {
                     description: "Shared secret".to_string(),
                     required: true,
                     default: None,
@@ -1852,7 +1759,7 @@ fn test_import_with_profiles() {
             );
             profiles.insert(
                 "production".to_string(),
-                ProfileConfig {
+                Profile {
                     secrets: prod_secrets,
                 },
             );
@@ -1876,15 +1783,15 @@ fn test_import_with_profiles() {
     let target_env_path = project_path.join(".env.dev");
     let global_config = GlobalConfig {
         defaults: GlobalDefaults {
-            provider: Some(format!("dotenv:{}", target_env_path.display())),
+            provider: Some(format!("dotenv://{}", target_env_path.display())),
             profile: Some("development".to_string()), // Use development profile
         },
     };
 
-    let spec = SecretSpec::new(project_config, Some(global_config));
+    let spec = Secrets::new(project_config, Some(global_config));
 
     // Import should only import secrets from the active profile (development)
-    let from_provider = format!("dotenv:{}", source_env_path.display());
+    let from_provider = format!("dotenv://{}", source_env_path.display());
     let result = spec.import(&from_provider);
     assert!(result.is_ok());
 
@@ -1922,9 +1829,9 @@ fn test_run_with_empty_command() {
     let env_file = temp_dir.path().join(".env");
     fs::write(&env_file, "").unwrap();
 
-    let spec = SecretSpec::new(
-        ProjectConfig {
-            project: ProjectInfo {
+    let spec = Secrets::new(
+        Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -1933,7 +1840,7 @@ fn test_run_with_empty_command() {
         },
         Some(GlobalConfig {
             defaults: GlobalDefaults {
-                provider: Some(format!("dotenv:{}", env_file.display())),
+                provider: Some(format!("dotenv://{}", env_file.display())),
                 profile: None,
             },
         }),
@@ -1961,7 +1868,7 @@ fn test_run_with_missing_required_secrets() {
     let mut secrets = HashMap::new();
     secrets.insert(
         "REQUIRED_SECRET".to_string(),
-        SecretConfig {
+        Secret {
             description: "A required secret".to_string(),
             required: true,
             default: None,
@@ -1969,11 +1876,11 @@ fn test_run_with_missing_required_secrets() {
     );
 
     let mut profiles = HashMap::new();
-    profiles.insert("default".to_string(), ProfileConfig { secrets });
+    profiles.insert("default".to_string(), Profile { secrets });
 
-    let spec = SecretSpec::new(
-        ProjectConfig {
-            project: ProjectInfo {
+    let spec = Secrets::new(
+        Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -1982,7 +1889,7 @@ fn test_run_with_missing_required_secrets() {
         },
         Some(GlobalConfig {
             defaults: GlobalDefaults {
-                provider: Some(format!("dotenv:{}", env_file.display())),
+                provider: Some(format!("dotenv://{}", env_file.display())),
                 profile: None,
             },
         }),
@@ -2008,7 +1915,7 @@ fn test_get_existing_secret() {
     let mut secrets = HashMap::new();
     secrets.insert(
         "TEST_SECRET".to_string(),
-        SecretConfig {
+        Secret {
             description: "Test secret".to_string(),
             required: true,
             default: None,
@@ -2016,11 +1923,11 @@ fn test_get_existing_secret() {
     );
 
     let mut profiles = HashMap::new();
-    profiles.insert("default".to_string(), ProfileConfig { secrets });
+    profiles.insert("default".to_string(), Profile { secrets });
 
-    let spec = SecretSpec::new(
-        ProjectConfig {
-            project: ProjectInfo {
+    let spec = Secrets::new(
+        Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -2029,14 +1936,14 @@ fn test_get_existing_secret() {
         },
         Some(GlobalConfig {
             defaults: GlobalDefaults {
-                provider: Some(format!("dotenv:{}", env_file.display())),
+                provider: Some(format!("dotenv://{}", env_file.display())),
                 profile: None,
             },
         }),
     );
 
     let result = spec.get("TEST_SECRET", None, None);
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "Failed to get secret: {:?}", result);
 }
 
 #[test]
@@ -2049,7 +1956,7 @@ fn test_get_secret_with_default() {
     let mut secrets = HashMap::new();
     secrets.insert(
         "SECRET_WITH_DEFAULT".to_string(),
-        SecretConfig {
+        Secret {
             description: "Secret with default value".to_string(),
             required: false,
             default: Some("default_value".to_string()),
@@ -2057,11 +1964,11 @@ fn test_get_secret_with_default() {
     );
 
     let mut profiles = HashMap::new();
-    profiles.insert("default".to_string(), ProfileConfig { secrets });
+    profiles.insert("default".to_string(), Profile { secrets });
 
-    let spec = SecretSpec::new(
-        ProjectConfig {
-            project: ProjectInfo {
+    let spec = Secrets::new(
+        Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -2070,7 +1977,7 @@ fn test_get_secret_with_default() {
         },
         Some(GlobalConfig {
             defaults: GlobalDefaults {
-                provider: Some(format!("dotenv:{}", env_file.display())),
+                provider: Some(format!("dotenv://{}", env_file.display())),
                 profile: None,
             },
         }),
@@ -2089,7 +1996,7 @@ fn test_get_nonexistent_secret() {
     let mut secrets = HashMap::new();
     secrets.insert(
         "EXISTING_SECRET".to_string(),
-        SecretConfig {
+        Secret {
             description: "Existing secret".to_string(),
             required: true,
             default: None,
@@ -2097,11 +2004,11 @@ fn test_get_nonexistent_secret() {
     );
 
     let mut profiles = HashMap::new();
-    profiles.insert("default".to_string(), ProfileConfig { secrets });
+    profiles.insert("default".to_string(), Profile { secrets });
 
-    let spec = SecretSpec::new(
-        ProjectConfig {
-            project: ProjectInfo {
+    let spec = Secrets::new(
+        Config {
+            project: Project {
                 name: "test".to_string(),
                 revision: "1.0".to_string(),
                 extends: None,
@@ -2110,7 +2017,7 @@ fn test_get_nonexistent_secret() {
         },
         Some(GlobalConfig {
             defaults: GlobalDefaults {
-                provider: Some(format!("dotenv:{}", env_file.display())),
+                provider: Some(format!("dotenv://{}", env_file.display())),
                 profile: None,
             },
         }),

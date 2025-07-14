@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-SecretSpec is a declarative secrets manager for development workflows written in Rust. It provides a CLI tool and Rust library for managing environment variables and secrets across different environments using multiple storage backends (keyring, dotenv, environment variables, 1Password, LastPass).
+SecretSpec is a declarative secrets manager for development workflows written in Rust. It provides a CLI tool and Rust library for managing environment variables and secrets across different environments using multiple storage backends (keyring, dotenv, environment variables, OnePassword, LastPass).
 
 ## Build and Development Commands
 
@@ -47,8 +47,8 @@ cd docs && npm run dev
 The project is organized as a Rust workspace with three interdependent crates:
 
 1. **secretspec** (src/): Main CLI and library
-   - `main.rs:20`: CLI entry point with command definitions (init, config, set/get, check, run, import)
-   - `lib.rs`: Core library with `SecretSpec` struct, validation logic, and CRUD operations
+   - `main.rs`: CLI entry point with command definitions (init, config, set/get, check, run, import)
+   - `lib.rs`: Core library with `Secrets` struct, validation logic, and CRUD operations
    - `provider/`: Storage backend implementations with trait-based plugin architecture
 
 2. **secretspec-derive**: Proc macro for type-safe code generation
@@ -57,22 +57,22 @@ The project is organized as a Rust workspace with three interdependent crates:
    - Supports both union types (safe for any profile) and profile-specific types
    - Validates secret names produce valid Rust identifiers
 
-3. **secretspec-types**: Shared type definitions
-   - Core configuration types (ProjectConfig, SecretConfig)
+3. **secretspec-core**: Shared type definitions
+   - Core configuration types (Config, Secret)
    - TOML parsing and serialization
    - Config file inheritance logic with circular dependency detection
    - Provider enum definitions
 
 ## Provider System
 
-The provider system uses a trait-based architecture defined in `src/provider/mod.rs:27`. When implementing new providers:
+The provider system uses a trait-based architecture defined in `src/provider/mod.rs`. When implementing new providers:
 
 1. Create module in `src/provider/your_provider.rs`
 2. Implement the `Provider` trait with methods: `get()`, `set()`, `allows_set()`, `name()`, `description()`
-3. Register in `ProviderRegistry::new()` in `src/provider/registry.rs`
+3. Use the `#[provider]` macro for automatic registration
 4. Handle profile-aware storage paths (e.g., `secretspec/{project}/{profile}/{key}`)
 
-Providers support URI-based configuration (e.g., `keyring://`, `1password://vault`, `dotenv://.env.production`).
+Providers support URI-based configuration (e.g., `keyring://`, `onepassword://vault`, `dotenv://.env.production`).
 
 ## Configuration System
 
@@ -117,7 +117,7 @@ cargo test provider_tests
 SECRETSPEC_TEST_PROVIDERS=keyring,dotenv cargo test provider_tests
 
 # Test all providers
-SECRETSPEC_TEST_PROVIDERS=keyring,dotenv,env,1password,lastpass cargo test provider_tests
+SECRETSPEC_TEST_PROVIDERS=keyring,dotenv,env,onepassword,lastpass cargo test provider_tests
 
 # Run with output visible
 SECRETSPEC_TEST_PROVIDERS=dotenv cargo test provider_tests -- --nocapture
@@ -135,10 +135,10 @@ Note: Some providers (like `env`) are read-only and will skip write tests.
 ## Key Files
 
 - `secretspec.toml`: Project secrets configuration
-- `src/provider/mod.rs:27`: Provider trait definition
+- `src/provider/mod.rs`: Provider trait definition
 - `src/provider/registry.rs`: Provider factory and URI parsing
-- `src/main.rs:20`: CLI command definitions
+- `src/main.rs`: CLI command definitions
 - `src/lib.rs`: Core SecretSpec implementation
 - `secretspec-derive/src/lib.rs`: Code generation macro implementation
-- `secretspec-types/src/lib.rs`: Shared type definitions
+- `secretspec-core/src/lib.rs`: Shared type definitions
 - `tests/integration/provider_tests.rs`: Generic provider test suite

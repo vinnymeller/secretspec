@@ -96,7 +96,7 @@ The same application works across different secret storage backends without any 
 $ secretspec config init
 ? Select your preferred provider backend:
 > keyring: Uses system keychain (Recommended)
-  1password: 1Password password manager
+  onepassword: OnePassword password manager
   dotenv: Traditional .env files
   env: Read-only environment variables
   lastpass: LastPass password manager
@@ -111,7 +111,7 @@ $ secretspec config init
 - [**Keyring**](/providers/keyring/) - System credential store (Keychain on macOS, Credential Manager on Windows, Secret Service on Linux)
 - [**Dotenv**](/providers/dotenv/) - Traditional .env files for local development
 - [**Environment**](/providers/env/) - Read-only access to environment variables for CI/CD
-- [**1Password**](/providers/1password/) - Team-based password management
+- [**OnePassword**](/providers/onepassword/) - Team-based password management
 - [**LastPass**](/providers/lastpass/) - Cloud-based password manager
 
 [Learn how to add a new provider →](/reference/adding-providers/)
@@ -123,11 +123,11 @@ $ secretspec set DATABASE_URL
 
 # Override provider for specific commands
 $ secretspec run --provider env -- npm test
-$ secretspec run --provider 1password://vault -- npm start
+$ secretspec run --provider onepassword://vault -- npm start
 
 # Or use environment variables
 $ SECRETSPEC_PROVIDER=env secretspec run -- npm test
-$ SECRETSPEC_PROVIDER=1password://vault secretspec run -- npm start
+$ SECRETSPEC_PROVIDER=onepassword://vault secretspec run -- npm start
 ```
 
 [Learn more about providers →](/concepts/providers/)
