@@ -26,6 +26,6 @@
   '';
 
   processes.docs.exec = ''
-    cd docs && astro dev
+    cd docs && npx run astro dev
   '';
 }
