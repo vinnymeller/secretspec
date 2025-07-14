@@ -146,7 +146,7 @@ secretspec::define_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load secrets with type-safe struct
-    let secretspec = SecretSpec::load(Some(Provider::Keyring), Some(Profile::Production))?;
+    let secretspec = Secrets::load(Some(Provider::Keyring), Some(Profile::Production))?;
 
     // Field names are lowercased versions of secret names
     // Required secrets are String (not Option<String>)

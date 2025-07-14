@@ -154,10 +154,10 @@ impl Config {
         }
 
         // Process extends if present
-        if let Some(ref extends_paths) = config.project.extends {
+        if let Some(extends_paths) = config.project.extends.clone() {
             if let Some(base) = base_path {
                 let base_dir = base.parent().unwrap_or(Path::new("."));
-                config = Self::merge_extended_configs(config, extends_paths, base_dir, visited)?;
+                config = Self::merge_extended_configs(config, &extends_paths, base_dir, visited)?;
             }
         }
 

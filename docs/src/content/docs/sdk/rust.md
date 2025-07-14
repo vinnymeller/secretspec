@@ -22,25 +22,25 @@ secretspec::define_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load secrets using the builder pattern
-    let secretspec = Secrets::builder()
+    let secrets = Secrets::builder()
         .with_provider("keyring")  // Can use provider name or URI like "dotenv:/path/to/.env"
         .with_profile("development")  // Can use string or Profile enum
         .load()?;  // All conversions and errors are handled here
 
     // Access secrets (field names are lowercased)
-    println!("Database: {}", secretspec.secrets.database_url);  // DATABASE_URL → database_url
+    println!("Database: {}", secrets.secrets.database_url);  // DATABASE_URL → database_url
 
     // Optional secrets are Option<String>
-    if let Some(redis) = &secretspec.secrets.redis_url {
+    if let Some(redis) = &secrets.secrets.redis_url {
         println!("Redis: {}", redis);
     }
 
     // Access profile and provider information
-    println!("Using profile: {}", secretspec.profile);
-    println!("Using provider: {}", secretspec.provider);
+    println!("Using profile: {}", secrets.profile);
+    println!("Using provider: {}", secrets.provider);
 
     // Set all secrets as environment variables
-    secretspec.secrets.set_as_env_vars();
+    secrets.secrets.set_as_env_vars();
 
     Ok(())
 }
@@ -55,23 +55,23 @@ secretspec::define_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load secrets with profile-specific types
-    let secretspec = Secrets::builder()
+    let secrets = Secrets::builder()
         .with_provider("keyring")
         .with_profile(Profile::Production)
         .load_profile()?;
     
     // Access profile and provider information
-    println!("Loaded profile: {}", secretspec.profile);
-    println!("Using provider: {}", secretspec.provider);
+    println!("Loaded profile: {}", secrets.profile);
+    println!("Using provider: {}", secrets.provider);
     
     // Access secrets through profile-specific enum
-    match secretspec.secrets {
-        SecretSpecProfile::Production { database_url, api_key, .. } => {
+    match secrets.secrets {
+        SecretsProfile::Production { database_url, api_key, .. } => {
             // In production: these are String (required)
             println!("Database: {}", database_url);
             println!("API Key: {}", api_key);
         }
-        SecretSpecProfile::Development { database_url, api_key, .. } => {
+        SecretsProfile::Development { database_url, api_key, .. } => {
             // In development: these might be Option<String> if they have defaults
             if let Some(db) = database_url {
                 println!("Database: {}", db);
