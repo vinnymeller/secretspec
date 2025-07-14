@@ -1,0 +1,41 @@
+//! Validation results for secret checking
+
+use crate::provider::Provider as ProviderTrait;
+use std::collections::HashMap;
+
+/// Container for validated secrets with metadata
+///
+/// This struct contains the validated secrets along with information about
+/// which secrets are present, missing, or using default values.
+pub struct ValidatedSecrets {
+    /// Map of secret names to their values
+    pub secrets: HashMap<String, String>,
+    /// List of required secrets that are missing
+    pub missing_required: Vec<String>,
+    /// List of optional secrets that are missing
+    pub missing_optional: Vec<String>,
+    /// List of secrets using their default values (name, default_value)
+    pub with_defaults: Vec<(String, String)>,
+    /// The provider used for validation
+    pub provider: Box<dyn ProviderTrait>,
+    /// The profile used for validation
+    pub profile: String,
+}
+
+impl ValidatedSecrets {
+    /// Checks if the validation result represents a valid state
+    ///
+    /// A validation result is considered valid if there are no missing required secrets.
+    ///
+    /// # Returns
+    ///
+    /// `true` if all required secrets are present, `false` otherwise
+    pub fn is_valid(&self) -> bool {
+        self.missing_required.is_empty()
+    }
+
+    /// Get the provider name
+    pub fn provider_name(&self) -> String {
+        self.provider.name().to_string()
+    }
+}

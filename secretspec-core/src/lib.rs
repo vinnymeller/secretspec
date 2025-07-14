@@ -368,6 +368,72 @@ pub struct GlobalDefaults {
     pub profile: Option<String>,
 }
 
+impl GlobalConfig {
+    /// Gets the path to the global configuration file.
+    ///
+    /// The configuration file is stored in the system's config directory,
+    /// typically `~/.config/secretspec/config.toml` on Unix systems.
+    ///
+    /// # Returns
+    ///
+    /// The path to the global configuration file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the config directory cannot be determined
+    pub fn path() -> Result<PathBuf, io::Error> {
+        use directories::ProjectDirs;
+        let dirs = ProjectDirs::from("", "", "secretspec").ok_or_else(|| {
+            io::Error::new(io::ErrorKind::NotFound, "Could not find config directory")
+        })?;
+        Ok(dirs.config_dir().join("config.toml"))
+    }
+
+    /// Loads the global user configuration.
+    ///
+    /// This method looks for the configuration file in the system's config
+    /// directory. If the file doesn't exist, it returns `Ok(None)`.
+    ///
+    /// # Returns
+    ///
+    /// The loaded global configuration, or `None` if not found
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file exists but cannot be parsed
+    pub fn load() -> Result<Option<Self>, ParseError> {
+        let config_path = Self::path().map_err(ParseError::Io)?;
+        if !config_path.exists() {
+            return Ok(None);
+        }
+        let content = std::fs::read_to_string(&config_path).map_err(ParseError::Io)?;
+        toml::from_str(&content).map(Some).map_err(ParseError::Toml)
+    }
+
+    /// Saves the global configuration to disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The config directory cannot be created
+    /// - The file cannot be written
+    /// - The configuration cannot be serialized
+    pub fn save(&self) -> Result<(), io::Error> {
+        let config_path = Self::path()?;
+
+        // Ensure the parent directory exists
+        if let Some(parent) = config_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        let content = toml::to_string_pretty(self)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        std::fs::write(&config_path, content)?;
+
+        Ok(())
+    }
+}
+
 /// Container for resolved secrets with their context.
 ///
 /// This generic struct wraps the actual secret values along with

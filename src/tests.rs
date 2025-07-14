@@ -1,6 +1,12 @@
 use super::*;
-use secretspec_core::Secret;
+use crate::error::{Result, SecretSpecError};
+use crate::provider::Provider as ProviderTrait;
+use crate::secrets::Secrets;
+use crate::validation::ValidatedSecrets;
+use secretspec_core::{Config, GlobalConfig, ParseError, Profile, Project, Secret};
+use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::path::Path;
 use std::{fs, io};
 use tempfile::TempDir;
 
@@ -36,7 +42,7 @@ fn test_new_with_project_config() {
 
     let spec = Secrets::new(config, None);
 
-    assert_eq!(spec.config.project.name, "test-project");
+    assert_eq!(spec.config().project.name, "test-project");
 }
 
 #[test]
@@ -72,10 +78,15 @@ profile = "development"
 
     let spec = Secrets::new(config, global_config);
 
-    assert_eq!(spec.config.project.name, "custom-project");
+    assert_eq!(spec.config().project.name, "custom-project");
     assert_eq!(
-        spec.global_config.as_ref().unwrap().defaults.provider,
-        Some("keyring".to_string())
+        spec.global_config()
+            .as_ref()
+            .unwrap()
+            .defaults
+            .provider
+            .as_ref(),
+        Some(&"keyring".to_string())
     );
 }
 
@@ -100,7 +111,7 @@ fn test_new_with_default_overrides() {
 
     let spec = Secrets::new(config, Some(global_config));
 
-    assert_eq!(spec.config.project.name, "test-project");
+    assert_eq!(spec.config().project.name, "test-project");
 }
 
 #[test]
@@ -241,15 +252,15 @@ fn test_secretspec_new() {
     };
 
     let spec = Secrets::new(config.clone(), Some(global_config.clone()));
-    assert_eq!(spec.config.project.name, "test");
-    assert!(spec.global_config.is_some());
+    assert_eq!(spec.config().project.name, "test");
+    assert!(spec.global_config().is_some());
     assert_eq!(
-        spec.global_config.unwrap().defaults.provider,
+        spec.global_config().as_ref().unwrap().defaults.provider,
         Some("keyring".to_string())
     );
 
     let spec_without_global = Secrets::new(config, None);
-    assert!(spec_without_global.global_config.is_none());
+    assert!(spec_without_global.global_config().is_none());
 }
 
 #[test]

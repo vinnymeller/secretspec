@@ -2,10 +2,8 @@ use crate::provider::{dotenv::DotEnvProvider, providers};
 use crate::{Config, GlobalConfig, GlobalDefaults, Profile, Project, Secrets};
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::{Result, WrapErr};
-use directories::ProjectDirs;
 use std::collections::HashMap;
 use std::fs;
-use std::io;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -103,65 +101,6 @@ enum ConfigAction {
     Init,
     /// Show current configuration
     Show,
-}
-
-/// Get the path to the user's configuration file.
-///
-/// Returns the platform-specific configuration directory path for secretspec,
-/// typically ~/.config/secretspec/config.toml on Unix systems.
-///
-/// # Returns
-///
-/// * `Ok(PathBuf)` - The path to the configuration file
-/// * `Err` - If the configuration directory cannot be determined
-///
-fn get_config_path() -> crate::Result<PathBuf> {
-    let dirs = ProjectDirs::from("", "", "secretspec").ok_or_else(|| {
-        io::Error::new(io::ErrorKind::NotFound, "Could not find config directory")
-    })?;
-    Ok(dirs.config_dir().join("config.toml"))
-}
-
-/// Load the global configuration from disk.
-///
-/// Reads and parses the user's global configuration file if it exists.
-/// Returns `None` if the configuration file doesn't exist.
-///
-/// # Returns
-///
-/// * `Ok(Some(GlobalConfig))` - The parsed configuration
-/// * `Ok(None)` - If the configuration file doesn't exist
-/// * `Err` - If reading or parsing the configuration fails
-fn load_global_config() -> crate::Result<Option<GlobalConfig>> {
-    let config_path = get_config_path()?;
-    if !config_path.exists() {
-        return Ok(None);
-    }
-    let content = fs::read_to_string(&config_path)?;
-    Ok(Some(toml::from_str(&content)?))
-}
-
-/// Save the global configuration to disk.
-///
-/// Writes the provided configuration to the user's configuration file,
-/// creating parent directories if necessary.
-///
-/// # Arguments
-///
-/// * `config` - The configuration to save
-///
-/// # Returns
-///
-/// * `Ok(())` - If the configuration was saved successfully
-/// * `Err` - If creating directories or writing the file fails
-fn save_global_config(config: &GlobalConfig) -> crate::Result<()> {
-    let config_path = get_config_path()?;
-    if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let content = toml::to_string_pretty(config)?;
-    fs::write(&config_path, content)?;
-    Ok(())
 }
 
 /// Returns an example TOML configuration string
@@ -368,18 +307,18 @@ pub fn main() -> Result<()> {
                     },
                 };
 
-                save_global_config(&config)?;
+                config.save()?;
                 println!(
                     "\n✓ Configuration saved to {}",
-                    get_config_path()?.display()
+                    GlobalConfig::path()?.display()
                 );
                 Ok(())
             }
             // Display current user configuration
             ConfigAction::Show => {
-                match load_global_config()? {
+                match GlobalConfig::load()? {
                     Some(config) => {
-                        println!("Configuration file: {}\n", get_config_path()?.display());
+                        println!("Configuration file: {}\n", GlobalConfig::path()?.display());
                         match config.defaults.provider {
                             Some(provider) => println!("Provider: {}", provider),
                             None => println!("Provider: (none)"),
