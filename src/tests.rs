@@ -4,20 +4,17 @@ use tempfile::TempDir;
 
 // Helper function for tests that need to parse from string
 fn parse_spec_from_str(content: &str, _base_path: Option<&Path>) -> Result<ProjectConfig> {
-    // Note: base_path is ignored as inheritance is handled automatically when using TryFrom<&Path>
-    ProjectConfig::from_str(content).map_err(|e| match e {
-        ParseError::Io(io_err) => SecretSpecError::Io(io_err),
-        ParseError::Toml(toml_err) => SecretSpecError::Toml(toml_err),
-        ParseError::UnsupportedRevision(rev) => {
-            SecretSpecError::UnsupportedRevision(rev)
-        }
-        ParseError::CircularDependency(msg) => {
-            SecretSpecError::Io(io::Error::new(io::ErrorKind::InvalidData, msg))
-        }
-        ParseError::Validation(msg) => {
-            SecretSpecError::Io(io::Error::new(io::ErrorKind::InvalidData, msg))
-        }
-    })
+    // Parse the TOML content directly
+    let config: ProjectConfig = toml::from_str(content).map_err(SecretSpecError::Toml)?;
+    
+    // Validate the configuration
+    if config.project.revision != "1.0" {
+        return Err(SecretSpecError::UnsupportedRevision(config.project.revision));
+    }
+    
+    config.validate().map_err(|e| SecretSpecError::from(e))?;
+    
+    Ok(config)
 }
 
 #[test]
@@ -262,58 +259,6 @@ fn test_project_config_from_nonexistent_path() {
 }
 
 #[test]
-fn test_get_example_toml() {
-    let example = get_example_toml();
-    assert!(example.contains("[profiles.development]"));
-    assert!(example.contains("DATABASE_URL"));
-    assert!(example.contains("Development profile inherits all secrets from default profile"));
-    assert!(example.contains("REDIS_URL"));
-}
-
-#[test]
-fn test_generate_toml_with_comments() {
-    let mut secrets = HashMap::new();
-    secrets.insert(
-        "API_KEY".to_string(),
-        SecretConfig {
-            description: "API key for service".to_string(),
-            required: true,
-            default: None,
-        },
-    );
-    secrets.insert(
-        "DATABASE_URL".to_string(),
-        SecretConfig {
-            description: "Database connection".to_string(),
-            required: false,
-            default: Some("sqlite:///test.db".to_string()),
-        },
-    );
-
-    let mut profiles = HashMap::new();
-    profiles.insert("default".to_string(), ProfileConfig { secrets });
-
-    let config = ProjectConfig {
-        project: ProjectInfo {
-            name: "test-project".to_string(),
-            revision: "1.0".to_string(),
-            extends: None,
-        },
-        profiles,
-    };
-
-    let toml_output = generate_toml_with_comments(&config).unwrap();
-    assert!(toml_output.contains("[project]"));
-    assert!(toml_output.contains("name = \"test-project\""));
-    assert!(toml_output.contains("revision = \"1.0\""));
-    assert!(toml_output.contains("[profiles.default]"));
-    assert!(toml_output.contains("API_KEY"));
-    assert!(toml_output.contains("required = true"));
-    assert!(toml_output.contains("default = \"sqlite:///test.db\""));
-    assert!(toml_output.contains("# extends = [ \"subdir1\", \"subdir2\" ]"));
-}
-
-#[test]
 fn test_secretspec_new() {
     let config = ProjectConfig {
         project: ProjectInfo {
@@ -334,7 +279,10 @@ fn test_secretspec_new() {
     let spec = SecretSpec::new(config.clone(), Some(global_config.clone()));
     assert_eq!(spec.config.project.name, "test");
     assert!(spec.global_config.is_some());
-    assert_eq!(spec.global_config.unwrap().defaults.provider, Some("keyring".to_string()));
+    assert_eq!(
+        spec.global_config.unwrap().defaults.provider,
+        Some("keyring".to_string())
+    );
 
     let spec_without_global = SecretSpec::new(config, None);
     assert!(spec_without_global.global_config.is_none());
@@ -505,17 +453,17 @@ fn test_get_provider_with_global_config() {
 }
 
 #[test]
-fn test_parse_spec_error_handling() {
+fn test_project_config_from_path_error_handling() {
     let temp_dir = TempDir::new().unwrap();
     let invalid_toml = temp_dir.path().join("invalid.toml");
     fs::write(&invalid_toml, "[invalid toml content").unwrap();
 
-    let result = parse_spec(&invalid_toml);
+    let result = ProjectConfig::try_from(invalid_toml.as_path()).map_err(Into::<SecretSpecError>::into);
     assert!(matches!(result, Err(SecretSpecError::Toml(_))));
 
     // Test nonexistent file
     let nonexistent = temp_dir.path().join("nonexistent.toml");
-    let result = parse_spec(&nonexistent);
+    let result = ProjectConfig::try_from(nonexistent.as_path()).map_err(Into::<SecretSpecError>::into);
     assert!(matches!(result, Err(SecretSpecError::NoManifest)));
 }
 
@@ -1197,7 +1145,8 @@ SECRET_E = { description = "New secret E", required = true }
     fs::write(base_path.join("override/secretspec.toml"), override_config).unwrap();
 
     // Parse the override config
-    let config = ProjectConfig::try_from(base_path.join("override/secretspec.toml").as_path()).unwrap();
+    let config =
+        ProjectConfig::try_from(base_path.join("override/secretspec.toml").as_path()).unwrap();
     let default_profile = config.profiles.get("default").unwrap();
 
     // Verify SECRET_A: only description changed

@@ -229,14 +229,13 @@ pub fn define_secrets(input: TokenStream) -> TokenStream {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
     let full_path = std::path::Path::new(&manifest_dir).join(&path);
 
-    let config: ProjectConfig =
-        match ProjectConfig::try_from(full_path.as_path()) {
-            Ok(config) => config,
-            Err(e) => {
-                let error = format!("Failed to parse TOML: {}", e);
-                return quote! { compile_error!(#error); }.into();
-            }
-        };
+    let config: ProjectConfig = match ProjectConfig::try_from(full_path.as_path()) {
+        Ok(config) => config,
+        Err(e) => {
+            let error = format!("Failed to parse TOML: {}", e);
+            return quote! { compile_error!(#error); }.into();
+        }
+    };
 
     // Validate the configuration at compile time
     if let Err(validation_errors) = validate_config_for_codegen(&config) {

@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::{Result, WrapErr};
 use directories::ProjectDirs;
-use secretspec::{GlobalConfig, GlobalDefaults, SecretSpec};
+use secretspec::{GlobalConfig, GlobalDefaults, SecretSpec, ProjectConfig};
 use std::fs;
 use std::io;
 #[cfg(unix)]
@@ -167,6 +167,76 @@ fn save_global_config(config: &GlobalConfig) -> secretspec::Result<()> {
     Ok(())
 }
 
+/// Returns an example TOML configuration string
+///
+/// This function provides a template for creating new `secretspec.toml` files,
+/// showing the recommended structure and commenting conventions.
+///
+/// # Returns
+///
+/// A static string containing an example TOML configuration
+fn get_example_toml() -> &'static str {
+    r#"# DATABASE_URL = { description = "Database connection string", required = true }
+
+[profiles.development]
+# Development profile inherits all secrets from default profile
+# Only define secrets here that need different values or settings than default
+# DATABASE_URL = { default = "sqlite:///dev.db" }
+#
+# New secrets
+# REDIS_URL = { description = "Redis connection URL for caching", required = false, default = "redis://localhost:6379" }
+"#
+}
+
+/// Generates a TOML string from a ProjectConfig with helpful comments
+///
+/// This function serializes a `ProjectConfig` to TOML format while adding
+/// instructional comments to help users understand the configuration options.
+///
+/// # Arguments
+///
+/// * `config` - The project configuration to serialize
+///
+/// # Returns
+///
+/// A TOML string with the configuration and helpful comments
+///
+/// # Errors
+///
+/// Returns an error if the configuration cannot be serialized
+fn generate_toml_with_comments(config: &ProjectConfig) -> secretspec::Result<String> {
+    let mut output = String::new();
+
+    // Project section
+    output.push_str("[project]\n");
+    output.push_str(&format!("name = \"{}\"\n", config.project.name));
+    output.push_str(&format!("revision = \"{}\"\n", config.project.revision));
+
+    // Add extends comment and field if needed
+    output.push_str("# Extend configurations from subdirectories\n");
+    output.push_str("# extends = [ \"subdir1\", \"subdir2\" ]\n");
+
+    // Profile sections
+    for (profile_name, profile_config) in &config.profiles {
+        output.push_str(&format!("\n[profiles.{}]\n", profile_name));
+
+        for (secret_name, secret_config) in &profile_config.secrets {
+            output.push_str(&format!(
+                "{} = {{ description = \"{}\", required = {}",
+                secret_name, secret_config.description, secret_config.required
+            ));
+
+            if let Some(default) = &secret_config.default {
+                output.push_str(&format!(", default = \"{}\"", default));
+            }
+
+            output.push_str(" }\n");
+        }
+    }
+
+    Ok(output)
+}
+
 /// Main entry point for the secretspec CLI application.
 ///
 /// Parses command-line arguments and executes the appropriate command.
@@ -196,10 +266,10 @@ fn main() -> Result<()> {
             }
 
             let project_config = secretspec::project_config_from_path(&from)?;
-            let mut content = secretspec::generate_toml_with_comments(&project_config)?;
+            let mut content = generate_toml_with_comments(&project_config)?;
 
             // Append comprehensive example
-            content.push_str(secretspec::get_example_toml());
+            content.push_str(get_example_toml());
 
             fs::write("secretspec.toml", content)?;
 

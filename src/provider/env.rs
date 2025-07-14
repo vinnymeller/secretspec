@@ -40,7 +40,7 @@ impl EnvConfig {
     /// ```
     /// # use http::Uri;
     /// # use secretspec::provider::env::EnvConfig;
-    /// let uri = "env://".parse::<Uri>().unwrap();
+    /// let uri = "env://localhost".parse::<Uri>().unwrap();
     /// let config = EnvConfig::from_uri(&uri).unwrap();
     /// ```
     pub fn from_uri(uri: &Uri) -> Result<Self> {
@@ -123,7 +123,7 @@ impl EnvProvider {
     /// ```
     /// # use http::Uri;
     /// # use secretspec::provider::env::EnvProvider;
-    /// let uri = "env://".parse::<Uri>().unwrap();
+    /// let uri = "env://localhost".parse::<Uri>().unwrap();
     /// let provider = EnvProvider::from_uri(&uri).unwrap();
     /// ```
     pub fn from_uri(uri: &Uri) -> Result<Self> {
@@ -155,7 +155,7 @@ impl Provider for EnvProvider {
     ///
     /// ```
     /// # use secretspec::provider::{Provider, env::{EnvProvider, EnvConfig}};
-    /// # std::env::set_var("MY_SECRET", "value123");
+    /// # unsafe { std::env::set_var("MY_SECRET", "value123"); }
     /// let provider = EnvProvider::new(EnvConfig::default());
     /// let value = provider.get("myproject", "MY_SECRET", "production").unwrap();
     /// assert_eq!(value, Some("value123".to_string()));

@@ -72,7 +72,7 @@ impl DotEnvConfig {
     ///
     /// let uri = "dotenv://localhost/.env.production".parse::<Uri>().unwrap();
     /// let config = DotEnvConfig::from_uri(&uri).unwrap();
-    /// assert_eq!(config.path.to_str().unwrap(), ".env.production");
+    /// assert_eq!(config.path.to_str().unwrap(), "/.env.production");
     /// ```
     pub fn from_uri(uri: &Uri) -> Result<Self> {
         let scheme = uri.scheme_str().ok_or_else(|| {

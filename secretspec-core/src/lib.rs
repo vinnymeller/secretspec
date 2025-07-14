@@ -1,6 +1,6 @@
 //! # SecretSpec Core
 //!
-//! This crate provides the core type definitions and parsing logic for the SecretSpec 
+//! This crate provides the core type definitions and parsing logic for the SecretSpec
 //! configuration system.
 //!
 //! SecretSpec uses a declarative TOML-based configuration format to define secrets
@@ -53,7 +53,6 @@ pub struct ProjectConfig {
 }
 
 impl ProjectConfig {
-
     /// Validate the configuration.
     ///
     /// Ensures that:
@@ -67,17 +66,22 @@ impl ProjectConfig {
     /// Returns a `ParseError` if validation fails.
     pub fn validate(&self) -> Result<(), ParseError> {
         if self.project.name.is_empty() {
-            return Err(ParseError::Validation("Project name cannot be empty".into()));
+            return Err(ParseError::Validation(
+                "Project name cannot be empty".into(),
+            ));
         }
 
         if self.profiles.is_empty() {
-            return Err(ParseError::Validation("At least one profile must be defined".into()));
+            return Err(ParseError::Validation(
+                "At least one profile must be defined".into(),
+            ));
         }
 
         // Validate each profile
         for (profile_name, profile) in &self.profiles {
-            profile.validate()
-                .map_err(|e| ParseError::Validation(format!("Profile '{}': {}", profile_name, e)))?;
+            profile.validate().map_err(|e| {
+                ParseError::Validation(format!("Profile '{}': {}", profile_name, e))
+            })?;
         }
 
         Ok(())
@@ -255,10 +259,14 @@ impl ProfileConfig {
         for (name, secret) in &self.secrets {
             // Validate secret name is a valid identifier
             if !is_valid_identifier(name) {
-                return Err(format!("Invalid secret name '{}': must be a valid identifier (alphanumeric and underscores, not starting with a number)", name));
+                return Err(format!(
+                    "Invalid secret name '{}': must be a valid identifier (alphanumeric and underscores, not starting with a number)",
+                    name
+                ));
             }
 
-            secret.validate()
+            secret
+                .validate()
                 .map_err(|e| format!("Secret '{}': {}", name, e))?;
         }
 
@@ -274,7 +282,6 @@ impl ProfileConfig {
             self.secrets.entry(secret_name).or_insert(secret_config);
         }
     }
-
 }
 
 impl Default for ProfileConfig {
@@ -282,7 +289,6 @@ impl Default for ProfileConfig {
         Self::new()
     }
 }
-
 
 /// Configuration for an individual secret.
 ///
@@ -317,7 +323,6 @@ impl SecretConfig {
         Ok(())
     }
 }
-
 
 fn default_true() -> bool {
     true
@@ -360,7 +365,6 @@ pub enum Provider {
 }
 
 impl Provider {
-
     /// Get the string representation of this provider.
     ///
     /// This is the canonical name used in configuration files and CLI arguments.
@@ -484,7 +488,11 @@ impl std::fmt::Display for ParseError {
             ParseError::Io(e) => write!(f, "I/O error: {}", e),
             ParseError::Toml(e) => write!(f, "TOML parsing error: {}", e),
             ParseError::UnsupportedRevision(rev) => {
-                write!(f, "Unsupported revision '{}'. Only '1.0' is supported.", rev)
+                write!(
+                    f,
+                    "Unsupported revision '{}'. Only '1.0' is supported.",
+                    rev
+                )
             }
             ParseError::CircularDependency(msg) => {
                 write!(f, "Circular dependency detected: {}", msg)
@@ -525,17 +533,32 @@ mod tests {
         assert_eq!(Provider::try_from("keyring").unwrap(), Provider::Keyring);
         assert_eq!(Provider::try_from("dotenv").unwrap(), Provider::Dotenv);
         assert_eq!(Provider::try_from("env").unwrap(), Provider::Env);
-        assert_eq!(Provider::try_from("1password").unwrap(), Provider::OnePassword);
+        assert_eq!(
+            Provider::try_from("1password").unwrap(),
+            Provider::OnePassword
+        );
         assert_eq!(Provider::try_from("lastpass").unwrap(), Provider::Lastpass);
     }
 
     #[test]
     fn test_provider_try_from_with_uri() {
         assert_eq!(Provider::try_from("keyring://").unwrap(), Provider::Keyring);
-        assert_eq!(Provider::try_from("dotenv://.env").unwrap(), Provider::Dotenv);
-        assert_eq!(Provider::try_from("dotenv://.env.production").unwrap(), Provider::Dotenv);
-        assert_eq!(Provider::try_from("1password://vault").unwrap(), Provider::OnePassword);
-        assert_eq!(Provider::try_from("1password://vault/Production").unwrap(), Provider::OnePassword);
+        assert_eq!(
+            Provider::try_from("dotenv://.env").unwrap(),
+            Provider::Dotenv
+        );
+        assert_eq!(
+            Provider::try_from("dotenv://.env.production").unwrap(),
+            Provider::Dotenv
+        );
+        assert_eq!(
+            Provider::try_from("1password://vault").unwrap(),
+            Provider::OnePassword
+        );
+        assert_eq!(
+            Provider::try_from("1password://vault/Production").unwrap(),
+            Provider::OnePassword
+        );
     }
 
     #[test]
@@ -544,4 +567,3 @@ mod tests {
         assert!(Provider::try_from("unknown://something").is_err());
     }
 }
-

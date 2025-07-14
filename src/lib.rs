@@ -247,74 +247,26 @@ pub fn project_config_from_path(from: &Path) -> Result<ProjectConfig> {
     })
 }
 
-/// Returns an example TOML configuration string
-///
-/// This function provides a template for creating new `secretspec.toml` files,
-/// showing the recommended structure and commenting conventions.
-///
-/// # Returns
-///
-/// A static string containing an example TOML configuration
-pub fn get_example_toml() -> &'static str {
-    r#"# DATABASE_URL = { description = "Database connection string", required = true }
-
-[profiles.development]
-# Development profile inherits all secrets from default profile
-# Only define secrets here that need different values or settings than default
-# DATABASE_URL = { default = "sqlite:///dev.db" }
-#
-# New secrets
-# REDIS_URL = { description = "Redis connection URL for caching", required = false, default = "redis://localhost:6379" }
-"#
-}
-
-/// Generates a TOML string from a ProjectConfig with helpful comments
-///
-/// This function serializes a `ProjectConfig` to TOML format while adding
-/// instructional comments to help users understand the configuration options.
-///
-/// # Arguments
-///
-/// * `config` - The project configuration to serialize
-///
-/// # Returns
-///
-/// A TOML string with the configuration and helpful comments
-///
-/// # Errors
-///
-/// Returns an error if the configuration cannot be serialized
-pub fn generate_toml_with_comments(config: &ProjectConfig) -> Result<String> {
-    let mut output = String::new();
-
-    // Project section
-    output.push_str("[project]\n");
-    output.push_str(&format!("name = \"{}\"\n", config.project.name));
-    output.push_str(&format!("revision = \"{}\"\n", config.project.revision));
-
-    // Add extends comment and field if needed
-    output.push_str("# Extend configurations from subdirectories\n");
-    output.push_str("# extends = [ \"subdir1\", \"subdir2\" ]\n");
-
-    // Profile sections
-    for (profile_name, profile_config) in &config.profiles {
-        output.push_str(&format!("\n[profiles.{}]\n", profile_name));
-
-        for (secret_name, secret_config) in &profile_config.secrets {
-            output.push_str(&format!(
-                "{} = {{ description = \"{}\", required = {}",
-                secret_name, secret_config.description, secret_config.required
-            ));
-
-            if let Some(default) = &secret_config.default {
-                output.push_str(&format!(", default = \"{}\"", default));
+impl From<ParseError> for SecretSpecError {
+    fn from(err: ParseError) -> Self {
+        match err {
+            ParseError::Io(io_err) => {
+                if io_err.kind() == io::ErrorKind::NotFound {
+                    SecretSpecError::NoManifest
+                } else {
+                    SecretSpecError::Io(io_err)
+                }
             }
-
-            output.push_str(" }\n");
+            ParseError::Toml(toml_err) => SecretSpecError::Toml(toml_err),
+            ParseError::UnsupportedRevision(rev) => SecretSpecError::UnsupportedRevision(rev),
+            ParseError::CircularDependency(msg) => {
+                SecretSpecError::Io(io::Error::new(io::ErrorKind::InvalidData, msg))
+            }
+            ParseError::Validation(msg) => {
+                SecretSpecError::Io(io::Error::new(io::ErrorKind::InvalidData, msg))
+            }
         }
     }
-
-    Ok(output)
 }
 
 /// The main entry point for the secretspec library
@@ -507,7 +459,7 @@ impl SecretSpecBuilder {
         let project_config = if let Some(config) = self.project_config {
             config
         } else if let Some(path) = self.project_config_path {
-            load_project_config_from_path(&path)?
+            ProjectConfig::try_from(path.as_path()).map_err(SecretSpecError::from)?
         } else {
             load_project_config()?
         };
@@ -1468,49 +1420,6 @@ fn get_config_path() -> Result<PathBuf> {
     Ok(dirs.config_dir().join("config.toml"))
 }
 
-/// Parses a project specification from a file
-///
-/// This function reads and parses a `secretspec.toml` file, handling
-/// configuration inheritance via the `extends` field.
-///
-/// # Arguments
-///
-/// * `path` - Path to the specification file
-///
-/// # Returns
-///
-/// The parsed project configuration
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - The file doesn't exist (returns `NoManifest` error)
-/// - The file cannot be parsed as TOML
-/// - The revision is unsupported
-/// - There are circular dependencies in extends
-pub fn parse_spec(path: &Path) -> Result<ProjectConfig> {
-    ProjectConfig::try_from(path).map_err(|e| match e {
-        ParseError::Io(io_err) => {
-            if io_err.kind() == io::ErrorKind::NotFound {
-                SecretSpecError::NoManifest
-            } else {
-                SecretSpecError::Io(io_err)
-            }
-        }
-        ParseError::Toml(toml_err) => SecretSpecError::Toml(toml_err),
-        ParseError::UnsupportedRevision(rev) => {
-            SecretSpecError::UnsupportedRevision(rev)
-        }
-        ParseError::CircularDependency(msg) => {
-            SecretSpecError::Io(io::Error::new(io::ErrorKind::InvalidData, msg))
-        }
-        ParseError::Validation(msg) => {
-            SecretSpecError::Io(io::Error::new(io::ErrorKind::InvalidData, msg))
-        }
-    })
-}
-
-
 /// Loads the project configuration from the default location
 ///
 /// This function looks for `secretspec.toml` in the current directory.
@@ -1523,7 +1432,7 @@ pub fn parse_spec(path: &Path) -> Result<ProjectConfig> {
 ///
 /// Returns an error if the file doesn't exist or cannot be parsed
 fn load_project_config() -> Result<ProjectConfig> {
-    parse_spec(Path::new("secretspec.toml"))
+    ProjectConfig::try_from(Path::new("secretspec.toml")).map_err(Into::into)
 }
 
 /// Loads the project configuration from a specific path
@@ -1539,10 +1448,6 @@ fn load_project_config() -> Result<ProjectConfig> {
 /// # Errors
 ///
 /// Returns an error if the file doesn't exist or cannot be parsed
-fn load_project_config_from_path(path: &Path) -> Result<ProjectConfig> {
-    parse_spec(path)
-}
-
 /// Loads the global user configuration
 ///
 /// This function looks for the configuration file in the system's config
