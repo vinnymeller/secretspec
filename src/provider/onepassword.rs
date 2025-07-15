@@ -193,7 +193,7 @@ impl OnePasswordConfig {}
 ///
 /// The provider supports two authentication methods:
 ///
-/// 1. **Interactive Authentication**: Users run `op signin` before using secretspec
+/// 1. **Interactive Authentication**: Users run `eval $(op signin)` before using secretspec
 /// 2. **Service Account Tokens**: For CI/CD, configure a token in the config
 ///
 /// # Storage Structure
@@ -208,7 +208,7 @@ impl OnePasswordConfig {}
 ///
 /// ```ignore
 /// # Interactive auth
-/// op signin
+/// eval $(op signin)
 /// secretspec set MY_SECRET --provider onepassword://Development
 ///
 /// # Service account token
@@ -277,7 +277,7 @@ impl OnePasswordProvider {
             Ok(output) => output,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return Err(SecretSpecError::ProviderOperationFailed(
-                    "OnePassword CLI (op) is not installed.\n\nTo install it:\n  - macOS: brew install 1password-cli\n  - Linux: Download from https://1password.com/downloads/command-line/\n  - Windows: Download from https://1password.com/downloads/command-line/\n  - NixOS: nix-env -iA nixpkgs.onepassword\n\nAfter installation, run 'op signin' to authenticate.".to_string(),
+                    "OnePassword CLI (op) is not installed.\n\nTo install it:\n  - macOS: brew install 1password-cli\n  - Linux: Download from https://1password.com/downloads/command-line/\n  - Windows: Download from https://1password.com/downloads/command-line/\n  - NixOS: nix-env -iA nixpkgs.onepassword\n\nAfter installation, run 'eval $(op signin)' to authenticate.".to_string(),
                 ));
             }
             Err(e) => return Err(e.into()),
@@ -287,7 +287,7 @@ impl OnePasswordProvider {
             let error_msg = String::from_utf8_lossy(&output.stderr);
             if error_msg.contains("not currently signed in") {
                 return Err(SecretSpecError::ProviderOperationFailed(
-                    "OnePassword authentication required. Please run 'op signin' first."
+                    "OnePassword authentication required. Please run 'eval $(op signin)' first."
                         .to_string(),
                 ));
             }
@@ -454,7 +454,8 @@ impl Provider for OnePasswordProvider {
         // Check authentication status first
         if !self.whoami()? {
             return Err(SecretSpecError::ProviderOperationFailed(
-                "OnePassword authentication required. Please run 'op signin' first.".to_string(),
+                "OnePassword authentication required. Please run 'eval $(op signin)' first."
+                    .to_string(),
             ));
         }
 
@@ -519,7 +520,8 @@ impl Provider for OnePasswordProvider {
         // Check authentication status first
         if !self.whoami()? {
             return Err(SecretSpecError::ProviderOperationFailed(
-                "OnePassword authentication required. Please run 'op signin' first.".to_string(),
+                "OnePassword authentication required. Please run 'eval $(op signin)' first."
+                    .to_string(),
             ));
         }
 
