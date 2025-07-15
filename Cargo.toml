@@ -30,15 +30,17 @@ proc-macro2 = "1.0"
 trybuild = "1.0"
 insta = "1.34"
 linkme = "0.3"
-secretspec-derive = { path = "./secretspec-derive" }
-secretspec-core = { path = "./secretspec-core" }
-secretspec = { path = ".", features = ["macros"] }
+secretspec-derive = { version = "0.1.0", path = "./secretspec-derive" }
+secretspec-core = { version = "0.1.0", path = "./secretspec-core" }
+secretspec = { version = "0.1.0", path = ".", features = ["macros"] }
 
 [package]
 name = "secretspec"
 version.workspace = true
 edition.workspace = true
 repository = "https://github.com/cachix/secretspec"
+description = "Declarative secrets, every environment, any provider"
+license = "Apache-2.0"
 
 [lib]
 name = "secretspec"
@@ -63,7 +65,7 @@ serde-envfile.workspace = true
 inquire.workspace = true
 color-eyre.workspace = true
 secretspec-derive = { workspace = true, optional = true }
-secretspec-core.workspace = true
+secretspec-core = { version = "0.1.0", path = "./secretspec-core" }
 serde_json.workspace = true
 tempfile.workspace = true
 http.workspace = true

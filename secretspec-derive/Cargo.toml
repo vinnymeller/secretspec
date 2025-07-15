@@ -2,6 +2,9 @@
 name = "secretspec-derive"
 version.workspace = true
 edition.workspace = true
+description = "Derive macros for SecretSpec type-safe code generation"
+license = "Apache-2.0"
+repository = "https://github.com/cachix/secretspec"
 
 [lib]
 proc-macro = true
@@ -12,7 +15,7 @@ quote.workspace = true
 proc-macro2.workspace = true
 toml.workspace = true
 serde.workspace = true
-secretspec-core.workspace = true
+secretspec-core = { version = "0.1.0", path = "../secretspec-core" }
 url.workspace = true
 
 [dev-dependencies]

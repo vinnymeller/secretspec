@@ -2,6 +2,9 @@
 name = "secretspec-core"
 version.workspace = true
 edition.workspace = true
+description = "Core types and configuration for SecretSpec"
+license = "Apache-2.0"
+repository = "https://github.com/cachix/secretspec"
 
 [dependencies]
 serde.workspace = true
