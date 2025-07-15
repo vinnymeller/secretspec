@@ -116,65 +116,27 @@ impl Secrets {
     /// # Arguments
     ///
     /// * `name` - The name of the secret
-    /// * `profile` - Optional profile to search in
-    ///
-    /// # Returns
-    ///
-    /// A tuple of (is_required, default_value) if the secret is found, `None` otherwise
-    pub(crate) fn resolve_secret_config(
-        &self,
-        name: &str,
-        profile: Option<&str>,
-    ) -> Option<(bool, Option<String>)> {
-        let profile_name = self.resolve_profile(profile);
-
-        // Check if the secret exists in the requested profile
-        let profile_secret = self
-            .config
-            .profiles
-            .get(profile_name)
-            .and_then(|p| p.secrets.get(name));
-
-        // Check if the secret exists in the default profile (if we're not already looking at default)
-        let default_secret = if profile_name != "default" {
-            self.config
-                .profiles
-                .get("default")
-                .and_then(|p| p.secrets.get(name))
-        } else {
-            None
-        };
-
-        // Use the profile secret if it exists, otherwise fall back to default
-        let secret_config = profile_secret.or(default_secret)?;
-
-        Some((secret_config.required, secret_config.default.clone()))
-    }
-
-    /// Finds the full secret configuration from either the specified profile or default profile
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The name of the secret
-    /// * `profile` - The profile to search in
+    /// * `profile` - Optional profile to search in (if None, uses resolved profile)
     ///
     /// # Returns
     ///
     /// The secret configuration if found
-    pub(crate) fn find_secret_config(
+    pub(crate) fn resolve_secret_config(
         &self,
         name: &str,
-        profile: &str,
+        profile: Option<&str>,
     ) -> Option<&secretspec_core::Secret> {
+        let profile_name = self.resolve_profile(profile);
+
         // First check the specified profile
-        if let Some(profile_config) = self.config.profiles.get(profile) {
+        if let Some(profile_config) = self.config.profiles.get(profile_name) {
             if let Some(secret) = profile_config.secrets.get(name) {
                 return Some(secret);
             }
         }
 
         // Fall back to default profile if not found and we're not already in default
-        if profile != "default" {
+        if profile_name != "default" {
             if let Some(default_profile) = self.config.profiles.get("default") {
                 return default_profile.secrets.get(name);
             }
@@ -362,9 +324,10 @@ impl Secrets {
     ) -> Result<()> {
         let backend = self.get_provider(provider_arg)?;
         let profile_name = self.resolve_profile(profile.as_deref());
-        let (_, default) = self
+        let secret_config = self
             .resolve_secret_config(name, profile.as_deref())
             .ok_or_else(|| SecretSpecError::SecretNotFound(name.to_string()))?;
+        let default = secret_config.default.clone();
 
         match backend.get(&self.config.project.name, name, profile_name)? {
             Some(value) => {
@@ -418,7 +381,9 @@ impl Secrets {
         if interactive && !validation_result.missing_required.is_empty() {
             println!("\nThe following required secrets are missing:");
             for secret_name in &validation_result.missing_required {
-                if let Some(secret_config) = self.find_secret_config(secret_name, profile_display) {
+                if let Some(secret_config) =
+                    self.resolve_secret_config(secret_name, Some(profile_display))
+                {
                     println!("\n{} - {}", secret_name.bold(), secret_config.description);
                     print!(
                         "Enter value for {} (profile: {}): ",
@@ -786,9 +751,11 @@ impl Secrets {
 
         // Now check all secrets
         for name in all_secrets {
-            let (required, default) = self
+            let secret_config = self
                 .resolve_secret_config(&name, profile.as_deref())
                 .expect("Secret should exist in config since we're iterating over it");
+            let required = secret_config.required;
+            let default = secret_config.default.clone();
 
             match backend.get(&self.config.project.name, &name, profile_name)? {
                 Some(value) => {

@@ -362,18 +362,21 @@ fn test_resolve_secret_config() {
     );
 
     // Test profile-specific secret
-    let (required, default) = spec
+    let secret_config = spec
         .resolve_secret_config("API_KEY", Some("development"))
         .unwrap();
-    assert!(!required);
-    assert_eq!(default, Some("dev-key".to_string()));
+    assert!(!secret_config.required);
+    assert_eq!(secret_config.default, Some("dev-key".to_string()));
 
     // Test fallback to default profile
-    let (required, default) = spec
+    let secret_config = spec
         .resolve_secret_config("DATABASE_URL", Some("development"))
         .unwrap();
-    assert!(!required);
-    assert_eq!(default, Some("sqlite:///default.db".to_string()));
+    assert!(!secret_config.required);
+    assert_eq!(
+        secret_config.default,
+        Some("sqlite:///default.db".to_string())
+    );
 
     // Test nonexistent secret
     assert!(
@@ -1657,21 +1660,24 @@ API_KEY = { description = "Dev API key", required = true }
     // Test that profiles are completely independent
 
     // 1. Check default profile
-    let (required, default_val) = spec
+    let secret_config = spec
         .resolve_secret_config("DATABASE_URL", Some("default"))
         .expect("DATABASE_URL should exist in default");
-    assert!(required);
+    assert!(secret_config.required);
     assert_eq!(
-        default_val,
+        secret_config.default,
         Some("postgres://localhost/default".to_string())
     );
 
     // 2. Check development profile - should have its own description and default
-    let (required, default_val) = spec
+    let secret_config = spec
         .resolve_secret_config("DATABASE_URL", Some("development"))
         .expect("DATABASE_URL should exist in development");
-    assert!(required);
-    assert_eq!(default_val, Some("postgres://localhost/dev".to_string()));
+    assert!(secret_config.required);
+    assert_eq!(
+        secret_config.default,
+        Some("postgres://localhost/dev".to_string())
+    );
 
     // 3. Check that CACHE_TTL exists in default and IS inherited by development
     // This proves profiles inherit from default
