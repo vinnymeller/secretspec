@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "secretspec-derive", "secretspec-core", "examples/derive"]
+members = ["secretspec", "secretspec-derive", "secretspec-core", "examples/derive"]
 resolver = "2"
 
 [workspace.package]
@@ -32,53 +32,7 @@ insta = "1.34"
 linkme = "0.3"
 secretspec-derive = { version = "0.1.0", path = "./secretspec-derive" }
 secretspec-core = { version = "0.1.0", path = "./secretspec-core" }
-secretspec = { version = "0.1.0", path = ".", features = ["macros"] }
-
-[package]
-name = "secretspec"
-version.workspace = true
-edition.workspace = true
-repository = "https://github.com/cachix/secretspec"
-description = "Declarative secrets, every environment, any provider"
-license = "Apache-2.0"
-
-[lib]
-name = "secretspec"
-path = "src/lib.rs"
-
-[[bin]]
-name = "secretspec"
-path = "src/bin/secretspec.rs"
-required-features = ["cli"]
-
-[dependencies]
-clap.workspace = true
-keyring.workspace = true
-serde.workspace = true
-toml.workspace = true
-thiserror.workspace = true
-directories.workspace = true
-colored.workspace = true
-rpassword.workspace = true
-dotenvy.workspace = true
-serde-envfile.workspace = true
-inquire.workspace = true
-color-eyre.workspace = true
-secretspec-derive = { workspace = true, optional = true }
-secretspec-core = { version = "0.1.0", path = "./secretspec-core" }
-serde_json.workspace = true
-tempfile.workspace = true
-http.workspace = true
-url.workspace = true
-whoami.workspace = true
-linkme.workspace = true
-
-[features]
-default = ["macros", "cli"]
-macros = ["secretspec-derive"]
-cli = []
-
-[dev-dependencies]
+secretspec = { version = "0.1.0", path = "./secretspec", features = ["macros"] }
 
 # The profile that 'dist' will build with
 [profile.dist]

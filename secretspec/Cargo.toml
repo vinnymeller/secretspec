@@ -1,0 +1,45 @@
+[package]
+name = "secretspec"
+version.workspace = true
+edition.workspace = true
+repository = "https://github.com/cachix/secretspec"
+description = "Declarative secrets, every environment, any provider"
+license = "Apache-2.0"
+
+[lib]
+name = "secretspec"
+path = "src/lib.rs"
+
+[[bin]]
+name = "secretspec"
+path = "src/bin/secretspec.rs"
+required-features = ["cli"]
+
+[dependencies]
+clap.workspace = true
+keyring.workspace = true
+serde.workspace = true
+toml.workspace = true
+thiserror.workspace = true
+directories.workspace = true
+colored.workspace = true
+rpassword.workspace = true
+dotenvy.workspace = true
+serde-envfile.workspace = true
+inquire.workspace = true
+color-eyre.workspace = true
+secretspec-derive = { workspace = true, optional = true }
+secretspec-core = { version = "0.1.0", path = "../secretspec-core" }
+serde_json.workspace = true
+tempfile.workspace = true
+http.workspace = true
+url.workspace = true
+whoami.workspace = true
+linkme.workspace = true
+
+[features]
+default = ["macros", "cli"]
+macros = ["secretspec-derive"]
+cli = []
+
+[dev-dependencies]
