@@ -20,6 +20,8 @@
   git-hooks.hooks = {
     rustfmt.enable = true;
     clippy.enable = true;
+    # TODO: this should be done by devenv
+    clippy.settings.offline = false;
   };
 
   enterTest = ''
