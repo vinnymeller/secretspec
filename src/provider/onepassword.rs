@@ -116,6 +116,11 @@ pub struct OnePasswordConfig {
     /// environment variable to authenticate without user interaction.
     /// Ideal for CI/CD environments.
     pub service_account_token: Option<String>,
+    /// Optional folder prefix format string for organizing secrets in OnePassword.
+    ///
+    /// Supports placeholders: {project}, {profile}, and {key}.
+    /// Defaults to "secretspec/{project}/{profile}/{key}" if not specified.
+    pub folder_prefix: Option<String>,
 }
 
 impl TryFrom<&Url> for OnePasswordConfig {
@@ -182,7 +187,7 @@ impl OnePasswordConfig {}
 ///
 /// This provider integrates with OnePassword CLI (`op`) to store and retrieve
 /// secrets. It organizes secrets in a hierarchical structure within OnePassword
-/// items using the format: `secretspec/{project}/{profile}/{key}`.
+/// items using a configurable format string that defaults to: `secretspec/{project}/{profile}/{key}`.
 ///
 /// # Authentication
 ///
@@ -194,7 +199,7 @@ impl OnePasswordConfig {}
 /// # Storage Structure
 ///
 /// Secrets are stored as Secure Note items in OnePassword with:
-/// - Title: `secretspec/{project}/{profile}/{key}`
+/// - Title: formatted according to folder_prefix configuration
 /// - Category: SECURE_NOTE
 /// - Fields: project, key, value
 /// - Tags: "automated", {project}
@@ -341,8 +346,9 @@ impl OnePasswordProvider {
 
     /// Formats the item name for storage in OnePassword.
     ///
-    /// Creates a hierarchical name that includes project, profile, and key
-    /// to ensure uniqueness and organization.
+    /// Creates a hierarchical name using the folder_prefix format string.
+    /// Supports placeholders: {project}, {profile}, and {key}.
+    /// Defaults to "secretspec/{project}/{profile}/{key}" if not configured.
     ///
     /// # Arguments
     ///
@@ -352,9 +358,18 @@ impl OnePasswordProvider {
     ///
     /// # Returns
     ///
-    /// A formatted string like "secretspec/myproject/production/DATABASE_URL"
+    /// A formatted string based on the configured pattern
     fn format_item_name(&self, project: &str, key: &str, profile: &str) -> String {
-        format!("secretspec/{}/{}/{}", project, profile, key)
+        let format_string = self
+            .config
+            .folder_prefix
+            .as_deref()
+            .unwrap_or("secretspec/{project}/{profile}/{key}");
+
+        format_string
+            .replace("{project}", project)
+            .replace("{profile}", profile)
+            .replace("{key}", key)
     }
 
     /// Creates a template for a new OnePassword item.
@@ -414,8 +429,8 @@ impl Provider for OnePasswordProvider {
 
     /// Retrieves a secret from OnePassword.
     ///
-    /// Searches for an item with the title "secretspec/{project}/{profile}/{key}"
-    /// in the appropriate vault. The method looks for a field labeled "value"
+    /// Searches for an item with the title formatted according to the folder_prefix
+    /// configuration in the appropriate vault. The method looks for a field labeled "value"
     /// first, then falls back to password or concealed fields.
     ///
     /// # Arguments

@@ -8,8 +8,7 @@ use url::Url;
 /// Configuration for the LastPass provider.
 ///
 /// This struct contains the configuration options for interacting with LastPass
-/// through the `lpass` CLI tool. Note: The folder_prefix field is not currently
-/// used in the implementation - all secrets are stored under the "secretspec" folder.
+/// through the `lpass` CLI tool.
 ///
 /// # Examples
 ///
@@ -26,10 +25,10 @@ use url::Url;
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LastPassConfig {
-    /// Optional folder prefix for organizing secrets in LastPass.
+    /// Optional folder prefix format string for organizing secrets in LastPass.
     ///
-    /// Note: This field is not currently used in the implementation.
-    /// All secrets are stored under the "secretspec" folder regardless of this setting.
+    /// Supports placeholders: {project}, {profile}, and {key}.
+    /// Defaults to "secretspec/{project}/{profile}/{key}" if not specified.
     pub folder_prefix: Option<String>,
 }
 
@@ -88,15 +87,8 @@ impl TryFrom<&Url> for LastPassConfig {
 
         let mut config = Self::default();
 
-        // Parse folder from authority or path, ignoring the dummy localhost
         if let Some(host) = url.host_str() {
-            if host != "localhost" {
-                config.folder_prefix = Some(host.to_string());
-            }
-        }
-
-        if config.folder_prefix.is_none() && !url.path().is_empty() && url.path() != "/" {
-            config.folder_prefix = Some(url.path().trim_start_matches('/').to_string());
+            config.folder_prefix = Some(host.to_string() + url.path());
         }
 
         Ok(config)
@@ -106,8 +98,8 @@ impl TryFrom<&Url> for LastPassConfig {
 /// LastPass provider implementation for SecretSpec.
 ///
 /// This provider integrates with LastPass password manager through the `lpass` CLI tool.
-/// It stores secrets in a hierarchical structure within LastPass using the format:
-/// `secretspec/{project}/{profile}/{key}`.
+/// It stores secrets in a hierarchical structure within LastPass using a configurable
+/// format string that defaults to: `secretspec/{project}/{profile}/{key}`.
 ///
 /// # Requirements
 ///
@@ -208,7 +200,8 @@ impl LastPassProvider {
     /// Formats the item name for storage in LastPass.
     ///
     /// Creates a hierarchical path for organizing secrets within LastPass.
-    /// The format is: `secretspec/{project}/{profile}/{key}`
+    /// Uses folder_prefix as a format string with {project}, {profile}, and {key} placeholders.
+    /// Defaults to "secretspec/{project}/{profile}/{key}" if not configured.
     ///
     /// # Arguments
     ///
@@ -220,7 +213,16 @@ impl LastPassProvider {
     ///
     /// A formatted string representing the full path to the secret in LastPass.
     fn format_item_name(&self, project: &str, key: &str, profile: &str) -> String {
-        format!("secretspec/{}/{}/{}", project, profile, key)
+        let format_string = self
+            .config
+            .folder_prefix
+            .as_deref()
+            .unwrap_or("secretspec/{project}/{profile}/{key}");
+
+        format_string
+            .replace("{project}", project)
+            .replace("{profile}", profile)
+            .replace("{key}", key)
     }
 
     /// Verifies that the user is logged in to LastPass.
@@ -276,7 +278,7 @@ impl Provider for LastPassProvider {
     /// Retrieves a secret from LastPass.
     ///
     /// Fetches the value of a secret stored in LastPass at the path
-    /// `secretspec/{project}/{profile}/{key}`. Uses `lpass show` with
+    /// determined by the folder_prefix format string. Uses `lpass show` with
     /// the `--sync=now` flag to ensure fresh data from the server.
     ///
     /// # Arguments
@@ -321,7 +323,7 @@ impl Provider for LastPassProvider {
     /// Stores a secret in LastPass.
     ///
     /// Creates or updates a secret in LastPass at the path
-    /// `secretspec/{project}/{profile}/{key}`. The method first checks if
+    /// determined by the folder_prefix format string. The method first checks if
     /// the item exists to determine whether to use `lpass edit` (for updates)
     /// or `lpass set` (for new items).
     ///
