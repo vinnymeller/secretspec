@@ -151,6 +151,38 @@ impl Secrets {
         Some((secret_config.required, secret_config.default.clone()))
     }
 
+    /// Finds the full secret configuration from either the specified profile or default profile
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the secret
+    /// * `profile` - The profile to search in
+    ///
+    /// # Returns
+    ///
+    /// The secret configuration if found
+    pub(crate) fn find_secret_config(
+        &self,
+        name: &str,
+        profile: &str,
+    ) -> Option<&secretspec_core::Secret> {
+        // First check the specified profile
+        if let Some(profile_config) = self.config.profiles.get(profile) {
+            if let Some(secret) = profile_config.secrets.get(name) {
+                return Some(secret);
+            }
+        }
+
+        // Fall back to default profile if not found and we're not already in default
+        if profile != "default" {
+            if let Some(default_profile) = self.config.profiles.get("default") {
+                return default_profile.secrets.get(name);
+            }
+        }
+
+        None
+    }
+
     /// Gets the provider instance to use for secret operations
     ///
     /// Provider resolution order:
@@ -244,17 +276,29 @@ impl Secrets {
             ))
         })?;
 
-        if !profile_config.secrets.contains_key(name) {
+        // Check if the secret exists in the profile or is inherited from default
+        if self
+            .resolve_secret_config(name, profile.as_deref())
+            .is_none()
+        {
+            // Collect available secrets from both current profile and default
+            let mut available_secrets = profile_config.secrets.keys().cloned().collect::<Vec<_>>();
+            if profile_name != "default" {
+                if let Some(default_profile) = self.config.profiles.get("default") {
+                    for key in default_profile.secrets.keys() {
+                        if !available_secrets.contains(key) {
+                            available_secrets.push(key.clone());
+                        }
+                    }
+                }
+            }
+            available_secrets.sort();
+
             return Err(SecretSpecError::SecretNotFound(format!(
                 "Secret '{}' is not defined in profile '{}'. Available secrets: {}",
                 name,
                 profile_name,
-                profile_config
-                    .secrets
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                available_secrets.join(", ")
             )));
         }
 
@@ -374,34 +418,28 @@ impl Secrets {
         if interactive && !validation_result.missing_required.is_empty() {
             println!("\nThe following required secrets are missing:");
             for secret_name in &validation_result.missing_required {
-                if let Some((_, _config)) =
-                    self.resolve_secret_config(secret_name, profile.as_deref())
-                {
-                    if let Some(profile_config) = self.config.profiles.get(profile_display) {
-                        if let Some(secret_config) = profile_config.secrets.get(secret_name) {
-                            println!("\n{} - {}", secret_name.bold(), secret_config.description);
-                            print!(
-                                "Enter value for {} (profile: {}): ",
-                                secret_name, profile_display
-                            );
-                            io::stdout().flush()?;
-                            let value = rpassword::read_password()?;
+                if let Some(secret_config) = self.find_secret_config(secret_name, profile_display) {
+                    println!("\n{} - {}", secret_name.bold(), secret_config.description);
+                    print!(
+                        "Enter value for {} (profile: {}): ",
+                        secret_name, profile_display
+                    );
+                    io::stdout().flush()?;
+                    let value = rpassword::read_password()?;
 
-                            backend.set(
-                                &self.config.project.name,
-                                secret_name,
-                                &value,
-                                &profile_display,
-                            )?;
-                            println!(
-                                "{} Secret '{}' saved to {} (profile: {})",
-                                "✓".green(),
-                                secret_name,
-                                backend.name(),
-                                profile_display
-                            );
-                        }
-                    }
+                    backend.set(
+                        &self.config.project.name,
+                        secret_name,
+                        &value,
+                        &profile_display,
+                    )?;
+                    println!(
+                        "{} Secret '{}' saved to {} (profile: {})",
+                        "✓".green(),
+                        secret_name,
+                        backend.name(),
+                        profile_display
+                    );
                 }
             }
 
@@ -470,12 +508,35 @@ impl Secrets {
             SecretSpecError::SecretNotFound(format!("Profile '{}' not found", profile_name))
         })?;
 
+        // Collect all secrets to display - from current profile and default profile
+        let mut all_secrets_to_display = Vec::new();
+
+        // Add secrets from the current profile
         for (name, config) in &profile_config.secrets {
-            if initial_validation.secrets.contains_key(name) {
+            all_secrets_to_display.push((name.clone(), config.clone()));
+        }
+
+        // If not the default profile, also add secrets from default profile
+        if profile_name != "default" {
+            if let Some(default_profile) = self.config.profiles.get("default") {
+                for (name, config) in &default_profile.secrets {
+                    // Only add if not already in current profile
+                    if !profile_config.secrets.contains_key(name) {
+                        all_secrets_to_display.push((name.clone(), config.clone()));
+                    }
+                }
+            }
+        }
+
+        // Sort by name for consistent display
+        all_secrets_to_display.sort_by(|a, b| a.0.cmp(&b.0));
+
+        for (name, config) in all_secrets_to_display {
+            if initial_validation.secrets.contains_key(&name) {
                 if initial_validation
                     .with_defaults
                     .iter()
-                    .any(|(n, _)| n == name)
+                    .any(|(n, _)| n == &name)
                 {
                     println!(
                         "{} {} - {} {}",
@@ -487,7 +548,7 @@ impl Secrets {
                 } else {
                     println!("{} {} - {}", "✓".green(), name, config.description);
                 }
-            } else if initial_validation.missing_required.contains(name) {
+            } else if initial_validation.missing_required.contains(&name) {
                 println!(
                     "{} {} - {} {}",
                     "✗".red(),
@@ -495,7 +556,7 @@ impl Secrets {
                     config.description,
                     "(required)".red()
                 );
-            } else if initial_validation.missing_optional.contains(name) {
+            } else if initial_validation.missing_optional.contains(&name) {
                 println!(
                     "{} {} - {} {}",
                     "○".blue(),

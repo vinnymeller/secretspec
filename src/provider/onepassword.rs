@@ -319,26 +319,20 @@ impl OnePasswordProvider {
         }
     }
 
-    /// Determines the vault name based on the profile.
+    /// Determines the vault name to use.
     ///
     /// # Arguments
     ///
-    /// * `profile` - The profile name
+    /// * `profile` - The profile name (currently unused, but kept for potential future use)
     ///
     /// # Returns
     ///
-    /// The vault name to use:
-    /// - For "default" profile: uses configured default_vault or "Private"
-    /// - For other profiles: uses the profile name as the vault name
-    fn get_vault_name(&self, profile: &str) -> String {
-        if profile == "default" {
-            self.config
-                .default_vault
-                .clone()
-                .unwrap_or_else(|| "Private".to_string())
-        } else {
-            profile.to_string()
-        }
+    /// The vault name to use - always returns the configured default_vault or "Private"
+    fn get_vault_name(&self, _profile: &str) -> String {
+        self.config
+            .default_vault
+            .clone()
+            .unwrap_or_else(|| "Private".to_string())
     }
 
     /// Formats the item name for storage in OnePassword.
@@ -379,7 +373,6 @@ impl OnePasswordProvider {
     /// * `project` - The project name
     /// * `key` - The secret key
     /// * `value` - The secret value
-    /// * `vault` - The vault to create the item in
     /// * `profile` - The profile name
     ///
     /// # Returns
@@ -390,7 +383,6 @@ impl OnePasswordProvider {
         project: &str,
         key: &str,
         value: &str,
-        vault: &str,
         profile: &str,
     ) -> OnePasswordItemTemplate {
         OnePasswordItemTemplate {
@@ -540,7 +532,7 @@ impl Provider for OnePasswordProvider {
             self.execute_op_command(&args)?;
         } else {
             // Item doesn't exist, create it
-            let template = self.create_item_template(project, key, value, &vault, profile);
+            let template = self.create_item_template(project, key, value, profile);
             let template_json = serde_json::to_string(&template)?;
 
             // Write template to temp file
