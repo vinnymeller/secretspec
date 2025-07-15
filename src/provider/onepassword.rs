@@ -46,9 +46,6 @@ struct OnePasswordItemTemplate {
     title: String,
     /// The category of the item. Always "SECURE_NOTE" for secretspec items.
     category: String,
-    /// The vault where the item should be created.
-    /// If None, OnePassword will use the default vault.
-    vault: Option<String>,
     /// Collection of fields to include in the item.
     /// Contains project, key, and value fields.
     fields: Vec<OnePasswordFieldTemplate>,
@@ -399,7 +396,6 @@ impl OnePasswordProvider {
         OnePasswordItemTemplate {
             title: self.format_item_name(project, key, profile),
             category: "SECURE_NOTE".to_string(),
-            vault: Some(vault.to_string()),
             fields: vec![
                 OnePasswordFieldTemplate {
                     label: "project".to_string(),
@@ -556,6 +552,8 @@ impl Provider for OnePasswordProvider {
             let args = vec![
                 "item",
                 "create",
+                "--vault",
+                &vault,
                 "--template",
                 temp_file.path().to_str().ok_or_else(|| {
                     SecretSpecError::ProviderOperationFailed(
