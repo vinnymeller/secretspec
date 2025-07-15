@@ -27,7 +27,7 @@ rpassword.workspace = true
 dotenvy.workspace = true
 serde-envfile.workspace = true
 inquire.workspace = true
-color-eyre.workspace = true
+miette.workspace = true
 secretspec-derive = { workspace = true, optional = true }
 secretspec-core = { version = "0.1.0", path = "../secretspec-core" }
 serde_json.workspace = true

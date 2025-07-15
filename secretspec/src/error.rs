@@ -1,5 +1,6 @@
 //! Error types for secretspec operations
 
+use miette::Diagnostic;
 use std::io;
 use thiserror::Error;
 
@@ -10,7 +11,7 @@ use secretspec_core::ParseError;
 ///
 /// This enum represents all possible errors that can occur when working with
 /// the secretspec library.
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Diagnostic)]
 pub enum SecretSpecError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

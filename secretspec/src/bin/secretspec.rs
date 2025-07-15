@@ -1,3 +1,5 @@
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    secretspec::cli::main().map_err(|e| e.into())
+use miette::Result;
+
+fn main() -> Result<()> {
+    secretspec::cli::main()
 }

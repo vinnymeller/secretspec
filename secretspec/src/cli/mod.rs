@@ -1,7 +1,7 @@
 use crate::provider::{dotenv::DotEnvProvider, providers};
 use crate::{Config, GlobalConfig, GlobalDefaults, Profile, Project, Secrets};
 use clap::{Parser, Subcommand};
-use color_eyre::eyre::{Result, WrapErr};
+use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use std::collections::HashMap;
 use std::fs;
 #[cfg(unix)]
@@ -193,7 +193,8 @@ pub fn main() -> Result<()> {
                 use inquire::Confirm;
                 let overwrite = Confirm::new("secretspec.toml already exists. Overwrite?")
                     .with_default(false)
-                    .prompt()?;
+                    .prompt()
+                    .into_diagnostic()?;
 
                 if !overwrite {
                     println!("Cancelled.");
@@ -204,23 +205,23 @@ pub fn main() -> Result<()> {
             // Parse the provider URL
             let uri = from
                 .parse::<url::Url>()
-                .map_err(|e| color_eyre::eyre::eyre!("Invalid provider URL '{}': {}", from, e))?;
+                .map_err(|e| miette!("Invalid provider URL '{}': {}", from, e))?;
 
             // Extract scheme from URI to validate provider
             let scheme = uri.scheme();
 
             // Currently only support dotenv provider
             if scheme != "dotenv" {
-                return Err(color_eyre::eyre::eyre!(
+                return Err(miette!(
                     "Only 'dotenv://' provider URLs are currently supported for init --from. Got: {}",
                     from
                 ));
             }
 
             // Create dotenv provider and reflect secrets
-            let dotenv_config = (&uri).try_into()?;
+            let dotenv_config = (&uri).try_into().into_diagnostic()?;
             let dotenv_provider = DotEnvProvider::new(dotenv_config);
-            let secrets = dotenv_provider.reflect()?;
+            let secrets = dotenv_provider.reflect().into_diagnostic()?;
 
             // Create a new project config
             let mut profiles = HashMap::new();
@@ -228,7 +229,8 @@ pub fn main() -> Result<()> {
 
             let project_config = Config {
                 project: Project {
-                    name: std::env::current_dir()?
+                    name: std::env::current_dir()
+                        .into_diagnostic()?
                         .file_name()
                         .unwrap_or_default()
                         .to_string_lossy()
@@ -238,20 +240,20 @@ pub fn main() -> Result<()> {
                 },
                 profiles,
             };
-            let mut content = generate_toml_with_comments(&project_config)?;
+            let mut content = generate_toml_with_comments(&project_config).into_diagnostic()?;
 
             // Append comprehensive example
             content.push_str(get_example_toml());
 
-            fs::write("secretspec.toml", content)?;
+            fs::write("secretspec.toml", content).into_diagnostic()?;
 
             // Set file permissions to 600 (owner read/write only) on Unix systems
             #[cfg(unix)]
             {
-                let metadata = fs::metadata("secretspec.toml")?;
+                let metadata = fs::metadata("secretspec.toml").into_diagnostic()?;
                 let mut permissions = metadata.permissions();
                 permissions.set_mode(0o600);
-                fs::set_permissions("secretspec.toml", permissions)?;
+                fs::set_permissions("secretspec.toml", permissions).into_diagnostic()?;
             }
 
             let secret_count = project_config
@@ -282,7 +284,8 @@ pub fn main() -> Result<()> {
 
                 let selected_choice =
                     Select::new("Select your preferred provider backend:", provider_choices)
-                        .prompt()?;
+                        .prompt()
+                        .into_diagnostic()?;
 
                 // Extract provider name from the selected choice
                 let provider = selected_choice.split(':').next().unwrap_or("keyring");
@@ -292,7 +295,8 @@ pub fn main() -> Result<()> {
                     .with_help_message(
                         "'development' is recommended for local development environments",
                     )
-                    .prompt()?;
+                    .prompt()
+                    .into_diagnostic()?;
 
                 let profile = if profile_choice == "none" {
                     None
@@ -307,18 +311,21 @@ pub fn main() -> Result<()> {
                     },
                 };
 
-                config.save()?;
+                config.save().into_diagnostic()?;
                 println!(
                     "\n✓ Configuration saved to {}",
-                    GlobalConfig::path()?.display()
+                    GlobalConfig::path().into_diagnostic()?.display()
                 );
                 Ok(())
             }
             // Display current user configuration
             ConfigAction::Show => {
-                match GlobalConfig::load()? {
+                match GlobalConfig::load().into_diagnostic()? {
                     Some(config) => {
-                        println!("Configuration file: {}\n", GlobalConfig::path()?.display());
+                        println!(
+                            "Configuration file: {}\n",
+                            GlobalConfig::path().into_diagnostic()?.display()
+                        );
                         match config.defaults.provider {
                             Some(provider) => println!("Provider: {}", provider),
                             None => println!("Provider: (none)"),
@@ -344,8 +351,11 @@ pub fn main() -> Result<()> {
             provider,
             profile,
         } => {
-            let app = Secrets::load().wrap_err("Failed to load secretspec configuration")?;
+            let app = Secrets::load()
+                .into_diagnostic()
+                .wrap_err("Failed to load secretspec configuration")?;
             app.set(&name, value, provider, profile)
+                .into_diagnostic()
                 .wrap_err("Failed to set secret")?;
             Ok(())
         }
@@ -355,8 +365,11 @@ pub fn main() -> Result<()> {
             provider,
             profile,
         } => {
-            let app = Secrets::load().wrap_err("Failed to load secretspec configuration")?;
+            let app = Secrets::load()
+                .into_diagnostic()
+                .wrap_err("Failed to load secretspec configuration")?;
             app.get(&name, provider, profile)
+                .into_diagnostic()
                 .wrap_err("Failed to get secret")?;
             Ok(())
         }
@@ -366,22 +379,31 @@ pub fn main() -> Result<()> {
             provider,
             profile,
         } => {
-            let app = Secrets::load().wrap_err("Failed to load secretspec configuration")?;
+            let app = Secrets::load()
+                .into_diagnostic()
+                .wrap_err("Failed to load secretspec configuration")?;
             app.run(command, provider, profile)
+                .into_diagnostic()
                 .wrap_err("Failed to run command")?;
             Ok(())
         }
         // Verify all required secrets are available
         Commands::Check { provider, profile } => {
-            let app = Secrets::load().wrap_err("Failed to load secretspec configuration")?;
+            let app = Secrets::load()
+                .into_diagnostic()
+                .wrap_err("Failed to load secretspec configuration")?;
             app.check(provider, profile)
+                .into_diagnostic()
                 .wrap_err("Failed to check secrets")?;
             Ok(())
         }
         // Import secrets from one provider to another
         Commands::Import { from_provider } => {
-            let app = Secrets::load().wrap_err("Failed to load secretspec configuration")?;
+            let app = Secrets::load()
+                .into_diagnostic()
+                .wrap_err("Failed to load secretspec configuration")?;
             app.import(&from_provider)
+                .into_diagnostic()
                 .wrap_err("Failed to import secrets")?;
             Ok(())
         }
