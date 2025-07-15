@@ -48,7 +48,7 @@ export default defineConfig({
             { label: "Dotenv", slug: "providers/dotenv" },
             { label: "Environment Variables", slug: "providers/env" },
             { label: "LastPass", slug: "providers/lastpass" },
-            { label: "1Password", slug: "providers/1password" },
+            { label: "1Password", slug: "providers/onepassword" },
           ],
         },
         {
