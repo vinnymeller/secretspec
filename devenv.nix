@@ -1,6 +1,5 @@
 { pkgs, ... }: {
   languages.rust.enable = true;
-  languages.rust.channel = "nightly";
   languages.javascript = {
     enable = true;
     npm = {
