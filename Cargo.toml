@@ -38,6 +38,7 @@ secretspec = { path = ".", features = ["macros"] }
 name = "secretspec"
 version.workspace = true
 edition.workspace = true
+repository = "https://github.com/cachix/secretspec"
 
 [lib]
 name = "secretspec"
@@ -76,3 +77,8 @@ macros = ["secretspec-derive"]
 cli = []
 
 [dev-dependencies]
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

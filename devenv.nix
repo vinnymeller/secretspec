@@ -14,6 +14,8 @@
     pkgs.dbus
     # coverage testing
     pkgs.cargo-tarpaulin
+    # installers
+    pkgs.cargo-dist
   ];
 
   git-hooks.hooks = {
