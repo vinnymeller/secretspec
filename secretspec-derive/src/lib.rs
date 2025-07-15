@@ -478,7 +478,7 @@ fn is_secret_optional(secret_config: &Secret) -> bool {
 /// - Only if required in ALL profiles → not optional
 fn is_field_optional_across_profiles(secret_name: &str, config: &Config) -> bool {
     // Check each profile
-    for (_, profile_config) in &config.profiles {
+    for profile_config in config.profiles.values() {
         if let Some(secret_config) = profile_config.secrets.get(secret_name) {
             if is_secret_optional(secret_config) {
                 return true;
@@ -560,8 +560,8 @@ fn analyze_field_types(config: &Config) -> BTreeMap<String, FieldInfo> {
     let mut field_info = BTreeMap::new();
 
     // Collect all unique secrets across all profiles
-    for (_, profile_config) in &config.profiles {
-        for (secret_name, _) in &profile_config.secrets {
+    for profile_config in config.profiles.values() {
+        for secret_name in profile_config.secrets.keys() {
             field_info.entry(secret_name.clone()).or_insert_with(|| {
                 let is_optional = is_field_optional_across_profiles(secret_name, config);
                 let field_type = if is_optional {

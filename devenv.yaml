@@ -1,4 +1,7 @@
 inputs:
+  devenv:
+    # https://github.com/cachix/devenv/pull/2011
+    url: github:cachix/devenv/fix-rust-hooks-with-custom-toolchain
   rust-overlay:
     url: github:oxalica/rust-overlay
     inputs:

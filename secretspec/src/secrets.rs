@@ -396,7 +396,7 @@ impl Secrets {
                         &self.config.project.name,
                         secret_name,
                         &value,
-                        &profile_display,
+                        profile_display,
                     )?;
                     println!(
                         "{} Secret '{}' saved to {} (profile: {})",
