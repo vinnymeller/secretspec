@@ -2,6 +2,7 @@
 members = [
     "secretspec",
     "secretspec-derive",
+    "examples/derive",
 ]
 resolver = "2"
 

@@ -39,9 +39,5 @@ linkme.workspace = true
 default = ["cli"]
 cli = []
 
-[[example]]
-name = "derive"
-path = "../examples/derive/derive.rs"
-
 [dev-dependencies]
 secretspec-derive.workspace = true
