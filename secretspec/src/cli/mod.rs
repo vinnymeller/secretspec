@@ -15,6 +15,7 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(name = "secretspec")]
 #[command(about = "Secure environment variable manager", long_about = None)]
+#[command(version)]
 struct Cli {
     /// The subcommand to execute
     #[command(subcommand)]
