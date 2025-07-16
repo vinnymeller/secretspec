@@ -29,6 +29,6 @@
   '';
 
   processes.docs.exec = ''
-    cd docs && npx run dev
+    cd docs && npm run dev
   '';
 }
