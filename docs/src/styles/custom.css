@@ -7,9 +7,11 @@
 }
 
 :root[data-theme="dark"] {
-  --sl-color-accent-low: #22304133;
-  --sl-color-accent: #4a6fa5;
-  --sl-color-accent-high: #6b8bc3;
+  --sl-color-accent-low: #1a2332;
+  --sl-color-accent: #5e9eff;
+  --sl-color-accent-high: #82b3ff;
+  --sl-color-bg-accent: #2d3748;
+  --sl-color-text-accent: #ffffff;
 }
 
 .sl-markdown-content a:not([class]) {
