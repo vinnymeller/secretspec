@@ -21,7 +21,7 @@
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use secretspec_core::{Config, Secret};
+use secretspec::{Config, Secret};
 use std::collections::{BTreeMap, HashSet};
 use syn::{LitStr, parse_macro_input};
 
@@ -194,7 +194,7 @@ impl ProfileVariant {
 /// # Example
 /// ```ignore
 /// // In your main.rs or lib.rs:
-/// secretspec::define_secrets!("secretspec.toml");
+/// secretspec_derive::declare_secrets!("secretspec.toml");
 ///
 /// use secretspec::Provider;
 ///
@@ -222,7 +222,7 @@ impl ProfileVariant {
 /// }
 /// ```
 #[proc_macro]
-pub fn define_secrets(input: TokenStream) -> TokenStream {
+pub fn declare_secrets(input: TokenStream) -> TokenStream {
     let path = parse_macro_input!(input as LitStr).value();
 
     // Get the manifest directory of the crate using the macro
@@ -1448,168 +1448,6 @@ fn capitalize_first(s: &str) -> String {
     match chars.next() {
         None => String::new(),
         Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-    }
-}
-
-/// Provider registration macro.
-///
-/// This attribute macro registers a provider struct with the global provider registry.
-/// It should be applied to provider struct definitions.
-///
-/// # Usage
-///
-/// ```ignore
-/// #[provider(
-///     name = "keyring",
-///     description = "Uses system keychain (Recommended)",
-///     schemes = ["keyring"],
-/// )]
-/// pub struct KeyringProvider {
-///     config: KeyringConfig,
-/// }
-/// ```
-///
-/// The macro automatically infers the config type from the `config` field in the struct.
-#[proc_macro_attribute]
-pub fn provider(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = match syn::parse::<ProviderArgs>(args) {
-        Ok(args) => args,
-        Err(e) => {
-            let err_msg = e.to_string();
-            return TokenStream::from(quote! { compile_error!(#err_msg); });
-        }
-    };
-
-    let item_struct = match syn::parse::<syn::ItemStruct>(input.clone()) {
-        Ok(item) => item,
-        Err(e) => {
-            let err_msg = e.to_string();
-            return TokenStream::from(quote! { compile_error!(#err_msg); });
-        }
-    };
-
-    let struct_name = &item_struct.ident;
-    let name = &args.name;
-    let description = &args.description;
-
-    // Always infer config type from the 'config' field
-    let config = if let syn::Fields::Named(fields) = &item_struct.fields {
-        let config_field = fields.named.iter().find(|field| {
-            field
-                .ident
-                .as_ref()
-                .map(|id| id == "config")
-                .unwrap_or(false)
-        });
-
-        if let Some(field) = config_field {
-            field.ty.clone()
-        } else {
-            let err_msg = "Provider struct must have a 'config' field";
-            return TokenStream::from(quote! { compile_error!(#err_msg); });
-        }
-    } else {
-        let err_msg = "Provider struct must have named fields";
-        return TokenStream::from(quote! { compile_error!(#err_msg); });
-    };
-
-    let schemes = &args.schemes;
-    let examples = &args.examples;
-
-    let output = quote! {
-        #item_struct
-
-        // Store provider name as a constant
-        impl #struct_name {
-            const PROVIDER_NAME: &'static str = #name;
-        }
-
-        const _: () = {
-            #[linkme::distributed_slice(crate::provider::PROVIDER_REGISTRY)]
-            #[doc(hidden)]
-            static PROVIDER_REGISTRATION: crate::provider::ProviderRegistration = crate::provider::ProviderRegistration {
-                info: crate::provider::ProviderInfo {
-                    name: #name,
-                    description: #description,
-                    examples: &[#(#examples),*],
-                },
-                schemes: &[#(#schemes),*],
-                factory: |url| {
-                    let config = <#config>::try_from(url)?;
-                    Ok(Box::new(<#struct_name>::new(config)))
-                },
-            };
-        };
-    };
-
-    TokenStream::from(output)
-}
-
-#[derive(Debug)]
-struct ProviderArgs {
-    name: String,
-    description: String,
-    schemes: Vec<String>,
-    examples: Vec<String>,
-}
-
-impl syn::parse::Parse for ProviderArgs {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut name = None;
-        let mut description = None;
-        let mut schemes = Vec::new();
-        let mut examples = Vec::new();
-
-        while !input.is_empty() {
-            let key: syn::Ident = input.parse()?;
-            let _: syn::Token![=] = input.parse()?;
-
-            match key.to_string().as_str() {
-                "name" => {
-                    let lit: syn::LitStr = input.parse()?;
-                    name = Some(lit.value());
-                }
-                "description" => {
-                    let lit: syn::LitStr = input.parse()?;
-                    description = Some(lit.value());
-                }
-                "schemes" => {
-                    let content;
-                    let _ = syn::bracketed!(content in input);
-                    while !content.is_empty() {
-                        let lit: syn::LitStr = content.parse()?;
-                        schemes.push(lit.value());
-                        if !content.is_empty() {
-                            let _: syn::Token![,] = content.parse()?;
-                        }
-                    }
-                }
-                "examples" => {
-                    let content;
-                    let _ = syn::bracketed!(content in input);
-                    while !content.is_empty() {
-                        let lit: syn::LitStr = content.parse()?;
-                        examples.push(lit.value());
-                        if !content.is_empty() {
-                            let _: syn::Token![,] = content.parse()?;
-                        }
-                    }
-                }
-                _ => return Err(syn::Error::new(key.span(), "unexpected argument")),
-            }
-
-            if !input.is_empty() {
-                let _: syn::Token![,] = input.parse()?;
-            }
-        }
-
-        Ok(ProviderArgs {
-            name: name.ok_or_else(|| syn::Error::new(input.span(), "missing `name` argument"))?,
-            description: description
-                .ok_or_else(|| syn::Error::new(input.span(), "missing `description` argument"))?,
-            schemes,
-            examples,
-        })
     }
 }
 

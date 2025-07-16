@@ -1,10 +1,10 @@
 //! Core secrets management functionality
 
+use crate::config::{Config, GlobalConfig};
 use crate::error::{Result, SecretSpecError};
 use crate::provider::Provider as ProviderTrait;
 use crate::validation::ValidatedSecrets;
 use colored::Colorize;
-use secretspec_core::{Config, GlobalConfig};
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::env;
@@ -125,7 +125,7 @@ impl Secrets {
         &self,
         name: &str,
         profile: Option<&str>,
-    ) -> Option<&secretspec_core::Secret> {
+    ) -> Option<&crate::config::Secret> {
         let profile_name = self.resolve_profile(profile);
 
         // First check the specified profile

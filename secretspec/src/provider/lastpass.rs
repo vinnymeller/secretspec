@@ -123,16 +123,19 @@ impl TryFrom<&Url> for LastPassConfig {
 ///     folder_prefix: Some("work".to_string()),
 /// };
 /// let provider = LastPassProvider::new(config);
-/// ```ignore
-#[crate::provider(
-    name = "lastpass",
-    description = "LastPass password manager",
-    schemes = ["lastpass"],
-    examples = ["lastpass://", "lastpass://Shared-SecretSpec"],
-)]
+/// ```
 pub struct LastPassProvider {
     #[allow(dead_code)]
     config: LastPassConfig,
+}
+
+crate::register_provider! {
+    struct: LastPassProvider,
+    config: LastPassConfig,
+    name: "lastpass",
+    description: "LastPass password manager",
+    schemes: ["lastpass"],
+    examples: ["lastpass://", "lastpass://Shared-SecretSpec"],
 }
 
 impl LastPassProvider {

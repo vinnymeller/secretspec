@@ -142,7 +142,7 @@ The Rust SDK generates strongly-typed structs from your `secretspec.toml`, ensur
 
 ```rust
 // Generate typed structs from secretspec.toml
-secretspec::define_secrets!("secretspec.toml");
+secretspec_derive::declare_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load secrets with type-safe struct

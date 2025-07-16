@@ -5,7 +5,7 @@ use std::io;
 use thiserror::Error;
 
 // Internal use only
-use secretspec_core::ParseError;
+use crate::config::ParseError;
 
 /// The main error type for secretspec operations
 ///

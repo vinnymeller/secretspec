@@ -1,6 +1,6 @@
-use secretspec_derive::define_secrets;
+use secretspec_derive::declare_secrets;
 
 // This should fail because the TOML is invalid
-define_secrets!("invalid_toml_embedded.txt");
+declare_secrets!("invalid_toml_embedded.txt");
 
 fn main() {}

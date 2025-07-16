@@ -212,15 +212,18 @@ impl OnePasswordConfig {}
 /// export OP_SERVICE_ACCOUNT_TOKEN="ops_eyJzaWduSW..."
 /// secretspec get MY_SECRET --provider onepassword+token://Development
 /// ```
-#[crate::provider(
-    name = "onepassword",
-    description = "OnePassword password manager",
-    schemes = ["onepassword", "onepassword+token"],
-    examples = ["onepassword://vault", "onepassword://work@Production", "onepassword+token://vault"],
-)]
 pub struct OnePasswordProvider {
     /// Configuration for the provider including auth settings and default vault.
     config: OnePasswordConfig,
+}
+
+crate::register_provider! {
+    struct: OnePasswordProvider,
+    config: OnePasswordConfig,
+    name: "onepassword",
+    description: "OnePassword password manager",
+    schemes: ["onepassword", "onepassword+token"],
+    examples: ["onepassword://vault", "onepassword://work@Production", "onepassword+token://vault"],
 }
 
 impl OnePasswordProvider {

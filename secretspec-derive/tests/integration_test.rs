@@ -1,11 +1,11 @@
 // Integration tests that verify the complete macro output
 
-use secretspec_derive::define_secrets;
+use secretspec_derive::declare_secrets;
 
 mod basic_generation {
     use super::*;
 
-    define_secrets!("tests/fixtures/basic.toml");
+    declare_secrets!("tests/fixtures/basic.toml");
 
     #[test]
     fn test_struct_fields_exist() {
@@ -21,7 +21,7 @@ mod basic_generation {
 mod profile_generation {
     use super::*;
 
-    define_secrets!("tests/fixtures/profiles.toml");
+    declare_secrets!("tests/fixtures/profiles.toml");
 
     #[test]
     fn test_profile_enum_variants() {
@@ -79,7 +79,7 @@ mod profile_generation {
 mod complex_generation {
     use super::*;
 
-    define_secrets!("tests/fixtures/complex.toml");
+    declare_secrets!("tests/fixtures/complex.toml");
 
     #[test]
     fn test_complex_field_types() {
@@ -105,7 +105,7 @@ mod complex_generation {
 mod empty_generation {
     use super::*;
 
-    define_secrets!("tests/fixtures/empty.toml");
+    declare_secrets!("tests/fixtures/empty.toml");
 
     #[test]
     fn test_empty_struct() {
@@ -123,7 +123,7 @@ mod json_serialization {
     use super::*;
     use serde_json;
 
-    define_secrets!("tests/fixtures/basic.toml");
+    declare_secrets!("tests/fixtures/basic.toml");
 
     #[test]
     fn test_secret_spec_secrets_json_serialization() {

@@ -1,5 +1,8 @@
 [workspace]
-members = ["secretspec", "secretspec-derive", "secretspec-core", "examples/derive"]
+members = [
+    "secretspec",
+    "secretspec-derive",
+]
 resolver = "2"
 
 [workspace.package]
@@ -31,8 +34,7 @@ trybuild = "1.0"
 insta = "1.34"
 linkme = "0.3"
 secretspec-derive = { version = "0.1.0", path = "./secretspec-derive" }
-secretspec-core = { version = "0.1.0", path = "./secretspec-core" }
-secretspec = { version = "0.1.0", path = "./secretspec", features = ["macros"] }
+secretspec = { version = "0.1.0", path = "./secretspec" }
 
 # The profile that 'dist' will build with
 [profile.dist]

@@ -1,6 +1,6 @@
-//! # SecretSpec Core
+//! # SecretSpec Core Configuration Types
 //!
-//! This crate provides the core type definitions and parsing logic for the SecretSpec
+//! This module provides the core type definitions and parsing logic for the SecretSpec
 //! configuration system.
 //!
 //! SecretSpec uses a declarative TOML-based configuration format to define secrets

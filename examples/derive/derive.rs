@@ -1,6 +1,6 @@
 // Use the proc macro to generate typed structs from secretspec.toml
 // This generates: SecretSpec, SecretSpecProfile, Profile, and Provider types
-secretspec::define_secrets!("secretspec.toml");
+secretspec_derive::declare_secrets!("../examples/derive/secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("SecretSpec Code Generation Example\n");

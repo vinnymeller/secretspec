@@ -73,15 +73,18 @@ impl EnvConfig {}
 /// let provider = EnvProvider::new(EnvConfig::default());
 /// // Can only read values, not set them
 /// ```
-#[crate::provider(
-    name = "env",
-    description = "Read-only environment variables",
-    schemes = ["env"],
-    examples = ["env://"],
-)]
 pub struct EnvProvider {
     #[allow(dead_code)]
     config: EnvConfig,
+}
+
+crate::register_provider! {
+    struct: EnvProvider,
+    config: EnvConfig,
+    name: "env",
+    description: "Read-only environment variables",
+    schemes: ["env"],
+    examples: ["env://"],
 }
 
 impl EnvProvider {

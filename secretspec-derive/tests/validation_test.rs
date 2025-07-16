@@ -1,4 +1,4 @@
-use secretspec_derive::define_secrets;
+use secretspec_derive::declare_secrets;
 
 #[test]
 fn test_validation_errors() {
@@ -6,7 +6,7 @@ fn test_validation_errors() {
     // The actual test is that this file should NOT compile if uncommented
 
     // Uncomment to test:
-    // define_secrets!("tests/fixtures/invalid_validation.toml");
+    // declare_secrets!("tests/fixtures/invalid_validation.toml");
 }
 
 // Test with valid Rust keywords that should be rejected
@@ -16,12 +16,12 @@ fn test_keyword_validation() {
 
     // mod test_type_keyword {
     //     use super::*;
-    //     define_secrets!("tests/fixtures/keyword_type.toml");
+    //     declare_secrets!("tests/fixtures/keyword_type.toml");
     // }
 
     // mod test_self_keyword {
     //     use super::*;
-    //     define_secrets!("tests/fixtures/keyword_self.toml");
+    //     declare_secrets!("tests/fixtures/keyword_self.toml");
     // }
 }
 
@@ -30,7 +30,7 @@ mod test_valid {
     use super::*;
 
     // This should compile successfully
-    define_secrets!("tests/fixtures/basic.toml");
+    declare_secrets!("tests/fixtures/basic.toml");
 
     #[test]
     fn test_basic_compiles() {

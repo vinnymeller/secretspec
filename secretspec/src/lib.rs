@@ -19,18 +19,19 @@
 //! fn main() -> Result<()> {
 //!     // Load the secret specification
 //!     let spec = Secrets::load()?;
-//!     
+//!
 //!     // Validate all secrets are present
 //!     spec.check(None, None)?;
-//!     
+//!
 //!     // Run a command with secrets injected
 //!     spec.run(vec!["npm".to_string(), "start".to_string()], None, None)?;
-//!     
+//!
 //!     Ok(())
 //! }
 //! ```
 
 // Internal modules
+mod config;
 mod error;
 mod secrets;
 mod validation;
@@ -41,18 +42,16 @@ pub(crate) mod provider;
 #[cfg(feature = "cli")]
 pub mod cli;
 
-// Re-export macros
-#[cfg(feature = "macros")]
-pub use secretspec_derive::define_secrets;
-#[cfg(feature = "macros")]
-pub(crate) use secretspec_derive::provider;
-
 // Re-export only the types needed by users and generated code
-pub use secretspec_core::Resolved;
+pub use config::Resolved;
 
 // Re-export config types for CLI usage only - these are marked #[doc(hidden)]
 #[doc(hidden)]
-pub use secretspec_core::{Config, GlobalConfig, GlobalDefaults, Profile, Project};
+pub use config::{Config, GlobalConfig, GlobalDefaults, Profile, Project};
+
+// Re-export Secret for secretspec-derive
+#[doc(hidden)]
+pub use config::Secret;
 
 // Public API exports
 pub use error::{Result, SecretSpecError};

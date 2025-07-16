@@ -4,7 +4,7 @@ This example demonstrates how to use SecretSpec's proc macro to create strongly-
 
 ## How it works
 
-1. The `secretspec::define_secrets!()` macro generates Rust structs from `secretspec.toml` at compile time
+1. The `secretspec_derive::declare_secrets!()` macro generates Rust structs from `secretspec.toml` at compile time
 2. The generated types include:
    - `SecretSpec` struct with union types (safe for any profile)
    - `SecretSpecProfile` enum with profile-specific field types

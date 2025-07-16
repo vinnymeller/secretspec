@@ -28,8 +28,6 @@ dotenvy.workspace = true
 serde-envfile.workspace = true
 inquire.workspace = true
 miette.workspace = true
-secretspec-derive = { workspace = true, optional = true }
-secretspec-core = { version = "0.1.0", path = "../secretspec-core" }
 serde_json.workspace = true
 tempfile.workspace = true
 http.workspace = true
@@ -38,8 +36,12 @@ whoami.workspace = true
 linkme.workspace = true
 
 [features]
-default = ["macros", "cli"]
-macros = ["secretspec-derive"]
+default = ["cli"]
 cli = []
 
+[[example]]
+name = "derive"
+path = "../examples/derive/derive.rs"
+
 [dev-dependencies]
+secretspec-derive.workspace = true

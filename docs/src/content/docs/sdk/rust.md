@@ -12,13 +12,14 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 secretspec = { version = "0.1" }
+secretspec-derive = { version = "0.1" }
 ```
 
 Basic example:
 
 ```rust
 // Generate typed structs from secretspec.toml
-secretspec::define_secrets!("secretspec.toml");
+secretspec_derive::declare_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load secrets using the builder pattern
@@ -51,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 The `load_profile()` method on the builder provides profile-specific types for your secrets:
 
 ```rust
-secretspec::define_secrets!("secretspec.toml");
+secretspec_derive::declare_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load secrets with profile-specific types

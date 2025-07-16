@@ -1,9 +1,9 @@
 use super::*;
+use crate::config::{Config, GlobalConfig, ParseError, Profile, Project, Secret};
 use crate::error::{Result, SecretSpecError};
 use crate::provider::Provider as ProviderTrait;
 use crate::secrets::Secrets;
 use crate::validation::ValidatedSecrets;
-use secretspec_core::{Config, GlobalConfig, ParseError, Profile, Project, Secret};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;

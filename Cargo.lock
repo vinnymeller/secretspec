@@ -339,15 +339,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "derive-example"
-version = "0.1.0"
-dependencies = [
- "secretspec",
- "serde",
- "url",
-]
-
-[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1228,7 +1219,6 @@ dependencies = [
  "linkme",
  "miette",
  "rpassword",
- "secretspec-core",
  "secretspec-derive",
  "serde",
  "serde-envfile",
@@ -1241,16 +1231,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "secretspec-core"
-version = "0.1.0"
-dependencies = [
- "directories",
- "serde",
- "tempfile",
- "toml",
-]
-
-[[package]]
 name = "secretspec-derive"
 version = "0.1.0"
 dependencies = [
@@ -1259,7 +1239,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "secretspec",
- "secretspec-core",
  "serde",
  "serde_json",
  "syn",

@@ -1,4 +1,4 @@
-use secretspec_derive::define_secrets;
+use secretspec_derive::declare_secrets;
 
 // Note: These tests validate that the macro generates correct code
 // They don't actually run the generated code since that would require
@@ -7,7 +7,7 @@ use secretspec_derive::define_secrets;
 #[test]
 fn test_basic_secrets() {
     // This should compile without errors
-    define_secrets!("tests/fixtures/basic.toml");
+    declare_secrets!("tests/fixtures/basic.toml");
 
     // The macro should generate:
     // - struct SecretSpec with api_key: String, database_url: String, optional_secret: Option<String>
@@ -18,7 +18,7 @@ fn test_basic_secrets() {
 #[test]
 fn test_profile_specific_secrets() {
     // This should compile without errors
-    define_secrets!("tests/fixtures/profiles.toml");
+    declare_secrets!("tests/fixtures/profiles.toml");
 
     // The macro should generate:
     // - struct SecretSpec with:
@@ -32,7 +32,7 @@ fn test_profile_specific_secrets() {
 #[test]
 fn test_empty_secrets() {
     // This should compile without errors
-    define_secrets!("tests/fixtures/empty.toml");
+    declare_secrets!("tests/fixtures/empty.toml");
 
     // The macro should generate empty structs
 }

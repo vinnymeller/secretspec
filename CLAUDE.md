@@ -44,11 +44,12 @@ cd docs && npm run dev
 
 ## Architecture
 
-The project is organized as a Rust workspace with three interdependent crates:
+The project is organized as a Rust workspace with two crates:
 
 1. **secretspec** (src/): Main CLI and library
    - `main.rs`: CLI entry point with command definitions (init, config, set/get, check, run, import)
    - `lib.rs`: Core library with `Secrets` struct, validation logic, and CRUD operations
+   - `config.rs`: Core configuration types (Config, Secret), TOML parsing, and inheritance logic
    - `provider/`: Storage backend implementations with trait-based plugin architecture
 
 2. **secretspec-derive**: Proc macro for type-safe code generation
@@ -56,12 +57,6 @@ The project is organized as a Rust workspace with three interdependent crates:
    - Generates strongly-typed structs from configuration
    - Supports both union types (safe for any profile) and profile-specific types
    - Validates secret names produce valid Rust identifiers
-
-3. **secretspec-core**: Shared type definitions
-   - Core configuration types (Config, Secret)
-   - TOML parsing and serialization
-   - Config file inheritance logic with circular dependency detection
-   - Provider enum definitions
 
 ## Provider System
 
@@ -140,5 +135,4 @@ Note: Some providers (like `env`) are read-only and will skip write tests.
 - `src/main.rs`: CLI command definitions
 - `src/lib.rs`: Core SecretSpec implementation
 - `secretspec-derive/src/lib.rs`: Code generation macro implementation
-- `secretspec-core/src/lib.rs`: Shared type definitions
 - `tests/integration/provider_tests.rs`: Generic provider test suite

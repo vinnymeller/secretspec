@@ -137,7 +137,7 @@ Generate strongly-typed Rust structs from your `secretspec.toml`:
 
 ```rust
 // Generate typed structs from secretspec.toml
-secretspec::define_secrets!("secretspec.toml");
+secretspec_derive::declare_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load secrets with type safety

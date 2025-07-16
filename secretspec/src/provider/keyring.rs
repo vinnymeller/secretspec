@@ -56,15 +56,18 @@ impl KeyringConfig {}
 ///
 /// This ensures secrets are properly namespaced by project and profile,
 /// preventing conflicts between different projects or environments.
-#[crate::provider(
-    name = "keyring",
-    description = "Uses system keychain (Recommended)",
-    schemes = ["keyring"],
-    examples = ["keyring://"],
-)]
 pub struct KeyringProvider {
     #[allow(dead_code)]
     config: KeyringConfig,
+}
+
+crate::register_provider! {
+    struct: KeyringProvider,
+    config: KeyringConfig,
+    name: "keyring",
+    description: "Uses system keychain (Recommended)",
+    schemes: ["keyring"],
+    examples: ["keyring://"],
 }
 
 impl KeyringProvider {

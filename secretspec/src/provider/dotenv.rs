@@ -123,15 +123,18 @@ impl TryFrom<&Url> for DotEnvConfig {
 /// This provider ignores the project and profile parameters as .env files
 /// typically don't have built-in namespacing. All secrets are stored
 /// flat in the file.
-#[crate::provider(
-    name = "dotenv",
-    description = "Traditional .env files",
-    schemes = ["dotenv"],
-    examples = ["dotenv://.env", "dotenv://.env.production"],
-)]
 pub struct DotEnvProvider {
     /// Configuration containing the path to the .env file
     config: DotEnvConfig,
+}
+
+crate::register_provider! {
+    struct: DotEnvProvider,
+    config: DotEnvConfig,
+    name: "dotenv",
+    description: "Traditional .env files",
+    schemes: ["dotenv"],
+    examples: ["dotenv://.env", "dotenv://.env.production"],
 }
 
 impl DotEnvProvider {
@@ -175,8 +178,8 @@ impl DotEnvProvider {
     ///     println!("Found secret: {} - {}", key, config.description);
     /// }
     /// ```
-    pub fn reflect(&self) -> Result<HashMap<String, secretspec_core::Secret>> {
-        use secretspec_core::Secret;
+    pub fn reflect(&self) -> Result<HashMap<String, crate::config::Secret>> {
+        use crate::config::Secret;
 
         if !self.config.path.exists() {
             return Ok(HashMap::new());

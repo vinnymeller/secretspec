@@ -20,7 +20,7 @@ pub trait Provider: Send + Sync {
 
 1. **Create provider module** in `src/provider/mybackend.rs`
 2. **Define config struct** with `Serialize`, `Deserialize`, `Default`, and `TryFrom<&Url>`
-3. **Implement provider struct** with the `#[provider]` macro for automatic registration
+3. **Implement provider struct** and use the `register_provider!` macro for automatic registration
 4. **Implement Provider trait** for your provider struct
 5. **Export from mod.rs**: Add `pub mod mybackend;`
 
@@ -60,14 +60,17 @@ impl TryFrom<&Url> for MyBackendConfig {
     }
 }
 
-#[crate::provider(
-    name = "mybackend",
-    description = "My custom backend provider",
-    schemes = ["mybackend"],
-    examples = ["mybackend://api.example.com", "mybackend://localhost:8080"],
-)]
 pub struct MyBackendProvider {
     config: MyBackendConfig,
+}
+
+crate::register_provider! {
+    struct: MyBackendProvider,
+    config: MyBackendConfig,
+    name: "mybackend",
+    description: "My custom backend provider",
+    schemes: ["mybackend"],
+    examples: ["mybackend://api.example.com", "mybackend://localhost:8080"],
 }
 
 impl MyBackendProvider {
