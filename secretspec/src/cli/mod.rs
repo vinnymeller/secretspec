@@ -27,7 +27,7 @@ struct Cli {
 /// initialization, secret management, configuration, and import operations.
 #[derive(Subcommand)]
 enum Commands {
-    /// Initialize a new secretspec.toml from a provider
+    /// Initialize a new secretspec.toml (optionally, from a provider)
     Init {
         /// Provider URL to import from (e.g., dotenv://.env, dotenv://.env.production)
         /// Currently only dotenv provider is supported.
@@ -70,7 +70,7 @@ enum Commands {
         #[arg(trailing_var_arg = true)]
         command: Vec<String>,
     },
-    /// Check if all required secrets are available
+    /// Check if all required secrets are in the provider, if not set them
     Check {
         /// Provider backend to use
         #[arg(short, long, env = "SECRETSPEC_PROVIDER")]
@@ -79,12 +79,12 @@ enum Commands {
         #[arg(short = 'P', long, env = "SECRETSPEC_PROFILE")]
         profile: Option<String>,
     },
-    /// Configure user settings
+    /// Init or show ~/.config/secretspec/config.toml
     Config {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    /// Import secrets from one provider to the default provider
+    /// Import secrets from a provider to another provider
     Import {
         /// Provider backend to import from (secrets will be imported to the default provider)
         from_provider: String,
