@@ -25,10 +25,10 @@
   };
 
   enterTest = ''
-    cargo test --all --verbose
+    cargo test --all
   '';
 
   processes.docs.exec = ''
-    cd docs && npx run astro dev
+    cd docs && npx run dev
   '';
 }
