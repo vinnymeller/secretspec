@@ -1,4 +1,6 @@
 inputs:
+  nixpkgs:
+    url: github:domenkozar/nixpkgs/cargo-dist-bump
   rust-overlay:
     url: github:oxalica/rust-overlay
     inputs:
