@@ -1219,7 +1219,6 @@ dependencies = [
  "linkme",
  "miette",
  "rpassword",
- "secretspec-derive",
  "serde",
  "serde-envfile",
  "serde_json",

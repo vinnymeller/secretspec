@@ -38,6 +38,3 @@ linkme.workspace = true
 [features]
 default = ["cli"]
 cli = []
-
-[dev-dependencies]
-secretspec-derive.workspace = true
