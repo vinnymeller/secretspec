@@ -203,7 +203,7 @@ impl DotEnvProvider {
             secrets.insert(
                 key.clone(),
                 Secret {
-                    description: format!("{} secret", key),
+                    description: Some(format!("{} secret", key)),
                     required: true,
                     default: None,
                 },
@@ -365,7 +365,10 @@ mod tests {
         assert!(secrets.contains_key("DATABASE_URL"));
 
         let api_key_config = &secrets["API_KEY"];
-        assert_eq!(api_key_config.description, "API_KEY secret");
+        assert_eq!(
+            api_key_config.description,
+            Some("API_KEY secret".to_string())
+        );
         assert!(api_key_config.required);
         assert!(api_key_config.default.is_none());
     }

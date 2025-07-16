@@ -297,7 +297,7 @@ impl Default for Profile {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Secret {
     /// Human-readable description of what this secret is used for
-    pub description: String,
+    pub description: Option<String>,
     /// Whether this secret must be provided (no default value)
     /// Defaults to true if not specified
     #[serde(default = "default_true")]
@@ -312,8 +312,12 @@ impl Secret {
     ///
     /// Ensures that required secrets don't have default values.
     pub fn validate(&self) -> Result<(), String> {
-        if self.description.is_empty() {
-            return Err("Secret description cannot be empty".into());
+        if let Some(desc) = &self.description {
+            if desc.is_empty() {
+                return Err("description cannot be empty".into());
+            }
+        } else {
+            return Err("missing description".into());
         }
 
         if self.required && self.default.is_some() {

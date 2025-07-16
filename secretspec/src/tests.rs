@@ -193,12 +193,15 @@ API_KEY = { description = "API key for external service", required = false, defa
     let database_url_config = default_profile.secrets.get("DATABASE_URL").unwrap();
     assert_eq!(
         database_url_config.description,
-        "Override database connection"
+        Some("Override database connection".to_string())
     );
 
     // Check that extended secrets are included
     let redis_config = default_profile.secrets.get("REDIS_URL").unwrap();
-    assert_eq!(redis_config.description, "Redis connection URL");
+    assert_eq!(
+        redis_config.description,
+        Some("Redis connection URL".to_string())
+    );
     assert!(!redis_config.required);
     assert_eq!(
         redis_config.default,
@@ -206,7 +209,10 @@ API_KEY = { description = "API key for external service", required = false, defa
     );
 
     let jwt_config = default_profile.secrets.get("JWT_SECRET").unwrap();
-    assert_eq!(jwt_config.description, "Secret key for JWT token signing");
+    assert_eq!(
+        jwt_config.description,
+        Some("Secret key for JWT token signing".to_string())
+    );
     assert!(jwt_config.required);
 }
 
@@ -311,7 +317,7 @@ fn test_resolve_secret_config() {
     default_secrets.insert(
         "API_KEY".to_string(),
         Secret {
-            description: "API Key".to_string(),
+            description: Some("API Key".to_string()),
             required: true,
             default: None,
         },
@@ -319,7 +325,7 @@ fn test_resolve_secret_config() {
     default_secrets.insert(
         "DATABASE_URL".to_string(),
         Secret {
-            description: "Database URL".to_string(),
+            description: Some("Database URL".to_string()),
             required: false,
             default: Some("sqlite:///default.db".to_string()),
         },
@@ -329,7 +335,7 @@ fn test_resolve_secret_config() {
     dev_secrets.insert(
         "API_KEY".to_string(),
         Secret {
-            description: "Dev API Key".to_string(),
+            description: Some("Dev API Key".to_string()),
             required: false,
             default: Some("dev-key".to_string()),
         },
@@ -554,12 +560,18 @@ MONITORING_TOKEN = { description = "Token for monitoring service", required = tr
 
     // Verify base config overrides common config
     let database_url = default_profile.secrets.get("DATABASE_URL").unwrap();
-    assert_eq!(database_url.description, "Custom database for my app");
+    assert_eq!(
+        database_url.description,
+        Some("Custom database for my app".to_string())
+    );
     assert!(database_url.required);
 
     // Verify inherited secrets from common
     let redis_url = default_profile.secrets.get("REDIS_URL").unwrap();
-    assert_eq!(redis_url.description, "Redis cache connection");
+    assert_eq!(
+        redis_url.description,
+        Some("Redis cache connection".to_string())
+    );
     assert!(!redis_url.required);
     assert_eq!(
         redis_url.default,
@@ -568,7 +580,10 @@ MONITORING_TOKEN = { description = "Token for monitoring service", required = tr
 
     // Verify inherited secrets from auth
     let jwt_secret = default_profile.secrets.get("JWT_SECRET").unwrap();
-    assert_eq!(jwt_secret.description, "Secret for JWT signing");
+    assert_eq!(
+        jwt_secret.description,
+        Some("Secret for JWT signing".to_string())
+    );
     assert!(jwt_secret.required);
 
     // Verify development profile
@@ -578,7 +593,10 @@ MONITORING_TOKEN = { description = "Token for monitoring service", required = tr
     assert_eq!(dev_api_key.default, Some("dev-key-123".to_string()));
 
     let dev_database_url = dev_profile.secrets.get("DATABASE_URL").unwrap();
-    assert_eq!(dev_database_url.description, "Development database");
+    assert_eq!(
+        dev_database_url.description,
+        Some("Development database".to_string())
+    );
     assert!(!dev_database_url.required);
     assert_eq!(
         dev_database_url.default,
@@ -790,7 +808,10 @@ SECRET_A = { description = "Secret A for staging", required = false, default = "
 
     // Verify B's override of COMMON_SECRET takes precedence over C's
     let common_secret = default_profile.secrets.get("COMMON_SECRET").unwrap();
-    assert_eq!(common_secret.description, "Common secret overridden by B");
+    assert_eq!(
+        common_secret.description,
+        Some("Common secret overridden by B".to_string())
+    );
     assert!(!common_secret.required);
     assert_eq!(common_secret.default, Some("default-b".to_string()));
 
@@ -1075,31 +1096,37 @@ SECRET_E = { description = "New secret E", required = true }
 
     // Verify SECRET_A: only description changed
     let secret_a = default_profile.secrets.get("SECRET_A").unwrap();
-    assert_eq!(secret_a.description, "New description A");
+    assert_eq!(secret_a.description, Some("New description A".to_string()));
     assert!(secret_a.required);
     assert_eq!(secret_a.default, None);
 
     // Verify SECRET_B: only required flag changed
     let secret_b = default_profile.secrets.get("SECRET_B").unwrap();
-    assert_eq!(secret_b.description, "Original description B");
+    assert_eq!(
+        secret_b.description,
+        Some("Original description B".to_string())
+    );
     assert!(!secret_b.required); // Changed from true to false
     assert_eq!(secret_b.default, Some("original-b".to_string()));
 
     // Verify SECRET_C: only default value added
     let secret_c = default_profile.secrets.get("SECRET_C").unwrap();
-    assert_eq!(secret_c.description, "Original description C");
+    assert_eq!(
+        secret_c.description,
+        Some("Original description C".to_string())
+    );
     assert!(!secret_c.required);
     assert_eq!(secret_c.default, Some("new-c".to_string()));
 
     // Verify SECRET_D: multiple properties changed
     let secret_d = default_profile.secrets.get("SECRET_D").unwrap();
-    assert_eq!(secret_d.description, "New description D");
+    assert_eq!(secret_d.description, Some("New description D".to_string()));
     assert!(secret_d.required); // Changed from false to true
     assert_eq!(secret_d.default, None); // Removed default
 
     // Verify SECRET_E: new secret added
     let secret_e = default_profile.secrets.get("SECRET_E").unwrap();
-    assert_eq!(secret_e.description, "New secret E");
+    assert_eq!(secret_e.description, Some("New secret E".to_string()));
     assert!(secret_e.required);
     assert_eq!(secret_e.default, None);
 }
@@ -1254,7 +1281,7 @@ fn test_set_with_undefined_secret() {
             secrets.insert(
                 "DEFINED_SECRET".to_string(),
                 Secret {
-                    description: "A defined secret".to_string(),
+                    description: Some("A defined secret".to_string()),
                     required: true,
                     default: None,
                 },
@@ -1315,7 +1342,7 @@ fn test_set_with_defined_secret() {
             secrets.insert(
                 "DEFINED_SECRET".to_string(),
                 Secret {
-                    description: "A defined secret".to_string(),
+                    description: Some("A defined secret".to_string()),
                     required: true,
                     default: None,
                 },
@@ -1363,7 +1390,7 @@ fn test_set_with_readonly_provider() {
             secrets.insert(
                 "DEFINED_SECRET".to_string(),
                 Secret {
-                    description: "A defined secret".to_string(),
+                    description: Some("A defined secret".to_string()),
                     required: true,
                     default: None,
                 },
@@ -1420,7 +1447,7 @@ fn test_import_between_dotenv_files() {
             secrets.insert(
                 "SECRET_ONE".to_string(),
                 Secret {
-                    description: "First test secret".to_string(),
+                    description: Some("First test secret".to_string()),
                     required: true,
                     default: None,
                 },
@@ -1428,7 +1455,7 @@ fn test_import_between_dotenv_files() {
             secrets.insert(
                 "SECRET_TWO".to_string(),
                 Secret {
-                    description: "Second test secret".to_string(),
+                    description: Some("Second test secret".to_string()),
                     required: true,
                     default: None,
                 },
@@ -1436,7 +1463,7 @@ fn test_import_between_dotenv_files() {
             secrets.insert(
                 "SECRET_THREE".to_string(),
                 Secret {
-                    description: "Third test secret".to_string(),
+                    description: Some("Third test secret".to_string()),
                     required: false,
                     default: Some("default_value".to_string()),
                 },
@@ -1444,7 +1471,7 @@ fn test_import_between_dotenv_files() {
             secrets.insert(
                 "SECRET_FOUR".to_string(),
                 Secret {
-                    description: "Fourth test secret (not in source)".to_string(),
+                    description: Some("Fourth test secret (not in source)".to_string()),
                     required: false,
                     default: None,
                 },
@@ -1538,7 +1565,7 @@ fn test_import_edge_cases() {
             secrets.insert(
                 "EMPTY_VALUE".to_string(),
                 Secret {
-                    description: "Secret with empty value".to_string(),
+                    description: Some("Secret with empty value".to_string()),
                     required: true,
                     default: None,
                 },
@@ -1546,7 +1573,7 @@ fn test_import_edge_cases() {
             secrets.insert(
                 "SPECIAL_CHARS".to_string(),
                 Secret {
-                    description: "Secret with special characters".to_string(),
+                    description: Some("Secret with special characters".to_string()),
                     required: true,
                     default: None,
                 },
@@ -1554,7 +1581,7 @@ fn test_import_edge_cases() {
             secrets.insert(
                 "MULTILINE".to_string(),
                 Secret {
-                    description: "Secret with multiline value".to_string(),
+                    description: Some("Secret with multiline value".to_string()),
                     required: true,
                     default: None,
                 },
@@ -1737,7 +1764,7 @@ fn test_import_with_profiles() {
             dev_secrets.insert(
                 "DEV_SECRET".to_string(),
                 Secret {
-                    description: "Development secret".to_string(),
+                    description: Some("Development secret".to_string()),
                     required: true,
                     default: None,
                 },
@@ -1745,7 +1772,7 @@ fn test_import_with_profiles() {
             dev_secrets.insert(
                 "SHARED_SECRET".to_string(),
                 Secret {
-                    description: "Shared secret".to_string(),
+                    description: Some("Shared secret".to_string()),
                     required: true,
                     default: None,
                 },
@@ -1762,7 +1789,7 @@ fn test_import_with_profiles() {
             prod_secrets.insert(
                 "PROD_SECRET".to_string(),
                 Secret {
-                    description: "Production secret".to_string(),
+                    description: Some("Production secret".to_string()),
                     required: true,
                     default: None,
                 },
@@ -1770,7 +1797,7 @@ fn test_import_with_profiles() {
             prod_secrets.insert(
                 "SHARED_SECRET".to_string(),
                 Secret {
-                    description: "Shared secret".to_string(),
+                    description: Some("Shared secret".to_string()),
                     required: true,
                     default: None,
                 },
@@ -1887,7 +1914,7 @@ fn test_run_with_missing_required_secrets() {
     secrets.insert(
         "REQUIRED_SECRET".to_string(),
         Secret {
-            description: "A required secret".to_string(),
+            description: Some("A required secret".to_string()),
             required: true,
             default: None,
         },
@@ -1934,7 +1961,7 @@ fn test_get_existing_secret() {
     secrets.insert(
         "TEST_SECRET".to_string(),
         Secret {
-            description: "Test secret".to_string(),
+            description: Some("Test secret".to_string()),
             required: true,
             default: None,
         },
@@ -1975,7 +2002,7 @@ fn test_get_secret_with_default() {
     secrets.insert(
         "SECRET_WITH_DEFAULT".to_string(),
         Secret {
-            description: "Secret with default value".to_string(),
+            description: Some("Secret with default value".to_string()),
             required: false,
             default: Some("default_value".to_string()),
         },
@@ -2015,7 +2042,7 @@ fn test_get_nonexistent_secret() {
     secrets.insert(
         "EXISTING_SECRET".to_string(),
         Secret {
-            description: "Existing secret".to_string(),
+            description: Some("Existing secret".to_string()),
             required: true,
             default: None,
         },

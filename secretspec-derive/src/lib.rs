@@ -1136,25 +1136,35 @@ mod builder_generation {
 
                 pub fn with_provider<T>(mut self, provider: T) -> Self
                 where
-                    T: TryInto<url::Url> + 'static,
-                    T::Error: std::fmt::Display + 'static,
+                    T: TryInto<url::Url>,
+                    T::Error: std::fmt::Display,
                 {
-                    self.provider = Some(Box::new(move || {
-                        provider.try_into()
-                            .map_err(|e| format!("Invalid provider URI: {}", e))
-                    }));
+                    match provider.try_into() {
+                        Ok(url) => {
+                            self.provider = Some(Box::new(move || Ok(url)));
+                        }
+                        Err(e) => {
+                            let error_msg = format!("Invalid provider URI: {}", e);
+                            self.provider = Some(Box::new(move || Err(error_msg)));
+                        }
+                    }
                     self
                 }
 
                 pub fn with_profile<T>(mut self, profile: T) -> Self
                 where
-                    T: TryInto<Profile> + 'static,
-                    T::Error: std::fmt::Display + 'static
+                    T: TryInto<Profile>,
+                    T::Error: std::fmt::Display
                 {
-                    self.profile = Some(Box::new(move || {
-                        profile.try_into()
-                            .map_err(|e| format!("{}", e))
-                    }));
+                    match profile.try_into() {
+                        Ok(p) => {
+                            self.profile = Some(Box::new(move || Ok(p)));
+                        }
+                        Err(e) => {
+                            let error_msg = format!("{}", e);
+                            self.profile = Some(Box::new(move || Err(error_msg)));
+                        }
+                    }
                     self
                 }
             }

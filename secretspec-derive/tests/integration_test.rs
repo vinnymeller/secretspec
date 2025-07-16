@@ -155,3 +155,114 @@ mod json_serialization {
         assert_eq!(deserialized.secrets.api_key, "test_key");
     }
 }
+
+mod profile_inheritance {
+    use super::*;
+
+    declare_secrets!("tests/fixtures/profile_inheritance.toml");
+
+    #[test]
+    fn test_profile_inheritance_compilation() {
+        // This test verifies that the macro successfully processes a TOML file
+        // where profiles have partial secret definitions that rely on field-level inheritance
+
+        // Verify all expected profiles are generated
+        let _default = Profile::Default;
+        let _dev = Profile::Development;
+        let _prod = Profile::Production;
+        let _staging = Profile::Staging;
+    }
+
+    #[test]
+    fn test_union_type_with_inheritance() {
+        // Verify the union struct has all secrets from all profiles
+        fn _test_field_types(s: SecretSpec) {
+            let _: Option<String> = s.database_url;
+            let _: Option<String> = s.api_key;
+            let _: Option<String> = s.log_level;
+            let _: Option<String> = s.cache_ttl;
+            let _: Option<String> = s.debug_mode;
+            let _: Option<String> = s.enable_profiling;
+        }
+    }
+
+    #[test]
+    fn test_profile_specific_with_inheritance() {
+        // Test that each profile variant has the expected fields
+        fn _test_default(profile: SecretSpecProfile) {
+            match profile {
+                SecretSpecProfile::Default {
+                    database_url,
+                    api_key,
+                    log_level,
+                    cache_ttl,
+                } => {
+                    let _: String = database_url; // Required
+                    let _: String = api_key; // Required
+                    let _: Option<String> = log_level; // Optional with default
+                    let _: Option<String> = cache_ttl; // Optional with default
+                }
+                _ => panic!("Expected Default variant"),
+            }
+        }
+
+        fn _test_development(profile: SecretSpecProfile) {
+            match profile {
+                SecretSpecProfile::Development {
+                    database_url,
+                    debug_mode,
+                } => {
+                    let _: Option<String> = database_url; // Override: not required with default
+                    let _: Option<String> = debug_mode; // New field in development
+                }
+                _ => panic!("Expected Development variant"),
+            }
+        }
+
+        fn _test_production(profile: SecretSpecProfile) {
+            match profile {
+                SecretSpecProfile::Production {
+                    database_url,
+                    api_key,
+                    log_level,
+                } => {
+                    let _: String = database_url; // Override: required
+                    let _: String = api_key; // Override: required
+                    let _: Option<String> = log_level; // Override: different default
+                }
+                _ => panic!("Expected Production variant"),
+            }
+        }
+
+        fn _test_staging(profile: SecretSpecProfile) {
+            match profile {
+                SecretSpecProfile::Staging {
+                    database_url,
+                    log_level,
+                    enable_profiling,
+                } => {
+                    let _: String = database_url; // Override: required
+                    let _: Option<String> = log_level; // Override: different default
+                    let _: Option<String> = enable_profiling; // New field in staging
+                }
+                _ => panic!("Expected Staging variant"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_builder_works_with_inherited_profiles() {
+        // Verify the builder is generated correctly
+        let _builder = SecretSpec::builder();
+
+        // Test that we can specify different profiles
+        // (We're not actually loading, just verifying the API exists)
+        let _ = SecretSpec::builder()
+            .with_profile("development")
+            .with_provider("dotenv://.env");
+
+        let _ = SecretSpec::builder()
+            .with_profile(Profile::Production)
+            .with_provider("keyring://");
+    }
+}

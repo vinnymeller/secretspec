@@ -111,7 +111,8 @@ impl Secrets {
     /// Resolves the configuration for a specific secret
     ///
     /// This method looks for the secret in the specified profile, falling back
-    /// to the default profile if not found.
+    /// to the default profile if not found. If the secret exists in both profiles,
+    /// fields are merged with the current profile taking precedence.
     ///
     /// # Arguments
     ///
@@ -120,29 +121,44 @@ impl Secrets {
     ///
     /// # Returns
     ///
-    /// The secret configuration if found
+    /// The secret configuration if found (may be merged from multiple profiles)
     pub(crate) fn resolve_secret_config(
         &self,
         name: &str,
         profile: Option<&str>,
-    ) -> Option<&crate::config::Secret> {
+    ) -> Option<crate::config::Secret> {
         let profile_name = self.resolve_profile(profile);
 
-        // First check the specified profile
-        if let Some(profile_config) = self.config.profiles.get(profile_name) {
-            if let Some(secret) = profile_config.secrets.get(name) {
-                return Some(secret);
-            }
-        }
+        let current_secret = self
+            .config
+            .profiles
+            .get(profile_name)
+            .and_then(|profile_config| profile_config.secrets.get(name));
 
-        // Fall back to default profile if not found and we're not already in default
-        if profile_name != "default" {
-            if let Some(default_profile) = self.config.profiles.get("default") {
-                return default_profile.secrets.get(name);
-            }
-        }
+        let default_secret = if profile_name != "default" {
+            self.config
+                .profiles
+                .get("default")
+                .and_then(|default_profile| default_profile.secrets.get(name))
+        } else {
+            None
+        };
 
-        None
+        match (current_secret, default_secret) {
+            (Some(current), Some(default)) => {
+                // Merge: current profile takes precedence
+                Some(crate::config::Secret {
+                    description: current
+                        .description
+                        .clone()
+                        .or_else(|| default.description.clone()),
+                    required: current.required,
+                    default: current.default.clone(),
+                })
+            }
+            (Some(secret), None) | (None, Some(secret)) => Some(secret.clone()),
+            (None, None) => None,
+        }
     }
 
     /// Gets the provider instance to use for secret operations
@@ -384,7 +400,11 @@ impl Secrets {
                 if let Some(secret_config) =
                     self.resolve_secret_config(secret_name, Some(profile_display))
                 {
-                    println!("\n{} - {}", secret_name.bold(), secret_config.description);
+                    let description = secret_config
+                        .description
+                        .as_deref()
+                        .unwrap_or("No description");
+                    println!("\n{} - {}", secret_name.bold(), description);
                     print!(
                         "Enter value for {} (profile: {}): ",
                         secret_name, profile_display
@@ -507,18 +527,23 @@ impl Secrets {
                         "{} {} - {} {}",
                         "○".yellow(),
                         name,
-                        config.description,
+                        config.description.as_deref().unwrap_or("No description"),
                         "(has default)".yellow()
                     );
                 } else {
-                    println!("{} {} - {}", "✓".green(), name, config.description);
+                    println!(
+                        "{} {} - {}",
+                        "✓".green(),
+                        name,
+                        config.description.as_deref().unwrap_or("No description")
+                    );
                 }
             } else if initial_validation.missing_required.contains(&name) {
                 println!(
                     "{} {} - {} {}",
                     "✗".red(),
                     name,
-                    config.description,
+                    config.description.as_deref().unwrap_or("No description"),
                     "(required)".red()
                 );
             } else if initial_validation.missing_optional.contains(&name) {
@@ -526,7 +551,7 @@ impl Secrets {
                     "{} {} - {} {}",
                     "○".blue(),
                     name,
-                    config.description,
+                    config.description.as_deref().unwrap_or("No description"),
                     "(optional)".blue()
                 );
             }
@@ -617,7 +642,7 @@ impl Secrets {
                                 "{} {} - {} {}",
                                 "○".yellow(),
                                 name,
-                                config.description,
+                                config.description.as_deref().unwrap_or("No description"),
                                 "(already exists in target)".yellow()
                             );
                             already_exists += 1;
@@ -630,7 +655,12 @@ impl Secrets {
                                 &value,
                                 profile_display,
                             )?;
-                            println!("{} {} - {}", "✓".green(), name, config.description);
+                            println!(
+                                "{} {} - {}",
+                                "✓".green(),
+                                name,
+                                config.description.as_deref().unwrap_or("No description")
+                            );
                             imported += 1;
                         }
                     }
@@ -644,7 +674,7 @@ impl Secrets {
                                 "{} {} - {} {}",
                                 "○".blue(),
                                 name,
-                                config.description,
+                                config.description.as_deref().unwrap_or("No description"),
                                 "(already in target, not in source)".blue()
                             );
                             already_exists += 1;
@@ -654,7 +684,7 @@ impl Secrets {
                                 "{} {} - {} {}",
                                 "✗".red(),
                                 name,
-                                config.description,
+                                config.description.as_deref().unwrap_or("No description"),
                                 "(not found in source)".red()
                             );
                             not_found += 1;

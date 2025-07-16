@@ -160,7 +160,9 @@ fn generate_toml_with_comments(config: &Config) -> crate::Result<String> {
         for (secret_name, secret_config) in &profile_config.secrets {
             output.push_str(&format!(
                 "{} = {{ description = \"{}\", required = {}",
-                secret_name, secret_config.description, secret_config.required
+                secret_name,
+                secret_config.description.as_deref().unwrap_or(""),
+                secret_config.required
             ));
 
             if let Some(default) = &secret_config.default {
