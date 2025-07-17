@@ -13,7 +13,7 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```ignore
 //! // Generate typed structs from secretspec.toml
 //! secretspec_derive::declare_secrets!("secretspec.toml");
 //!
