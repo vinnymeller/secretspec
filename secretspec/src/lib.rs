@@ -14,17 +14,30 @@
 //! # Example
 //!
 //! ```no_run
-//! use secretspec::{Secrets, Result};
+//! // Generate typed structs from secretspec.toml
+//! secretspec_derive::declare_secrets!("secretspec.toml");
 //!
-//! fn main() -> Result<()> {
-//!     // Load the secret specification
-//!     let spec = Secrets::load()?;
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Load secrets using the builder pattern
+//!     let secrets = Secrets::builder()
+//!         .with_provider("keyring")  // Can use provider name or URI like "dotenv:/path/to/.env"
+//!         .with_profile("development")  // Can use string or Profile enum
+//!         .load()?;  // All conversions and errors are handled here
 //!
-//!     // Validate all secrets are present
-//!     spec.check(None, None)?;
+//!     // Access secrets (field names are lowercased)
+//!     println!("Database: {}", secrets.secrets.database_url);  // DATABASE_URL → database_url
 //!
-//!     // Run a command with secrets injected
-//!     spec.run(vec!["npm".to_string(), "start".to_string()], None, None)?;
+//!     // Optional secrets are Option<String>
+//!     if let Some(redis) = &secrets.secrets.redis_url {
+//!         println!("Redis: {}", redis);
+//!     }
+//!
+//!     // Access profile and provider information
+//!     println!("Using profile: {}", secrets.profile);
+//!     println!("Using provider: {}", secrets.provider);
+//!
+//!     // Set all secrets as environment variables
+//!     secrets.secrets.set_as_env_vars();
 //!
 //!     Ok(())
 //! }
