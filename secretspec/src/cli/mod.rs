@@ -355,10 +355,16 @@ pub fn main() -> Result<()> {
             provider,
             profile,
         } => {
-            let app = Secrets::load()
+            let mut app = Secrets::load()
                 .into_diagnostic()
                 .wrap_err("Failed to load secretspec configuration")?;
-            app.set(&name, value, provider, profile)
+            if let Some(p) = provider {
+                app.set_provider(p);
+            }
+            if let Some(p) = profile {
+                app.set_profile(p);
+            }
+            app.set(&name, value)
                 .into_diagnostic()
                 .wrap_err("Failed to set secret")?;
             Ok(())
@@ -369,10 +375,16 @@ pub fn main() -> Result<()> {
             provider,
             profile,
         } => {
-            let app = Secrets::load()
+            let mut app = Secrets::load()
                 .into_diagnostic()
                 .wrap_err("Failed to load secretspec configuration")?;
-            app.get(&name, provider, profile)
+            if let Some(p) = provider {
+                app.set_provider(p);
+            }
+            if let Some(p) = profile {
+                app.set_profile(p);
+            }
+            app.get(&name)
                 .into_diagnostic()
                 .wrap_err("Failed to get secret")?;
             Ok(())
@@ -383,20 +395,32 @@ pub fn main() -> Result<()> {
             provider,
             profile,
         } => {
-            let app = Secrets::load()
+            let mut app = Secrets::load()
                 .into_diagnostic()
                 .wrap_err("Failed to load secretspec configuration")?;
-            app.run(command, provider, profile)
+            if let Some(p) = provider {
+                app.set_provider(p);
+            }
+            if let Some(p) = profile {
+                app.set_profile(p);
+            }
+            app.run(command)
                 .into_diagnostic()
                 .wrap_err("Failed to run command")?;
             Ok(())
         }
         // Verify all required secrets are available
         Commands::Check { provider, profile } => {
-            let app = Secrets::load()
+            let mut app = Secrets::load()
                 .into_diagnostic()
                 .wrap_err("Failed to load secretspec configuration")?;
-            app.check(provider, profile)
+            if let Some(p) = provider {
+                app.set_provider(p);
+            }
+            if let Some(p) = profile {
+                app.set_profile(p);
+            }
+            app.check()
                 .into_diagnostic()
                 .wrap_err("Failed to check secrets")?;
             Ok(())

@@ -1,8 +1,9 @@
-use super::*;
-use crate::config::{Config, GlobalConfig, ParseError, Profile, Project, Resolved, Secret};
+use crate::config::{
+    Config, GlobalConfig, GlobalDefaults, ParseError, Profile, Project, Resolved, Secret,
+};
 use crate::error::{Result, SecretSpecError};
 use crate::secrets::Secrets;
-use crate::validation::ValidatedSecrets;
+use crate::validation::{ValidatedSecrets, ValidationErrors};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
@@ -39,7 +40,7 @@ fn test_new_with_project_config() {
         profiles: HashMap::new(),
     };
 
-    let spec = Secrets::new(config, None);
+    let spec = Secrets::new(config, None, None, None);
 
     assert_eq!(spec.config().project.name, "test-project");
 }
@@ -75,7 +76,7 @@ profile = "development"
     let global_config_content = fs::read_to_string(&global_path).unwrap();
     let global_config: Option<GlobalConfig> = Some(toml::from_str(&global_config_content).unwrap());
 
-    let spec = Secrets::new(config, global_config);
+    let spec = Secrets::new(config, global_config, None, None);
 
     assert_eq!(spec.config().project.name, "custom-project");
     assert_eq!(
@@ -108,7 +109,7 @@ fn test_new_with_default_overrides() {
         },
     };
 
-    let spec = Secrets::new(config, Some(global_config));
+    let spec = Secrets::new(config, Some(global_config), None, None);
 
     assert_eq!(spec.config().project.name, "test-project");
 }
@@ -216,22 +217,26 @@ API_KEY = { description = "API key for external service", required = false, defa
 }
 
 #[test]
-fn test_validation_result_is_valid() {
+fn test_validation_result_structure() {
+    // Test ValidatedSecrets structure
     let valid_result = ValidatedSecrets {
         resolved: Resolved::new(HashMap::new(), "keyring".to_string(), "default".to_string()),
-        missing_required: Vec::new(),
         missing_optional: vec!["optional_secret".to_string()],
         with_defaults: Vec::new(),
     };
-    assert!(valid_result.is_valid());
+    assert_eq!(valid_result.missing_optional.len(), 1);
+    assert_eq!(valid_result.with_defaults.len(), 0);
 
-    let invalid_result = ValidatedSecrets {
-        resolved: Resolved::new(HashMap::new(), "keyring".to_string(), "default".to_string()),
-        missing_required: vec!["required_secret".to_string()],
-        missing_optional: Vec::new(),
-        with_defaults: Vec::new(),
-    };
-    assert!(!invalid_result.is_valid());
+    // Test ValidationErrors structure
+    let validation_errors = ValidationErrors::new(
+        vec!["required_secret".to_string()],
+        vec!["optional_secret".to_string()],
+        vec![],
+        "keyring".to_string(),
+        "default".to_string(),
+    );
+    assert!(validation_errors.has_errors());
+    assert_eq!(validation_errors.missing_required.len(), 1);
 }
 
 #[test]
@@ -252,7 +257,7 @@ fn test_secretspec_new() {
         },
     };
 
-    let spec = Secrets::new(config.clone(), Some(global_config.clone()));
+    let spec = Secrets::new(config.clone(), Some(global_config.clone()), None, None);
     assert_eq!(spec.config().project.name, "test");
     assert!(spec.global_config().is_some());
     assert_eq!(
@@ -260,7 +265,7 @@ fn test_secretspec_new() {
         Some("keyring".to_string())
     );
 
-    let spec_without_global = Secrets::new(config, None);
+    let spec_without_global = Secrets::new(config, None, None, None);
     assert!(spec_without_global.global_config().is_none());
 }
 
@@ -283,6 +288,8 @@ fn test_resolve_profile() {
             profiles: HashMap::new(),
         },
         Some(global_config),
+        None,
+        None,
     );
 
     // Test with explicit profile
@@ -301,6 +308,8 @@ fn test_resolve_profile() {
             },
             profiles: HashMap::new(),
         },
+        None,
+        None,
         None,
     );
     assert_eq!(spec_no_global.resolve_profile(None), "default");
@@ -360,6 +369,8 @@ fn test_resolve_secret_config() {
             profiles,
         },
         None,
+        None,
+        None,
     );
 
     // Test profile-specific secret
@@ -398,6 +409,8 @@ fn test_get_provider_error_cases() {
             profiles: HashMap::new(),
         },
         None,
+        None,
+        None,
     );
 
     // Test with no provider configured
@@ -424,6 +437,8 @@ fn test_get_provider_with_global_config() {
             profiles: HashMap::new(),
         },
         Some(global_config),
+        None,
+        None,
     );
 
     // Should not error with global config
@@ -1293,16 +1308,11 @@ fn test_set_with_undefined_secret() {
         },
     };
 
-    let spec = Secrets::new(project_config, Some(global_config));
+    let spec = Secrets::new(project_config, Some(global_config), None, None);
 
     // Test setting an undefined secret - env provider is read-only,
     // but we should get the SecretNotFound error before the provider error
-    let result = spec.set(
-        "UNDEFINED_SECRET",
-        Some("test_value".to_string()),
-        Some("env".to_string()),
-        None,
-    );
+    let result = spec.set("UNDEFINED_SECRET", Some("test_value".to_string()));
 
     assert!(result.is_err());
     match result {
@@ -1354,15 +1364,10 @@ fn test_set_with_defined_secret() {
         },
     };
 
-    let spec = Secrets::new(project_config, Some(global_config));
+    let spec = Secrets::new(project_config, Some(global_config), None, None);
 
     // This should succeed with dotenv provider
-    let result = spec.set(
-        "DEFINED_SECRET",
-        Some("test_value".to_string()),
-        Some("dotenv".to_string()),
-        None,
-    );
+    let result = spec.set("DEFINED_SECRET", Some("test_value".to_string()));
 
     // Restore original directory
     env::set_current_dir(original_dir).unwrap();
@@ -1402,15 +1407,10 @@ fn test_set_with_readonly_provider() {
         },
     };
 
-    let spec = Secrets::new(project_config, Some(global_config));
+    let spec = Secrets::new(project_config, Some(global_config), None, None);
 
     // Test setting a defined secret with env provider (which is read-only)
-    let result = spec.set(
-        "DEFINED_SECRET",
-        Some("test_value".to_string()),
-        Some("env".to_string()),
-        None,
-    );
+    let result = spec.set("DEFINED_SECRET", Some("test_value".to_string()));
 
     assert!(result.is_err());
     match result {
@@ -1498,7 +1498,7 @@ fn test_import_between_dotenv_files() {
     };
 
     // Create SecretSpec instance
-    let spec = Secrets::new(project_config, Some(global_config));
+    let spec = Secrets::new(project_config, Some(global_config), None, None);
 
     // Import from source dotenv to target dotenv
     let from_provider = format!("dotenv://{}", source_env_path.display());
@@ -1607,7 +1607,7 @@ fn test_import_edge_cases() {
         },
     };
 
-    let spec = Secrets::new(project_config, Some(global_config));
+    let spec = Secrets::new(project_config, Some(global_config), None, None);
 
     // Import from source to target
     let from_provider = format!("dotenv://{}", source_env_path.display());
@@ -1677,7 +1677,16 @@ API_KEY = { description = "Dev API key", required = true }
 
     // Load the config
     let config = Config::try_from(project_path.as_path()).unwrap();
-    let spec = Secrets::new(config, None);
+
+    // Create a global config with env provider
+    let global_config = GlobalConfig {
+        defaults: GlobalDefaults {
+            provider: Some("env".to_string()),
+            profile: None,
+        },
+    };
+
+    let spec = Secrets::new(config.clone(), Some(global_config.clone()), None, None);
 
     // Test that profiles are completely independent
 
@@ -1714,26 +1723,44 @@ API_KEY = { description = "Dev API key", required = true }
     );
 
     // 4. Verify through validation that development profile DOES see CACHE_TTL
-    let default_validation = spec
-        .validate(Some("env".to_string()), Some("default".to_string()))
-        .unwrap();
-    let dev_validation = spec
-        .validate(Some("env".to_string()), Some("development".to_string()))
-        .unwrap();
+    // Create separate instances for each profile validation
+    let spec_default = Secrets::new(
+        config.clone(),
+        Some(global_config.clone()),
+        None,
+        Some("default".to_string()),
+    );
+    let default_validation_result = spec_default.validate().unwrap();
+
+    let spec_dev = Secrets::new(
+        config,
+        Some(global_config),
+        None,
+        Some("development".to_string()),
+    );
+    let dev_validation_result = spec_dev.validate().unwrap();
+
+    // Both should be errors since we're using env provider with no env vars set
+    let default_errors = default_validation_result
+        .err()
+        .expect("Should have validation errors");
+    let dev_errors = dev_validation_result
+        .err()
+        .expect("Should have validation errors");
 
     // Default profile should know about 3 secrets
     assert_eq!(
-        default_validation.missing_required.len()
-            + default_validation.missing_optional.len()
-            + default_validation.with_defaults.len(),
+        default_errors.missing_required.len()
+            + default_errors.missing_optional.len()
+            + default_errors.with_defaults.len(),
         3
     );
 
     // Development profile should now know about 3 secrets (2 defined + 1 inherited)
     assert_eq!(
-        dev_validation.missing_required.len()
-            + dev_validation.missing_optional.len()
-            + dev_validation.with_defaults.len(),
+        dev_errors.missing_required.len()
+            + dev_errors.missing_optional.len()
+            + dev_errors.with_defaults.len(),
         3,
         "Development should see 3 secrets: DATABASE_URL, API_KEY, and inherited CACHE_TTL"
     );
@@ -1828,7 +1855,7 @@ fn test_import_with_profiles() {
         },
     };
 
-    let spec = Secrets::new(project_config, Some(global_config));
+    let spec = Secrets::new(project_config, Some(global_config), None, None);
 
     // Import should only import secrets from the active profile (development)
     let from_provider = format!("dotenv://{}", source_env_path.display());
@@ -1884,9 +1911,11 @@ fn test_run_with_empty_command() {
                 profile: None,
             },
         }),
+        None,
+        None,
     );
 
-    let result = spec.run(vec![], None, None);
+    let result = spec.run(vec![]);
     assert!(result.is_err());
 
     match result {
@@ -1933,9 +1962,11 @@ fn test_run_with_missing_required_secrets() {
                 profile: None,
             },
         }),
+        None,
+        None,
     );
 
-    let result = spec.run(vec!["echo".to_string(), "hello".to_string()], None, None);
+    let result = spec.run(vec!["echo".to_string(), "hello".to_string()]);
     assert!(result.is_err());
 
     match result {
@@ -1980,9 +2011,11 @@ fn test_get_existing_secret() {
                 profile: None,
             },
         }),
+        None,
+        None,
     );
 
-    let result = spec.get("TEST_SECRET", None, None);
+    let result = spec.get("TEST_SECRET");
     assert!(result.is_ok(), "Failed to get secret: {:?}", result);
 }
 
@@ -2021,9 +2054,11 @@ fn test_get_secret_with_default() {
                 profile: None,
             },
         }),
+        None,
+        None,
     );
 
-    let result = spec.get("SECRET_WITH_DEFAULT", None, None);
+    let result = spec.get("SECRET_WITH_DEFAULT");
     assert!(result.is_ok());
 }
 
@@ -2061,9 +2096,11 @@ fn test_get_nonexistent_secret() {
                 profile: None,
             },
         }),
+        None,
+        None,
     );
 
-    let result = spec.get("NONEXISTENT_SECRET", None, None);
+    let result = spec.get("NONEXISTENT_SECRET");
     assert!(result.is_err());
 
     match result {

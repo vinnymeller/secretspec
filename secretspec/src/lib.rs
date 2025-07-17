@@ -18,26 +18,23 @@
 //! secretspec_derive::declare_secrets!("secretspec.toml");
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     // Load secrets using the builder pattern
-//!     let secrets = Secrets::builder()
-//!         .with_provider("keyring")  // Can use provider name or URI like "dotenv:/path/to/.env"
-//!         .with_profile("development")  // Can use string or Profile enum
-//!         .load()?;  // All conversions and errors are handled here
+//!     // Load secrets and configure provider/profile
+//!     let mut spec = Secrets::load()?;
+//!     spec.set_provider("keyring");  // Can use provider name or URI like "dotenv:/path/to/.env"
+//!     spec.set_profile("development");
+//!     
+//!     // Validate and get secrets
+//!     let secrets = match spec.validate()? {
+//!         Ok(validated) => validated,
+//!         Err(errors) => return Err(format!("Missing secrets: {}", errors).into()),
+//!     };
 //!
 //!     // Access secrets (field names are lowercased)
-//!     println!("Database: {}", secrets.secrets.database_url);  // DATABASE_URL → database_url
-//!
-//!     // Optional secrets are Option<String>
-//!     if let Some(redis) = &secrets.secrets.redis_url {
-//!         println!("Redis: {}", redis);
-//!     }
+//!     println!("Database: {}", secrets.resolved.secrets.get("DATABASE_URL").unwrap());
 //!
 //!     // Access profile and provider information
-//!     println!("Using profile: {}", secrets.profile);
-//!     println!("Using provider: {}", secrets.provider);
-//!
-//!     // Set all secrets as environment variables
-//!     secrets.secrets.set_as_env_vars();
+//!     println!("Using profile: {}", secrets.resolved.profile);
+//!     println!("Using provider: {}", secrets.resolved.provider);
 //!
 //!     Ok(())
 //! }

@@ -7,10 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- SDK: Added `set_provider()` and `set_profile()` methods for configuration
+- SDK: Removed provider/profile parameters from `set()`, `get()`, `check()`, `validate()`, and `run()` methods
+
 ## [0.1.2] - 2025-01-17
 
 ### Fixed
-- Hide internal functions
+- SDK: Hide internal functions
 
 ## [0.1.1] - 2025-07-16
 

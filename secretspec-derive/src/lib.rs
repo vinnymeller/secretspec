@@ -989,8 +989,19 @@ mod secret_spec_generation {
                 provider_str: Option<String>,
                 profile_str: Option<String>,
             ) -> Result<secretspec::ValidatedSecrets, secretspec::SecretSpecError> {
-                let spec = secretspec::Secrets::load()?;
-                spec.validate(provider_str, profile_str)
+                let mut spec = secretspec::Secrets::load()?;
+                if let Some(provider) = provider_str {
+                    spec.set_provider(provider);
+                }
+                if let Some(profile) = profile_str {
+                    spec.set_profile(profile);
+                }
+                match spec.validate()? {
+                    Ok(valid_secrets) => Ok(valid_secrets),
+                    Err(validation_errors) => Err(secretspec::SecretSpecError::RequiredSecretMissing(
+                        validation_errors.missing_required.join(", ")
+                    ))
+                }
             }
         }
     }

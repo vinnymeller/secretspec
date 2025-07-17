@@ -6,6 +6,7 @@ use thiserror::Error;
 
 // Internal use only
 use crate::config::ParseError;
+use crate::validation::ValidationErrors;
 
 /// The main error type for secretspec operations
 ///
@@ -49,6 +50,8 @@ pub enum SecretSpecError {
     Json(#[from] serde_json::Error),
     #[error("Invalid profile: {0}")]
     InvalidProfile(String),
+    #[error("Validation failed: {0}")]
+    ValidationFailed(ValidationErrors),
 }
 
 /// A type alias for `Result<T, SecretSpecError>`

@@ -28,6 +28,15 @@
     cargo test --all
   '';
 
+  scripts.test-cli-integration.exec = ''
+    # Build the CLI for integration tests
+    cargo build --release
+    export PATH="$PWD/target/release:$PATH"
+    
+    # Run CLI integration tests
+    bash tests/cli-integration.sh
+  '';
+
   processes.docs.exec = ''
     cd docs && npm run dev
   '';
