@@ -30,6 +30,7 @@ pub static PROVIDER_REGISTRY: [ProviderRegistration];
 ///     examples: ["keyring://"],
 /// }
 /// ```
+#[doc(hidden)]
 #[macro_export]
 macro_rules! register_provider {
     (

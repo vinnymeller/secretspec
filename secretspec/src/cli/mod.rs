@@ -185,6 +185,7 @@ fn generate_toml_with_comments(config: &Config) -> crate::Result<String> {
 ///
 /// * `Ok(())` - If the command executed successfully
 /// * `Err` - If any error occurred during execution
+#[doc(hidden)]
 pub fn main() -> Result<()> {
     let cli = Cli::parse();
 
