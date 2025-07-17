@@ -63,7 +63,7 @@ See the [Quick Start Guide](https://secretspec.dev/docs/quick-start) for detaile
 
 ```bash
 # Quick install
-$ curl -sSL https://secretspec.dev/install | sh
+$ curl -sSL https://install.secretspec.dev | sh
 ```
 
 See the [installation guide](https://secretspec.dev/docs/quick-start#installation) for more options including Nix, Homebrew, and Docker.
