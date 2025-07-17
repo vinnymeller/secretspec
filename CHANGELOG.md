@@ -5,17 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2025-07-17
 
 ### Changed
 - SDK: Added `set_provider()` and `set_profile()` methods for configuration
 - SDK: Removed provider/profile parameters from `set()`, `get()`, `check()`, `validate()`, and `run()` methods
+- SDK: Embedded Resolved inside ValidatedSecrets
 
 ### Fixed
 - Fix stdin handling for piped input in set/check commands
-- Centralize SECRETSPEC_PROFILE and SECRETSPEC_PROVIDER environment variable resolution
+- Fix SECRETSPEC_PROFILE and SECRETSPEC_PROVIDER environment variable resolution
 - Ensure CLI arguments take precedence over environment variables
-- Fix CLI integration tests for NixOS compatibility
+- add CLI integration tests
 - Update test script to handle non-TTY environments correctly
 
 ## [0.1.2] - 2025-01-17
