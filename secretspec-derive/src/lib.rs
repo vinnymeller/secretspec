@@ -1042,9 +1042,9 @@ mod secret_spec_generation {
                     };
 
                     let validation_result = load_internal(provider_str, profile_str)?;
-                    let provider_name = validation_result.provider_name();
-                    let profile = validation_result.profile;
-                    let secrets = validation_result.secrets;
+                    let provider_name = validation_result.resolved.provider.clone();
+                    let profile = validation_result.resolved.profile.clone();
+                    let secrets = validation_result.resolved.secrets;
 
                     let data = Self {
                         #(#load_assignments,)*
@@ -1258,9 +1258,9 @@ mod builder_generation {
                     #resolve_profile_load
 
                     let validation_result = load_internal(provider_str, profile_str)?;
-                    let provider_name = validation_result.provider_name();
-                    let profile = validation_result.profile;
-                    let secrets = validation_result.secrets;
+                    let provider_name = validation_result.resolved.provider.clone();
+                    let profile = validation_result.resolved.profile.clone();
+                    let secrets = validation_result.resolved.secrets;
 
                     let data = SecretSpec {
                         #(#load_assignments,)*
@@ -1292,9 +1292,9 @@ mod builder_generation {
                     };
 
                     let validation_result = load_internal(provider_str, profile_str)?;
-                    let provider_name = validation_result.provider_name();
-                    let profile = validation_result.profile;
-                    let secrets = validation_result.secrets;
+                    let provider_name = validation_result.resolved.provider.clone();
+                    let profile = validation_result.resolved.profile.clone();
+                    let secrets = validation_result.resolved.secrets;
 
                     let data_result: LoadResult<SecretSpecProfile> = match selected_profile {
                         #(#load_profile_arms,)*

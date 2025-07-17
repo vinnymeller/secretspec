@@ -1,6 +1,6 @@
 //! Core secrets management functionality
 
-use crate::config::{Config, GlobalConfig};
+use crate::config::{Config, GlobalConfig, Resolved};
 use crate::error::{Result, SecretSpecError};
 use crate::provider::Provider as ProviderTrait;
 use crate::validation::ValidatedSecrets;
@@ -517,7 +517,7 @@ impl Secrets {
         all_secrets_to_display.sort_by(|a, b| a.0.cmp(&b.0));
 
         for (name, config) in all_secrets_to_display {
-            if initial_validation.secrets.contains_key(&name) {
+            if initial_validation.resolved.secrets.contains_key(&name) {
                 if initial_validation
                     .with_defaults
                     .iter()
@@ -557,7 +557,8 @@ impl Secrets {
             }
         }
 
-        let found_count = initial_validation.secrets.len() - initial_validation.with_defaults.len();
+        let found_count =
+            initial_validation.resolved.secrets.len() - initial_validation.with_defaults.len();
         let missing_count = initial_validation.missing_required.len();
 
         println!(
@@ -805,12 +806,14 @@ impl Secrets {
         }
 
         Ok(ValidatedSecrets {
-            secrets,
+            resolved: Resolved::new(
+                secrets,
+                backend.name().to_string(),
+                profile_name.to_string(),
+            ),
             missing_required,
             missing_optional,
             with_defaults,
-            provider: backend,
-            profile: profile_name.to_string(),
         })
     }
 
@@ -862,7 +865,7 @@ impl Secrets {
         let validation_result = self.ensure_secrets(provider_arg, profile, false)?;
 
         let mut env_vars = env::vars().collect::<HashMap<_, _>>();
-        env_vars.extend(validation_result.secrets);
+        env_vars.extend(validation_result.resolved.secrets);
 
         let mut cmd = Command::new(&command[0]);
         cmd.args(&command[1..]);

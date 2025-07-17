@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+When commiting changes, make sure to update /CHANGELOG.md
 
 ## Project Overview
 
@@ -25,21 +25,8 @@ cargo run -- check
 cargo run -- set DATABASE_URL
 cargo run -- run -- npm start
 
-# Format code
-cargo fmt
-
-# Run linter
-cargo clippy
-
-# Run code coverage
-cargo tarpaulin
-
-# Build documentation site
-cd docs && npm run build
-
-# Run documentation site locally
-cd docs && npm run dev
-# Or from devenv: devenv processes up
+# Format code / Run linter
+pre-commit run -a
 ```
 
 ## Architecture

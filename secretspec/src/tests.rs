@@ -1,7 +1,6 @@
 use super::*;
-use crate::config::{Config, GlobalConfig, ParseError, Profile, Project, Secret};
+use crate::config::{Config, GlobalConfig, ParseError, Profile, Project, Resolved, Secret};
 use crate::error::{Result, SecretSpecError};
-use crate::provider::Provider as ProviderTrait;
 use crate::secrets::Secrets;
 use crate::validation::ValidatedSecrets;
 use std::collections::HashMap;
@@ -219,22 +218,18 @@ API_KEY = { description = "API key for external service", required = false, defa
 #[test]
 fn test_validation_result_is_valid() {
     let valid_result = ValidatedSecrets {
-        secrets: HashMap::new(),
+        resolved: Resolved::new(HashMap::new(), "keyring".to_string(), "default".to_string()),
         missing_required: Vec::new(),
         missing_optional: vec!["optional_secret".to_string()],
         with_defaults: Vec::new(),
-        provider: Box::<dyn ProviderTrait>::try_from("keyring").unwrap(),
-        profile: "default".to_string(),
     };
     assert!(valid_result.is_valid());
 
     let invalid_result = ValidatedSecrets {
-        secrets: HashMap::new(),
+        resolved: Resolved::new(HashMap::new(), "keyring".to_string(), "default".to_string()),
         missing_required: vec!["required_secret".to_string()],
         missing_optional: Vec::new(),
         with_defaults: Vec::new(),
-        provider: Box::<dyn ProviderTrait>::try_from("keyring").unwrap(),
-        profile: "default".to_string(),
     };
     assert!(!invalid_result.is_valid());
 }
