@@ -4,44 +4,34 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Git tag to publish (e.g., 0.1.2 or v0.1.2)'
+        description: "Git tag to publish (e.g., 0.1.2 or v0.1.2)"
         required: true
         type: string
   push:
     tags:
-      - "[0-9]+.[0-9]+.[0-9]+*"
-      - "v[0-9]+.[0-9]+.[0-9]+*"
+      - "*[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: release # Optional: for enhanced security
     permissions:
-      id-token: write # Required for OIDC token exchange
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
-      
-      - name: Verify tag format
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: |
-          if ! [[ "${{ inputs.tag }}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Error: Tag must be in format X.Y.Z or vX.Y.Z (e.g., 0.1.2 or v0.1.2)"
-            exit 1
-          fi
-      
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-      
+
       - uses: rust-lang/crates-io-auth-action@v1
         id: auth
-      
+
       - name: Publish secretspec crate
         run: cargo publish -p secretspec
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      
+
       - name: Publish secretspec-derive crate
         run: cargo publish -p secretspec-derive
         env:
