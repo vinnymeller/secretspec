@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SDK: Added `set_provider()` and `set_profile()` methods for configuration
 - SDK: Removed provider/profile parameters from `set()`, `get()`, `check()`, `validate()`, and `run()` methods
 
+### Fixed
+- Fix stdin handling for piped input in set/check commands
+- Centralize SECRETSPEC_PROFILE and SECRETSPEC_PROVIDER environment variable resolution
+- Ensure CLI arguments take precedence over environment variables
+- Fix CLI integration tests for NixOS compatibility
+- Update test script to handle non-TTY environments correctly
+
 ## [0.1.2] - 2025-01-17
 
 ### Fixed

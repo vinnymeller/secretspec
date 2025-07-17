@@ -5,6 +5,8 @@ echo "Running CLI integration tests..."
 
 # Use dotenv provider for testing
 export SECRETSPEC_PROVIDER=dotenv
+# Ensure we use the default profile for tests
+export SECRETSPEC_PROFILE=default
 
 # Test directory for isolated tests
 TEST_DIR="$(mktemp -d)"
@@ -75,8 +77,14 @@ TEST_SECRET = { description = "Test secret for integration tests" }
 REQUIRED_SECRET = { description = "Required secret", required = true }
 EOF
 
-secretspec check 2>/dev/null || true
-check_failure "Check fails with missing required secret"
+# Test that check fails when required secret is missing
+if secretspec check 2>/dev/null; then
+    # Should have failed but didn't
+    echo "✗ Check fails with missing required secret"
+    exit 1
+else
+    echo "✓ Check fails with missing required secret"
+fi
 
 # Set the required secret
 echo "required_value" | secretspec set REQUIRED_SECRET
@@ -105,7 +113,7 @@ ENV_VAR1 = { description = "Imported from .env" }
 ENV_VAR2 = { description = "Imported from .env" }
 EOF
 
-secretspec import --from .env.import
+secretspec import dotenv://.env.import
 check_success "Import from .env file"
 
 # Verify imported values
@@ -115,7 +123,7 @@ VALUE2=$(secretspec get ENV_VAR2)
 check_success "Imported values are correct"
 
 # Test 7: Run command with secrets
-echo "#!/bin/bash" > test_script.sh
+echo "#!/usr/bin/env bash" > test_script.sh
 echo "echo \"\$TEST_SECRET\"" >> test_script.sh
 chmod +x test_script.sh
 
@@ -123,9 +131,7 @@ OUTPUT=$(secretspec run -- ./test_script.sh)
 [ "$OUTPUT" = "test_value" ]
 check_success "Run command with secrets injected"
 
-# Test 8: Profile support
-secretspec --profile production init
-check_success "Init with production profile"
+# Test 8: Profile support - init doesn't need profile, just add the profile to config
 
 # Declare secret in production profile
 cat >> secretspec.toml << EOF
@@ -134,16 +140,14 @@ cat >> secretspec.toml << EOF
 PROD_SECRET = { description = "Production secret" }
 EOF
 
-echo "prod_value" | secretspec --profile production set PROD_SECRET
+echo "prod_value" | secretspec set --profile production PROD_SECRET
 check_success "Set secret in production profile"
 
-# Test 9: List secrets
-secretspec list > /dev/null
-check_success "List secrets command works"
+# Test 9: List secrets - removed as this command doesn't exist
 
 # Test 10: Config command
-secretspec config > /dev/null
-check_success "Config command works"
+secretspec config show > /dev/null
+check_success "Config show command works"
 
 # Test 11: Default value handling
 cat > secretspec.toml << EOF

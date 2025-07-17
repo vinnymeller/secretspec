@@ -8,7 +8,7 @@ use colored::Colorize;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::env;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::path::Path;
 use std::process::Command;
 
@@ -160,9 +160,10 @@ impl Secrets {
     ///
     /// Profile resolution order:
     /// 1. Provided profile argument
-    /// 2. Profile set via builder
-    /// 3. Global configuration default profile
-    /// 4. "default" profile
+    /// 2. Profile set via set_profile()
+    /// 3. SECRETSPEC_PROFILE environment variable
+    /// 4. Global configuration default profile
+    /// 5. "default" profile
     ///
     /// # Arguments
     ///
@@ -171,15 +172,17 @@ impl Secrets {
     /// # Returns
     ///
     /// The resolved profile name
-    pub(crate) fn resolve_profile<'a>(&'a self, profile: Option<&'a str>) -> &'a str {
+    pub(crate) fn resolve_profile(&self, profile: Option<&str>) -> String {
         profile
-            .or(self.profile.as_deref())
+            .map(|p| p.to_string())
+            .or_else(|| self.profile.clone())
+            .or_else(|| env::var("SECRETSPEC_PROFILE").ok())
             .or_else(|| {
                 self.global_config
                     .as_ref()
-                    .and_then(|gc| gc.defaults.profile.as_deref())
+                    .and_then(|gc| gc.defaults.profile.clone())
             })
-            .unwrap_or("default")
+            .unwrap_or_else(|| "default".to_string())
     }
 
     /// Resolves the configuration for a specific secret
@@ -206,7 +209,7 @@ impl Secrets {
         let current_secret = self
             .config
             .profiles
-            .get(profile_name)
+            .get(&profile_name)
             .and_then(|profile_config| profile_config.secrets.get(name));
 
         let default_secret = if profile_name != "default" {
@@ -261,6 +264,7 @@ impl Secrets {
         provider_arg: Option<String>,
     ) -> Result<Box<dyn ProviderTrait>> {
         let provider_spec = provider_arg
+            .or_else(|| env::var("SECRETSPEC_PROVIDER").ok())
             .or_else(|| self.provider.clone())
             .or_else(|| {
                 self.global_config
@@ -307,7 +311,7 @@ impl Secrets {
     pub fn set(&self, name: &str, value: Option<String>) -> Result<()> {
         // Check if the secret exists in the spec
         let profile_name = self.resolve_profile(None);
-        let profile_config = self.config.profiles.get(profile_name).ok_or_else(|| {
+        let profile_config = self.config.profiles.get(&profile_name).ok_or_else(|| {
             SecretSpecError::SecretNotFound(format!(
                 "Profile '{}' is not defined in secretspec.toml. Available profiles: {}",
                 profile_name,
@@ -356,13 +360,18 @@ impl Secrets {
 
         let value = if let Some(v) = value {
             v
-        } else {
+        } else if io::stdin().is_terminal() {
             print!("Enter value for {} (profile: {}): ", name, profile_display);
             io::stdout().flush()?;
             rpassword::read_password()?
+        } else {
+            // Read from stdin when input is piped
+            let mut buffer = String::new();
+            io::stdin().read_line(&mut buffer)?;
+            buffer.trim().to_string()
         };
 
-        backend.set(&self.config.project.name, name, &value, profile_name)?;
+        backend.set(&self.config.project.name, name, &value, &profile_name)?;
         println!(
             "{} Secret '{}' saved to {} (profile: {})",
             "✓".green(),
@@ -403,7 +412,7 @@ impl Secrets {
             .ok_or_else(|| SecretSpecError::SecretNotFound(name.to_string()))?;
         let default = secret_config.default.clone();
 
-        match backend.get(&self.config.project.name, name, profile_name)? {
+        match backend.get(&self.config.project.name, name, &profile_name)? {
             Some(value) => {
                 println!("{}", value);
                 Ok(())
@@ -459,25 +468,32 @@ impl Secrets {
                     println!("\nThe following required secrets are missing:");
                     for secret_name in &validation_errors.missing_required {
                         if let Some(secret_config) =
-                            self.resolve_secret_config(secret_name, Some(profile_display))
+                            self.resolve_secret_config(secret_name, Some(&profile_display))
                         {
                             let description = secret_config
                                 .description
                                 .as_deref()
                                 .unwrap_or("No description");
                             println!("\n{} - {}", secret_name.bold(), description);
-                            print!(
-                                "Enter value for {} (profile: {}): ",
-                                secret_name, profile_display
-                            );
-                            io::stdout().flush()?;
-                            let value = rpassword::read_password()?;
+                            let value = if io::stdin().is_terminal() {
+                                print!(
+                                    "Enter value for {} (profile: {}): ",
+                                    secret_name, profile_display
+                                );
+                                io::stdout().flush()?;
+                                rpassword::read_password()?
+                            } else {
+                                // When stdin is not a terminal, we can't prompt interactively
+                                return Err(SecretSpecError::RequiredSecretMissing(
+                                    validation_errors.missing_required.join(", "),
+                                ));
+                            };
 
                             backend.set(
                                 &self.config.project.name,
                                 secret_name,
                                 &value,
-                                profile_display,
+                                &profile_display,
                             )?;
                             println!(
                                 "{} Secret '{}' saved to {} (profile: {})",
@@ -571,7 +587,7 @@ impl Secrets {
 
         // Display status for each secret
         let profile_name = self.resolve_profile(None);
-        let profile_config = self.config.profiles.get(profile_name).ok_or_else(|| {
+        let profile_config = self.config.profiles.get(&profile_name).ok_or_else(|| {
             SecretSpecError::SecretNotFound(format!("Profile '{}' not found", profile_name))
         })?;
 
@@ -682,12 +698,8 @@ impl Secrets {
         // Get the "to" provider from global config (default)
         let to_provider = self.get_provider(None)?;
 
-        // Get the profile from global config
-        let profile = self
-            .global_config
-            .as_ref()
-            .and_then(|gc| gc.defaults.profile.as_deref());
-        let profile_display = self.resolve_profile(profile);
+        // Resolve profile (checks env var, then global config, then defaults to "default")
+        let profile_display = self.resolve_profile(None);
 
         // Create the "from" provider
         let from_provider_instance = Box::<dyn ProviderTrait>::try_from(from_provider.to_string())?;
@@ -700,7 +712,7 @@ impl Secrets {
         );
 
         // Get the profile configuration
-        let profile_config = self.config.profiles.get(profile_display).ok_or_else(|| {
+        let profile_config = self.config.profiles.get(&profile_display).ok_or_else(|| {
             SecretSpecError::SecretNotFound(format!("Profile '{}' not found", profile_display))
         })?;
 
@@ -711,10 +723,10 @@ impl Secrets {
         // Process each secret in the profile
         for (name, config) in &profile_config.secrets {
             // First check if the secret exists in the "from" provider
-            match from_provider_instance.get(&self.config.project.name, name, profile_display)? {
+            match from_provider_instance.get(&self.config.project.name, name, &profile_display)? {
                 Some(value) => {
                     // Secret exists in "from" provider, check if it exists in "to" provider
-                    match to_provider.get(&self.config.project.name, name, profile_display)? {
+                    match to_provider.get(&self.config.project.name, name, &profile_display)? {
                         Some(_) => {
                             println!(
                                 "{} {} - {} {}",
@@ -731,7 +743,7 @@ impl Secrets {
                                 &self.config.project.name,
                                 name,
                                 &value,
-                                profile_display,
+                                &profile_display,
                             )?;
                             println!(
                                 "{} {} - {}",
@@ -746,7 +758,7 @@ impl Secrets {
                 None => {
                     // Secret doesn't exist in "from" provider
                     // Check if it exists in the "to" provider
-                    match to_provider.get(&self.config.project.name, name, profile_display)? {
+                    match to_provider.get(&self.config.project.name, name, &profile_display)? {
                         Some(_) => {
                             println!(
                                 "{} {} - {} {}",
@@ -827,7 +839,7 @@ impl Secrets {
         let mut with_defaults = Vec::new();
 
         let profile_name = self.resolve_profile(None);
-        let profile_config = self.config.profiles.get(profile_name).ok_or_else(|| {
+        let profile_config = self.config.profiles.get(&profile_name).ok_or_else(|| {
             SecretSpecError::SecretNotFound(format!("Profile '{}' not found", profile_name))
         })?;
 
@@ -856,7 +868,7 @@ impl Secrets {
             let required = secret_config.required;
             let default = secret_config.default.clone();
 
-            match backend.get(&self.config.project.name, &name, profile_name)? {
+            match backend.get(&self.config.project.name, &name, &profile_name)? {
                 Some(value) => {
                     secrets.insert(name.clone(), value);
                 }
