@@ -64,6 +64,24 @@ If you have an existing `.env` file, you can import secrets from it:
 $ secretspec init --from .env
 ```
 
+Now edit `secretspec.toml` to define the secrets your application needs:
+
+```toml
+[project]
+name = "my-app"
+revision = "1.0"
+
+[profiles.default]
+DATABASE_URL = { description = "PostgreSQL connection string", required = true }
+REDIS_URL = { description = "Redis connection string", required = false }
+
+[profiles.development]
+DATABASE_URL = { default = "sqlite://./dev.db" }
+
+[profiles.production]
+REDIS_URL = { required = true }
+```
+
 ## 2. Set up provider backend
 
 Configure your preferred secrets storage backend:
@@ -120,26 +138,6 @@ $ secretspec run -- npm start
 
 # Or with a specific profile and provider
 $ secretspec run --profile production --provider dotenv -- npm start
-```
-
-## Example `secretspec.toml`
-
-Here's a simple example configuration:
-
-```toml
-[project]
-name = "my-app"
-revision = "1.0"
-
-[profiles.default]
-DATABASE_URL = { description = "PostgreSQL connection string", required = true }
-REDIS_URL = { description = "Redis connection string", required = false }
-
-[profiles.development]
-DATABASE_URL = { default = "sqlite://./dev.db" }
-
-[profiles.production]
-REDIS_URL = { required = true }
 ```
 
 ## Next Steps
