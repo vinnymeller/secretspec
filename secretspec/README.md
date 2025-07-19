@@ -10,7 +10,7 @@ Declarative secrets, every environment, any provider.
 
 SecretSpec separates the declaration of what secrets an application needs from where they are stored, enabling portable applications that work across different secret storage backends without code changes.
 
-[Documentation](https://secretspec.dev) | [Quick Start](https://secretspec.dev/docs/quick-start) | [Announcement Blog Post](XXX)
+[Documentation](https://secretspec.dev) | [Quick Start](https://secretspec.dev/docs/quick-start) | [Announcement Blog Post](https://devenv.sh/blog/2025/07/21/announcing-secretspecs-declarative-secrets-management)
 
 ## Features
 
