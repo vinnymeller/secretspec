@@ -23,25 +23,25 @@ secretspec_derive::declare_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load secrets using the builder pattern
-    let secrets = Secrets::builder()
+    let secretspec = SecretSpec::builder()
         .with_provider("keyring")  // Can use provider name or URI like "dotenv:/path/to/.env"
         .with_profile("development")  // Can use string or Profile enum
         .load()?;  // All conversions and errors are handled here
 
     // Access secrets (field names are lowercased)
-    println!("Database: {}", secrets.secrets.database_url);  // DATABASE_URL → database_url
+    println!("Database: {}", secretspec.secrets.database_url);  // DATABASE_URL → database_url
 
     // Optional secrets are Option<String>
-    if let Some(redis) = &secrets.secrets.redis_url {
+    if let Some(redis) = &secretspec.secrets.redis_url {
         println!("Redis: {}", redis);
     }
 
     // Access profile and provider information
-    println!("Using profile: {}", secrets.profile);
-    println!("Using provider: {}", secrets.provider);
+    println!("Using profile: {}", secretspec.profile);
+    println!("Using provider: {}", secretspec.provider);
 
-    // Set all secrets as environment variables
-    secrets.secrets.set_as_env_vars();
+    // From backwards compatibility, you can tell it to set environment variables
+    secretspec.secrets.set_as_env_vars();
 
     Ok(())
 }
@@ -60,11 +60,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_provider("keyring")
         .with_profile(Profile::Production)
         .load_profile()?;
-    
+
     // Access profile and provider information
     println!("Loaded profile: {}", secrets.profile);
     println!("Using provider: {}", secrets.provider);
-    
+
     // Access secrets through profile-specific enum
     match secrets.secrets {
         SecretsProfile::Production { database_url, api_key, .. } => {
@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ => {}
     }
-    
+
     Ok(())
 }
 ```
