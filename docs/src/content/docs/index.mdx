@@ -132,7 +132,17 @@ $ SECRETSPEC_PROVIDER=onepassword://vault secretspec run -- npm start
 
 [Learn more about providers →](/concepts/providers/)
 
-This separation enables portable applications, early validation, better tooling, and type safety.
+## Migrating Between Providers
+
+SecretSpec makes it easy to migrate your secrets between different providers without changing your application code.
+
+```bash
+# Import all secrets from one provider to another
+$ secretspec import dotenv://.env.production
+✓ Imported 5 secrets from dotenv://.env.production to keyring://
+```
+
+This separation enables portable applications with lower operational overhead when switching providers.
 
 ## Type-Safe Rust SDK
 
