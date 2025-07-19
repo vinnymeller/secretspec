@@ -145,20 +145,22 @@ The Rust SDK generates strongly-typed structs from your `secretspec.toml`, ensur
 secretspec_derive::declare_secrets!("secretspec.toml");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load secrets with type-safe struct
-    let secretspec = Secrets::load(Some(Provider::Keyring), Some(Profile::Production))?;
+    // Load secrets using the builder pattern
+    let secrets = Secrets::builder()
+        .with_provider("keyring")  // Can use provider name or URI like "dotenv:/path/to/.env"
+        .with_profile("production")  // Can use string or Profile enum
+        .load()?;  // All conversions and errors are handled here
 
-    // Field names are lowercased versions of secret names
-    // Required secrets are String (not Option<String>)
-    println!("Database: {}", &secretspec.secrets.database_url);  // DATABASE_URL -> database_url
+    // Access secrets (field names are lowercased)
+    println!("Database: {}", secrets.secrets.database_url);  // DATABASE_URL → database_url
 
     // Optional secrets are Option<String>
-    if let Some(redis_url) = &secretspec.secrets.redis_url {
+    if let Some(redis_url) = &secrets.secrets.redis_url {
         println!("Redis: {}", redis_url);
     }
 
     // Set all secrets as environment variables
-    secretspec.secrets.set_as_env_vars();
+    secrets.secrets.set_as_env_vars();
 
     Ok(())
 }
