@@ -11,8 +11,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-secretspec = { version = "0.1" }
-secretspec-derive = { version = "0.1" }
+secretspec = { version = "0.2.0" }
+secretspec-derive = { version = "0.2.0" }
 ```
 
 Basic example:
