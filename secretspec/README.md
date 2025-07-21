@@ -9,14 +9,14 @@ Declarative secrets, every environment, any provider.
 
 SecretSpec separates the declaration of what secrets an application needs from where they are stored, enabling portable applications that work across different secret storage backends without code changes.
 
-[Documentation](https://secretspec.dev) | [Quick Start](https://secretspec.dev/docs/quick-start) | [Announcement Blog Post](https://devenv.sh/blog/2025/07/21/announcing-secretspec-declarative-secrets-management)
+[Documentation](https://secretspec.dev) | [Quick Start](https://secretspec.dev/quick-start) | [Announcement Blog Post](https://devenv.sh/blog/2025/07/21/announcing-secretspec-declarative-secrets-management)
 
 ## Features
 
-- **[Declarative Configuration](https://secretspec.dev/docs/reference/configuration/)**: Define your secrets in `secretspec.toml` with descriptions and requirements
-- **[Multiple Provider Backends](https://secretspec.dev/docs/concepts/providers/)**: [Keyring](https://secretspec.dev/docs/providers/keyring), [.env](https://secretspec.dev/docs/providers/dotenv), [OnePassword](https://secretspec.dev/docs/providers/onepassword), [LastPass](https://secretspec.dev/docs/providers/lastpass), and [environment variables](https://secretspec.dev/docs/providers/env)
-- **[Type-Safe Rust SDK](https://secretspec.dev/docs/sdk/rust/)**: Generate strongly-typed structs from your `secretspec.toml` for compile-time safety
-- **[Profile Support](https://secretspec.dev/docs/concepts/profiles/)**: Override secret requirements and defaults per profile (development, production, etc.)
+- **[Declarative Configuration](https://secretspec.dev/reference/configuration/)**: Define your secrets in `secretspec.toml` with descriptions and requirements
+- **[Multiple Provider Backends](https://secretspec.dev/concepts/providers/)**: [Keyring](https://secretspec.dev/providers/keyring), [.env](https://secretspec.dev/providers/dotenv), [OnePassword](https://secretspec.dev/providers/onepassword), [LastPass](https://secretspec.dev/providers/lastpass), and [environment variables](https://secretspec.dev/providers/env)
+- **[Type-Safe Rust SDK](https://secretspec.dev/sdk/rust/)**: Generate strongly-typed structs from your `secretspec.toml` for compile-time safety
+- **[Profile Support](https://secretspec.dev/concepts/profiles/)**: Override secret requirements and defaults per profile (development, production, etc.)
 - **Configuration Inheritance**: Extend and override shared configurations using the `extends` feature
 - **Discovery**: `secretspec init` to discover secrets from existing `.env` files
 
@@ -56,7 +56,7 @@ $ secretspec run -- npm start
 $ secretspec run --profile production --provider dotenv -- npm start
 ```
 
-See the [Quick Start Guide](https://secretspec.dev/docs/quick-start) for detailed instructions.
+See the [Quick Start Guide](https://secretspec.dev/quick-start) for detailed instructions.
 
 ## Installation
 
@@ -65,7 +65,7 @@ See the [Quick Start Guide](https://secretspec.dev/docs/quick-start) for detaile
 $ curl -sSL https://install.secretspec.dev | sh
 ```
 
-See the [installation guide](https://secretspec.dev/docs/quick-start#installation) for more options including Nix, Homebrew, and Docker.
+See the [installation guide](https://secretspec.dev/quick-start#installation) for more options including Nix, Homebrew, and Docker.
 
 ## Configuration
 
@@ -92,7 +92,7 @@ DATABASE_URL = { description = "PostgreSQL connection string", required = true }
 REDIS_URL = { description = "Redis connection string", required = true }
 ```
 
-See the [configuration reference](https://secretspec.dev/docs/reference/configuration) for all available options.
+See the [configuration reference](https://secretspec.dev/reference/configuration/) for all available options.
 
 ## Profiles
 
@@ -107,17 +107,17 @@ $ secretspec run --profile production -- npm start
 $ secretspec config init
 ```
 
-Learn more about [profiles](https://secretspec.dev/docs/concepts/profiles) and [profile selection](https://secretspec.dev/docs/concepts/profiles#profile-selection).
+Learn more about [profiles](https://secretspec.dev/concepts/profiles) and [profile selection](https://secretspec.dev/concepts/profiles#profile-selection).
 
 ## Providers
 
 SecretSpec supports multiple storage backends for secrets:
 
-- **[Keyring](https://secretspec.dev/docs/providers/keyring)** - System credential store (recommended)
-- **[.env files](https://secretspec.dev/docs/providers/dotenv)** - Traditional dotenv files
-- **[Environment variables](https://secretspec.dev/docs/providers/env)** - Read-only for CI/CD
-- **[OnePassword](https://secretspec.dev/docs/providers/onepassword)** - Team secret management
-- **[LastPass](https://secretspec.dev/docs/providers/lastpass)** - Cloud password manager
+- **[Keyring](https://secretspec.dev/providers/keyring)** - System credential store (recommended)
+- **[.env files](https://secretspec.dev/providers/dotenv)** - Traditional dotenv files
+- **[Environment variables](https://secretspec.dev/providers/env)** - Read-only for CI/CD
+- **[OnePassword](https://secretspec.dev/providers/onepassword)** - Team secret management
+- **[LastPass](https://secretspec.dev/providers/lastpass)** - Cloud password manager
 
 ```bash
 # Use specific provider
@@ -128,7 +128,7 @@ $ secretspec run --provider dotenv -- npm start
 $ secretspec config init
 ```
 
-See [provider concepts](https://secretspec.dev/docs/concepts/providers) and [provider reference](https://secretspec.dev/docs/reference/providers) for details.
+See [provider concepts](https://secretspec.dev/concepts/providers) and [provider reference](https://secretspec.dev/reference/providers) for details.
 
 ## Rust SDK
 
@@ -154,7 +154,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-See the [Rust SDK documentation](https://secretspec.dev/docs/sdk/rust) for advanced usage including profile-specific types.
+See the [Rust SDK documentation](https://secretspec.dev/sdk/rust) for advanced usage including profile-specific types.
 
 ## CLI Reference
 
@@ -176,13 +176,13 @@ secretspec import PROVIDER       # Import secrets from another provider
 secretspec run -- command        # Run command with secrets as env vars
 ```
 
-See the [full CLI reference](https://secretspec.dev/docs/reference/cli) for all commands and options.
+See the [full CLI reference](https://secretspec.dev/reference/cli) for all commands and options.
 
 ## Contributing
 
 We welcome contributions! Areas where you can help:
 
-- **New provider backends** - See the [provider implementation guide](https://secretspec.dev/docs/reference/adding-providers)
+- **New provider backends** - See the [provider implementation guide](https://secretspec.dev/reference/adding-providers)
 - **Language SDKs** - Help us support more languages beyond Rust
 - **Package managers** - Get SecretSpec into your favorite package manager
 - **Documentation** - Improve guides and examples
