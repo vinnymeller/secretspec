@@ -192,3 +192,5 @@ See our [GitHub repository](https://github.com/cachix/secretspec) to get started
 ## License
 
 This project is licensed under the Apache License 2.0.
+
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=ddbe4178-cff6-4549-9365-facbc08f3b6f" />
