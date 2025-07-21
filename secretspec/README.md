@@ -2,7 +2,6 @@
 [![Crates.io](https://img.shields.io/crates/v/secretspec)](https://crates.io/crates/secretspec)
 [![docs.rs](https://docs.rs/secretspec/badge.svg)](https://docs.rs/secretspec)
 [![Discord channel](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FnaMgvexb6q%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&logo=discord&logoColor=white&label=Discord%20users&color=green&style=flat)](https://discord.gg/naMgvexb6q)
-![License: Apache 2.0](https://img.shields.io/github/license/cachix/secretspec)
 
 # SecretSpec
 
