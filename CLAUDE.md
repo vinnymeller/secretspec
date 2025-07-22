@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-When commiting changes, make sure to update /CHANGELOG.md
+When commiting changes, make sure to update /CHANGELOG.md with one entry (can be multi-line)
 
 ## Project Overview
 
