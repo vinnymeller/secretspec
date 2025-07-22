@@ -18,6 +18,7 @@
 //! - [`KeyringProvider`]: System keyring integration (default)
 //! - [`DotEnvProvider`]: `.env` file support
 //! - [`EnvProvider`]: Environment variables (read-only)
+//! - [`BitwardenProvider`]: Bitwarden integration
 //! - [`OnePasswordProvider`]: OnePassword integration
 //! - [`LastPassProvider`]: LastPass integration
 //!
@@ -28,6 +29,7 @@
 //! ```text
 //! keyring://
 //! dotenv://.env.production
+//! bitwarden://SecretSpec
 //! onepassword://vault/items
 //! lastpass://folder
 //! ```
@@ -54,6 +56,7 @@ use crate::{Result, SecretSpecError};
 use std::convert::TryFrom;
 use url::Url;
 
+pub mod bitwarden;
 pub mod dotenv;
 pub mod env;
 pub mod keyring;
